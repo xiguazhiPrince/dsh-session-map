@@ -469,9 +469,14 @@ export function createMapView(
     // the old one. Declared BEFORE the placement effect so a mount places
     // exactly once, and keyed on the values so a toggle made in the other seat
     // re-places this one too.
-    React.useEffect(() => { setPlaced(false) }, [showPrompts, hideSubagents])
+    // Both placement effects run in the layout phase, before the browser paints.
+    // The View is session-scoped, so switching Session remounts it and the
+    // transform starts over at its initial value; a post-paint correction would
+    // show that first frame — the graph's top-left corner at the baseline zoom —
+    // before snapping to the placed one.
+    React.useLayoutEffect(() => { setPlaced(false) }, [showPrompts, hideSubagents])
 
-    React.useEffect(() => {
+    React.useLayoutEffect(() => {
       if (placed || graph.nodes.length === 0) return
       setPlaced(true)
       const size = panelSize()
