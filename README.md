@@ -67,6 +67,31 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 
 **一个包同时是 bundle 和 client 插件是可行的**：产品随附的布局把两者拆成不同的包（bundle 的 patch 行去引用 `packages/client/*` 里的插件包），但自引用同样能被浏览器 roster 收下。
 
-**已完成**：仓库结构、`dsh.bundle` 层、`dsh.client` 声明、宿主半、构建契约。
+**已完成**：仓库结构、`dsh.bundle` 层、`dsh.client` 声明、宿主半、构建契约，以及全部画布与交互。
 
-**待办**：把画布搬进来。目标形态包括——对话标签页里的全宽画布、右侧栏标签页、会话头部的「会话图谱」按钮、Ctrl+滚轮缩放、滚轮/拖动平移、节点操作菜单、逐线展开/收起用户输入、fork 继承前缀折叠。
+## 贡献了什么
+
+| 座位 | 内容 |
+|---|---|
+| `conversation.view` | 「概览」标签页（order 20）、「会话图谱」标签页（order 30） |
+| `conversation.session.header.utilities` | 会话头部的「会话图谱」开关（order 40）；右侧栏已打开时再点一次关闭 |
+| `sidebar.right.pane.tab` | 常驻标签页 `dsh-session-map.overview` 与 `dsh-session-map.map` |
+
+画布交互：滚轮上下平移、Shift + 滚轮左右平移、Ctrl / ⌘ + 滚轮缩放、拖动空白平移（不会选中文字）、点击会话节点弹出操作菜单（跳转到会话 / 在画布中居中）、点击链首胶囊展开或收起该线的用户输入、点击输入珠子弹出该轮操作、fork 继承的输入前缀折叠成 `+N 继承` 胶囊。工具栏的键盘图标后面收着这份快捷键表。
+
+## 源码结构
+
+```
+src/index.ts            宿主半（空实现，只为占据 bundle 行）
+src/client/index.ts     apply：样式表、插件级开关、座位与标签页注册
+src/client/views.ts     概览页、头部按钮、画布视图工厂
+src/client/graph.ts     布局：fork 树、珠子、折叠标记、连边
+src/client/css.ts       样式表字符串
+src/client/constants.ts 几何常量与 tab type id
+src/client/flags.ts     跨挂载存活的插件级开关
+src/client/format.ts    数字与耗时格式化
+```
+
+样式表以字符串形式随包分发，由 `apply` 里的一个 effect 建 `<style>` 元素并负责移除。产品的 `styles` 服务只存在于动态运行时，正式插件没有它。
+
+**改完源码务必 `pnpm build` 再提交**——`lib/` 是仓库内容的一部分，安装方不会替你构建。
