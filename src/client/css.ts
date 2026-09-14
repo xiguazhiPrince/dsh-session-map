@@ -73,6 +73,8 @@ export const CSS = `
   cursor: pointer;
 }
 .dsm-launch:hover { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
+/* The launcher and the reason its last click failed, kept on one line. */
+.dsm-launchWrap { display: inline-flex; align-items: center; gap: 6px; }
 
 /* height:100% resolves only where the seat has a definite height (the right
    column's pane); in the conversation the parent is auto-height, so this

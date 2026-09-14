@@ -337,29 +337,41 @@ export function createOverviewTab(runtime: SessionMapRuntime): (props: SessionVi
  */
 export function createMapLauncher(runtime: SessionMapRuntime): () => React.ReactElement {
   function MapLauncher(): React.ReactElement {
+    // A rejected toggle used to reach only the console, which reads as a dead
+    // button; the reason is shown beside it instead.
+    const [error, setError] = React.useState<string | null>(null)
     const onClick = (): void => {
       try {
         const sidebarRight = runtime.sidebarRight()
         const active = sidebarRight.active()
         if (active !== undefined && active.kind === MAP_KIND) {
           sidebarRight.close(active.id)
+          setError(null)
           return
         }
         sidebarRight.openTab(MAP_KIND)
+        setError(null)
       } catch (cause) {
+        const message = errorText(cause)
         // console.error lines are mirrored into this Run's diagnostics.
-        console.error('会话图谱：切换右侧栏失败', errorText(cause))
+        console.error('会话图谱：切换右侧栏失败', message)
+        setError(message)
       }
     }
     return React.createElement(
-      'button',
-      {
-        type: 'button',
-        className: 'dsm-launch',
-        title: '在右侧栏打开或关闭会话图谱',
-        onClick,
-      },
-      '会话图谱',
+      'span',
+      { className: 'dsm-launchWrap' },
+      React.createElement(
+        'button',
+        {
+          type: 'button',
+          className: 'dsm-launch',
+          title: '在右侧栏打开或关闭会话图谱',
+          onClick,
+        },
+        '会话图谱',
+      ),
+      error === null ? null : React.createElement('span', { className: 'dsm__error' }, error),
     )
   }
   return MapLauncher

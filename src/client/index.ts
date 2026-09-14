@@ -202,57 +202,66 @@ export function apply(ctx: Context): void {
     SessionMapTab,
   )), 'session-map: conversation view entry')
 
-  const sidebarRightTabs = lookup<SidebarRightTabsService>(ctx, 'sidebarRightTabs')
-  if (sidebarRightTabs === undefined) return
+  // The right column's type registry belongs to another package whose own
+  // injections are wider, so its apply can land after this one. Reading the
+  // service once at this point would find nothing, drop both tab types, and
+  // leave the header button opening a kind nothing registered. Waiting on it
+  // here keeps the Conversation seats available in a composition that mounts no
+  // right column at all, which a plugin-level inject would not.
+  ctx.inject(['slots', 'sidebarRightTabs'], (scope) => {
+    const scopedSlots = lookup<SlotsService>(scope, 'slots')
+    const sidebarRightTabs = lookup<SidebarRightTabsService>(scope, 'sidebarRightTabs')
+    if (scopedSlots === undefined || sidebarRightTabs === undefined) return
 
-  // A page kept open across a host restart still runs the previous incarnation
-  // of this plugin, which already holds the same type. Reusing that one is
-  // safe: every other cell is re-registered below under a later priority, so
-  // the new bodies win. A DIFFERENT type holding the kind is a real wiring
-  // conflict and still fails loud.
-  const claimType = (
-    id: string,
-    kind: string,
-    title: () => string,
-    guideTitle?: () => string,
-    guideDescription?: () => string,
-  ): EffectBody => {
-    return () => {
-      const existing = sidebarRightTabs.get(kind)
-      if (existing !== undefined) {
-        if (existing.id === id) return () => {}
-        throw new Error(
-          'sidebarRight: kind "' + kind + '" is already held by tab type "' + existing.id + '"',
-        )
+    // A page kept open across a host restart still runs the previous incarnation
+    // of this plugin, which already holds the same type. Reusing that one is
+    // safe: every other cell is re-registered below under a later priority, so
+    // the new bodies win. A DIFFERENT type holding the kind is a real wiring
+    // conflict and still fails loud.
+    const claimType = (
+      id: string,
+      kind: string,
+      title: () => string,
+      guideTitle?: () => string,
+      guideDescription?: () => string,
+    ): EffectBody => {
+      return () => {
+        const existing = sidebarRightTabs.get(kind)
+        if (existing !== undefined) {
+          if (existing.id === id) return () => {}
+          throw new Error(
+            'sidebarRight: kind "' + kind + '" is already held by tab type "' + existing.id + '"',
+          )
+        }
+        const definition: SidebarRightTabDefinition = guideTitle === undefined
+          ? { id, kind, title }
+          : { id, kind, title, guide: [{ order: 20, title: guideTitle, description: guideDescription }] }
+        return sidebarRightTabs.register(definition)
       }
-      const definition: SidebarRightTabDefinition = guideTitle === undefined
-        ? { id, kind, title }
-        : { id, kind, title, guide: [{ order: 20, title: guideTitle, description: guideDescription }] }
-      return sidebarRightTabs.register(definition)
     }
-  }
 
-  ctx.effect(
-    claimType(OVERVIEW_TYPE_ID, OVERVIEW_KIND, () => '会话概览'),
-    'session-overview: rightbar tab type',
-  )
-  ctx.effect(() => slots.inject('sidebar.right.pane.tab', () => slots.register(
-    { name: 'sidebar.right.pane.tab', key: OVERVIEW_TYPE_ID },
-    SidebarOverviewBody,
-  )), 'session-overview: rightbar tab body')
+    ctx.effect(
+      claimType(OVERVIEW_TYPE_ID, OVERVIEW_KIND, () => '会话概览'),
+      'session-overview: rightbar tab type',
+    )
+    ctx.effect(() => scopedSlots.inject('sidebar.right.pane.tab', () => scopedSlots.register(
+      { name: 'sidebar.right.pane.tab', key: OVERVIEW_TYPE_ID },
+      SidebarOverviewBody,
+    )), 'session-overview: rightbar tab body')
 
-  ctx.effect(
-    claimType(
-      MAP_TYPE_ID,
-      MAP_KIND,
-      () => '会话图谱',
-      () => '会话图谱',
-      () => '所有会话的 fork 树画布',
-    ),
-    'session-map: rightbar tab type',
-  )
-  ctx.effect(() => slots.inject('sidebar.right.pane.tab', () => slots.register(
-    { name: 'sidebar.right.pane.tab', key: MAP_TYPE_ID },
-    SidebarMapBody,
-  )), 'session-map: rightbar tab body')
+    ctx.effect(
+      claimType(
+        MAP_TYPE_ID,
+        MAP_KIND,
+        () => '会话图谱',
+        () => '会话图谱',
+        () => '所有会话的 fork 树画布',
+      ),
+      'session-map: rightbar tab type',
+    )
+    ctx.effect(() => scopedSlots.inject('sidebar.right.pane.tab', () => scopedSlots.register(
+      { name: 'sidebar.right.pane.tab', key: MAP_TYPE_ID },
+      SidebarMapBody,
+    )), 'session-map: rightbar tab body')
+  })
 }
