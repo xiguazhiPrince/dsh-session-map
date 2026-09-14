@@ -411,8 +411,14 @@ export function createMapView(
     const [error, setError] = React.useState<string | null>(null)
     const panelRef = React.useRef<HTMLDivElement | null>(null)
 
-    const lines: LineState = { global: showPrompts, opened: openedLines, collapsed: collapsedLines }
-    const graph = buildGraph(ids, byId, workspaces, hideSubagents, lines, expandedInherited)
+    // Rebuilt only when its inputs move. Panning and zooming re-render on every
+    // pointer and wheel event, so an unmemoized graph would be rebuilt at that
+    // rate; the inputs are all stable references between changes (selector
+    // snapshots, and the Sets this plugin replaces rather than mutates).
+    const graph = React.useMemo(() => {
+      const lines: LineState = { global: showPrompts, opened: openedLines, collapsed: collapsedLines }
+      return buildGraph(ids, byId, workspaces, hideSubagents, lines, expandedInherited)
+    }, [ids, byId, workspaces, hideSubagents, showPrompts, openedLines, collapsedLines, expandedInherited])
 
     const panelSize = (): PanelSize => {
       const element = panelRef.current
