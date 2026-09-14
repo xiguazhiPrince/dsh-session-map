@@ -1,0 +1,9 @@
+# The layer this bundle contributes. A profile that lists this bundle in
+# dsh.profile.bundles applies it after every earlier layer.
+#
+# The row names this package, so the Loader imports its node half (lib/index.js)
+# and the modules half reads the same manifest's dsh.client declaration to add
+# lib/client.js to the browser roster.
+- insert:
+    - id: session-map
+      name: dsh-session-map

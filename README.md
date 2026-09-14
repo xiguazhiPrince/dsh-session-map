@@ -1,0 +1,73 @@
+# dsh-session-map
+
+把所有会话的 fork 关系画成一张可平移缩放的画布，作为一个标签页加进 DSH 的 Web 界面。
+
+> **当前状态：骨架。** 仓库结构、bundle 层、构建产物契约都已就位，但画布本体还没搬进来（见 [状态](#状态)）。
+
+## 安装（GitHub 直装）
+
+```sh
+dsh plugin --profile <你的 profile> add github:<你的账号>/dsh-session-map
+```
+
+这是**源码形式**：pnpm 克隆仓库、跑本仓库的 `prepare` 现场构建 `lib/`。pnpm ≥10 默认拒绝执行依赖的构建脚本，所以**第一次 `add` 会失败**，并打印出需要放行的包键。把它抄进 profile 的 `pnpm-workspace.yaml`：
+
+```yaml
+allowBuilds:
+  dsh-session-map: true
+```
+
+然后重跑那条 `add`。
+
+**把这个放行当成安全决定**：它等于允许本仓库的代码在你机器上、在 agent 沙箱之外执行安装期脚本。所以：
+
+- 只放行你信任的源码；
+- **钉住 commit**，否则之后一次 push 就能悄悄换掉要跑的东西：
+
+  ```sh
+  dsh plugin --profile <name> add github:<账号>/dsh-session-map#<sha>
+  ```
+
+不想让用户放行构建的话，改用预构建产物分发（`pnpm pack` 出 tarball，或发布到 npm）——那两条路都不需要任何放行。
+
+## 验证
+
+```sh
+dsh --profile <name> --dump-config   # 应能看到一行 "# == dsh-session-map" 层
+dsh --profile <name>
+```
+
+启动后打开任意会话，头部标签栏应出现「**会话图谱**」，点进去显示「N 个会话 · 当前 <会话 id>」。
+
+## 本地开发
+
+```sh
+pnpm install
+pnpm build        # 产出 lib/index.js 与 lib/client.js
+pnpm typecheck    # tsc --noEmit
+```
+
+`prepare` 与 `build` 跑的是同一份 `tsdown.config.ts`——它不做类型检查、不用 project references，因此在安装期是自包含的。
+
+## 两个产物
+
+| 产物 | 形态 | 谁用 |
+|---|---|---|
+| `lib/index.js` | ESM | 宿主 Loader 按包名 import |
+| `lib/client.js` | CJS closure factory | 浏览器内核通过 module table 取用 |
+
+浏览器半外面包了一层交接，由本仓库的 `tsdown.config.ts` 自己声明：
+
+```js
+window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { … } });
+```
+
+产品自带的 `packages/client/tsdown.client.ts` 预设是**仓库内部**的（它会去读 `packages/<group>/<pkg>/package.json` 并 import 同仓的构建模块），独立仓库导不进来，所以这里自己写。React 与 `@deepseek-ai/cordis` 保持 `require` 外部化，由内核的 `require` 提供；本插件不 import 其它产品包，所以产物里只有自己的代码。
+
+## 状态
+
+**已完成**：仓库结构、`dsh.bundle` 层、`dsh.client` 声明、宿主半、构建契约。
+
+**待办**：把画布搬进来。目标形态包括——对话标签页里的全宽画布、右侧栏标签页、会话头部的「会话图谱」按钮、Ctrl+滚轮缩放、滚轮/拖动平移、节点操作菜单、逐线展开/收起用户输入、fork 继承前缀折叠。
+
+**尚未验证的一点**：本包同时声明 `dsh.bundle` 和 `dsh.client`，即"一个包既是 bundle 又是 client 插件"。产品随附的布局把两者分成不同的包（bundle 的 patch 行去引用 `packages/client/*` 里的插件包），但文档里的最小例子（`hello-plugin`）是一个包自引用，所以这里按后者做。若 profile 启动后浏览器 roster 里找不到本行，把它拆成 `dsh-session-map`（插件）+ 一个只含 patch 的 bundle 包即可，不需要改插件代码。
