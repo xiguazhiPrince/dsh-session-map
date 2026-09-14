@@ -1,3 +1,14 @@
 node_modules/
-lib/
 *.tsbuildinfo
+
+# Local IDE state, not part of the distributed package.
+.idea/
+
+# No lockfile is committed on purpose: a stale one hands consumers a
+# resolution their own pnpm supply-chain policy may reject (pnpm 11 blocks
+# packages younger than its minimumReleaseAge, and that check runs against
+# the committed lockfile, not against a fresh resolution).
+pnpm-lock.yaml
+
+# lib/ is deliberately NOT ignored — see the README. The committed build
+# output is what makes an install run no build script at all.

@@ -16,6 +16,10 @@ const ID = 'dsh-session-map'
  * imports sibling build modules), so this standalone repository states the
  * handoff itself. Everything the shell shares stays an external `require`; this
  * plugin imports none of it, so the bundle carries only its own code.
+ *
+ * `entryFileNames` pins both artifacts to the paths package.json declares:
+ * tsdown's default extension follows the format, so the ESM half would land on
+ * `index.mjs` and the Loader would not find `main`.
  * @returns the build-face configs tsdown runs.
  */
 export default (): UserConfig[] => [
@@ -29,6 +33,7 @@ export default (): UserConfig[] => [
     clean: false,
     dts: false,
     sourcemap: true,
+    outputOptions: { entryFileNames: 'index.js' },
   },
   {
     name: `${ID}/client`,
@@ -41,7 +46,7 @@ export default (): UserConfig[] => [
     dts: false,
     sourcemap: true,
     // Shared baseline the kernel answers through the injected `require`.
-    external: ['react', 'react/jsx-runtime', '@deepseek-ai/cordis'],
+    deps: { neverBundle: ['react', 'react/jsx-runtime', '@deepseek-ai/cordis'] },
     outputOptions: {
       entryFileNames: 'client.js',
       banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(ID)}, factory: (require) => {`,

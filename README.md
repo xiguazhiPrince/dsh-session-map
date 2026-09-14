@@ -10,25 +10,15 @@
 dsh plugin --profile <你的 profile> add github:<你的账号>/dsh-session-map
 ```
 
-这是**源码形式**：pnpm 克隆仓库、跑本仓库的 `prepare` 现场构建 `lib/`。pnpm ≥10 默认拒绝执行依赖的构建脚本，所以**第一次 `add` 会失败**，并打印出需要放行的包键。把它抄进 profile 的 `pnpm-workspace.yaml`：
+**预构建分发。** 仓库里直接提交了构建产物 `lib/`，并且没有 `prepare` 脚本，所以 pnpm 只下载 tarball 解压，**不执行任何安装期代码**——不需要 `allowBuilds` 放行，也没有构建等待。
 
-```yaml
-allowBuilds:
-  dsh-session-map: true
+代价是产物可能与源码不同步：**改了 `src/` 必须先 `pnpm build` 再提交**（见[本地开发](#本地开发)）。
+
+另外建议**钉住 commit**。不钉的话，仓库之后任何一次 push 都会改变你安装的内容：
+
+```sh
+dsh plugin --profile <name> add github:<账号>/dsh-session-map#<sha>
 ```
-
-然后重跑那条 `add`。
-
-**把这个放行当成安全决定**：它等于允许本仓库的代码在你机器上、在 agent 沙箱之外执行安装期脚本。所以：
-
-- 只放行你信任的源码；
-- **钉住 commit**，否则之后一次 push 就能悄悄换掉要跑的东西：
-
-  ```sh
-  dsh plugin --profile <name> add github:<账号>/dsh-session-map#<sha>
-  ```
-
-不想让用户放行构建的话，改用预构建产物分发（`pnpm pack` 出 tarball，或发布到 npm）——那两条路都不需要任何放行。
 
 ## 验证
 
@@ -47,7 +37,9 @@ pnpm build        # 产出 lib/index.js 与 lib/client.js
 pnpm typecheck    # tsc --noEmit
 ```
 
-`prepare` 与 `build` 跑的是同一份 `tsdown.config.ts`——它不做类型检查、不用 project references，因此在安装期是自包含的。
+`tsdown.config.ts` 不做类型检查、也不用 project references，所以构建是自包含的，类型检查是独立的一步。
+
+**提交前务必 `pnpm build`**：`lib/` 是仓库内容的一部分，安装方不会替你构建。
 
 ## 两个产物
 
@@ -65,6 +57,8 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 产品自带的 `packages/client/tsdown.client.ts` 预设是**仓库内部**的（它会去读 `packages/<group>/<pkg>/package.json` 并 import 同仓的构建模块），独立仓库导不进来，所以这里自己写。React 与 `@deepseek-ai/cordis` 保持 `require` 外部化，由内核的 `require` 提供；本插件不 import 其它产品包，所以产物里只有自己的代码。
 
 ## 状态
+
+**已在本机验证**：GitHub 直装全流程（克隆 → 解压 → 装进 profile → 写回 `dsh.profile.bundles`）、两个产物的构建与文件名、浏览器半的 `__ModuleLoader__` 交接与 React 外部化。
 
 **已完成**：仓库结构、`dsh.bundle` 层、`dsh.client` 声明、宿主半、构建契约。
 
