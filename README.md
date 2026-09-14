@@ -58,10 +58,15 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 
 ## 状态
 
-**已在本机验证**：GitHub 直装全流程（克隆 → 解压 → 装进 profile → 写回 `dsh.profile.bundles`）、两个产物的构建与文件名、浏览器半的 `__ModuleLoader__` 交接与 React 外部化。
+**已在本机验证**：
+
+- GitHub 直装全流程——下载 tarball → 解压 → 写进 profile 的 `dependencies` → 回写 `dsh.profile.bundles`；**4.6 秒，零安装期脚本**；
+- `--dump-config` 里出现 `# == dsh-session-map` 层；
+- 首页 HTML 的 boot manifest 列出了 `dsh-session-map/client.js`，合并后的插件包请求返回 200 且含 `__ModuleLoader__` 工厂交接；
+- 两个产物的文件名与 React 外部化（`lib/client.js` 里是 `require("react")`，没有内联）。
+
+**一个包同时是 bundle 和 client 插件是可行的**：产品随附的布局把两者拆成不同的包（bundle 的 patch 行去引用 `packages/client/*` 里的插件包），但自引用同样能被浏览器 roster 收下。
 
 **已完成**：仓库结构、`dsh.bundle` 层、`dsh.client` 声明、宿主半、构建契约。
 
 **待办**：把画布搬进来。目标形态包括——对话标签页里的全宽画布、右侧栏标签页、会话头部的「会话图谱」按钮、Ctrl+滚轮缩放、滚轮/拖动平移、节点操作菜单、逐线展开/收起用户输入、fork 继承前缀折叠。
-
-**尚未验证的一点**：本包同时声明 `dsh.bundle` 和 `dsh.client`，即"一个包既是 bundle 又是 client 插件"。产品随附的布局把两者分成不同的包（bundle 的 patch 行去引用 `packages/client/*` 里的插件包），但文档里的最小例子（`hello-plugin`）是一个包自引用，所以这里按后者做。若 profile 启动后浏览器 roster 里找不到本行，把它拆成 `dsh-session-map`（插件）+ 一个只含 patch 的 bundle 包即可，不需要改插件代码。
