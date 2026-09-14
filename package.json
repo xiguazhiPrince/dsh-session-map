@@ -23,9 +23,6 @@
     "typecheck": "tsc --noEmit",
     "watch": "tsdown --watch"
   },
-  "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.2"
-  },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
     "@types/react": "~18.3.1",

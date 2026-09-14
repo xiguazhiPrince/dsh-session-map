@@ -45,8 +45,11 @@ export default (): UserConfig[] => [
     clean: false,
     dts: false,
     sourcemap: true,
-    // Shared baseline the kernel answers through the injected `require`.
-    deps: { neverBundle: ['react', 'react/jsx-runtime', '@deepseek-ai/cordis'] },
+    // Shared baseline the kernel answers through the injected `require`. This
+    // plugin currently imports only `react` (it builds elements with
+    // `createElement`, not JSX), but a future JSX import that fell through to
+    // the bundler would inline a second React and break hooks in the shell.
+    deps: { neverBundle: ['react', 'react/jsx-runtime'] },
     outputOptions: {
       entryFileNames: 'client.js',
       banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(ID)}, factory: (require) => {`,
