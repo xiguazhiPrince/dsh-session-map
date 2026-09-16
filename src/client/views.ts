@@ -271,6 +271,52 @@ function openInRightbar(runtime: SessionMapRuntime, kind: string): void {
 }
 
 /**
+ * Whether the right column is drawing the map right now.
+ *
+ * Asked before a jump, where it is the user's intent for this navigation; after
+ * the switch the same question is about the target Session's own layout.
+ * @param runtime - the plugin's live service accessors.
+ * @returns true while the map is the active tab.
+ */
+function sidebarShowsMap(runtime: SessionMapRuntime): boolean {
+  try {
+    return runtime.sidebarRight().active()?.kind === MAP_KIND
+  } catch {
+    // No right column in this composition, so the jump simply does not follow.
+    return false
+  }
+}
+
+/**
+ * Re-open the map in the Session a jump just switched to.
+ *
+ * The controller acts on whichever Session surface is bound, and the switch
+ * rebinds it asynchronously, so opening immediately would land in the Session
+ * being left. While that one is still bound its column is drawing the map, so
+ * waiting for the map to disappear is what proves the target's own layout — the
+ * per-Session seed — is in place. A target that already has the map open never
+ * satisfies that test and is left as it is.
+ * @param runtime - the plugin's live service accessors.
+ */
+function followMapIntoNextSession(runtime: SessionMapRuntime): void {
+  let attempts = 0
+  const tick = (): void => {
+    attempts += 1
+    try {
+      const sidebarRight = runtime.sidebarRight()
+      if (sidebarRight.active()?.kind !== MAP_KIND) {
+        sidebarRight.openTab(MAP_KIND)
+        return
+      }
+    } catch {
+      // Nothing is bound yet; the next frame decides.
+    }
+    if (attempts < 20) window.requestAnimationFrame(tick)
+  }
+  window.requestAnimationFrame(tick)
+}
+
+/**
  * The right column's own copy of the overview: same figures, panel spacing, and
  * no way to open a second copy of what is already on screen.
  * @param props - composed slot props.
@@ -642,7 +688,11 @@ export function createMapView(
         className: 'dsm__menuItem',
         onClick: () => {
           setMenuTarget(null)
+          // Sampled before the switch: afterwards the same question would be
+          // about the Session being navigated to, not the one being left.
+          const follows = sidebarShowsMap(runtime)
           runtime.openSession(box.sessionId)
+          if (follows) followMapIntoNextSession(runtime)
         },
       }, '跳转到该会话')]
       if (menuNode !== undefined) {
