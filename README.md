@@ -2,8 +2,6 @@
 
 把所有会话的 fork 关系画成一张可平移缩放的画布，作为一个标签页加进 DSH 的 Web 界面。
 
-> **当前状态：骨架。** 仓库结构、bundle 层、构建产物契约都已就位，但画布本体还没搬进来（见 [状态](#状态)）。
-
 ## 安装（GitHub 直装）
 
 ```sh
@@ -20,14 +18,33 @@ dsh plugin --profile <你的 profile> add github:<你的账号>/dsh-session-map
 dsh plugin --profile <name> add github:<账号>/dsh-session-map#<sha>
 ```
 
-## 验证
+## 安装后验证
+
+装完不会立刻生效：**profile 的 bundle 列表是启动时读的**，正在运行的实例不会加载新行。先确认补丁栈里有这一层——
 
 ```sh
-dsh --profile <name> --dump-config   # 应能看到一行 "# == dsh-session-map" 层
-dsh --profile <name>
+dsh --profile <name> --dump-config
 ```
 
-启动后打开任意会话，头部标签栏应出现「**会话图谱**」，点进去显示「N 个会话 · 当前 <会话 id>」。
+```yaml
+# == dsh-session-map
+- id: session-map
+  name: dsh-session-map
+```
+
+然后重启该 profile 的进程并刷新页面。四处应该出现：
+
+| 位置 | 应该看到 |
+|---|---|
+| 会话标签栏 | 「概览」与「会话图谱」两个标签页 |
+| 会话头部工具区 | 「会话图谱」开关；右侧栏正显示图谱时再点一次会关闭它 |
+| 右侧栏标签 | `dsh-session-map.map`（标题「会话图谱」）和 `dsh-session-map.overview`（标题「会话概览」） |
+| 图谱页本身 | fork 树画布；工具栏显示会话数、树数与当前缩放百分比 |
+
+两件容易被当成故障的事：
+
+- **切换会话后图谱没了。** 视图选择和右侧栏布局都是**按会话各存一份**的状态，没打开过的会话回落到它自己的默认值。从画布「跳转到该会话」时右侧栏的图谱会跟随过去；对话标签栏的图谱不会——那个选择属于 `ui-conversation`，插件没有接口去改。
+- **点右侧栏开关没反应。** 按钮旁边会出现红色错误文字——失败不再只写进 console。把内容贴出来即可。
 
 ## 本地开发
 
