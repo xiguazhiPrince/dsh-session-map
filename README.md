@@ -90,11 +90,27 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 
 | 座位 | 内容 |
 |---|---|
-| `conversation.view` | 「概览」标签页（order 20）、「会话图谱」标签页（order 30） |
+| `conversation.view` | 「概览」标签页（order 20）、「会话图谱」标签页（order 30）—— **默认关闭**，见下 |
 | `conversation.session.header.utilities` | 会话头部的「会话图谱」开关（order 40）；右侧栏已打开时再点一次关闭 |
 | `sidebar.right.pane.tab` | 常驻标签页 `dsh-session-map.overview` 与 `dsh-session-map.map` |
 
 画布交互：滚轮上下平移、Shift + 滚轮左右平移、Ctrl / ⌘ + 滚轮缩放、拖动空白平移（不会选中文字）、点击会话节点弹出操作菜单（跳转到会话 / 在画布中居中）、点击链首胶囊展开或收起该线的用户输入、点击输入珠子弹出该轮操作、fork 继承的输入前缀折叠成 `+N 继承` 胶囊。工具栏的键盘图标后面收着这份快捷键表。
+
+### 对话标签栏的两个标签页默认关闭
+
+「概览」和「会话图谱」这两个 `conversation.view` 入口由**浏览器本地偏好**控制，默认不注册。头部开关和右侧栏的两个标签页不受影响，图谱仍然可以从右侧栏正常使用。
+
+在页面控制台里改，**刷新后生效**（不需要重新构建或重启）：
+
+```js
+localStorage.setItem('dsh.session-map.conversationViews', 'true')   // 打开
+localStorage.setItem('dsh.session-map.conversationViews', 'false')  // 显式关闭
+localStorage.removeItem('dsh.session-map.conversationViews')        // 回到出厂默认
+```
+
+出厂默认写在 `src/client/index.ts` 的 `DEFAULT_CONVERSATION_VIEWS`。
+
+**为什么不用 profile 里的 `config`**：浏览器半由 web boot 用**裸 `{ name }`** 创建（`packages/client/web/src/boot-client.ts:50`），而 boot manifest 的插件行只带 `id` / `inject` / `immediately`——宿主行的 `config` 到不了客户端插件。给这个包写 `config` 不会有任何效果。
 
 ## 源码结构
 

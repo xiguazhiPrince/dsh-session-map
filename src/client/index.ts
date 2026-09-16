@@ -128,6 +128,41 @@ function lookup<T>(ctx: Context, name: string): T | undefined {
 }
 
 /**
+ * Browser-local preference holding whether the Conversation tab entries are
+ * registered.
+ *
+ * Not row config: the browser half is created by the web boot with a bare
+ * `{ name }` (`packages/client/web/src/boot-client.ts`), and a boot manifest
+ * row carries only `id`, `inject`, and `immediately`, so nothing a profile
+ * writes reaches this program.
+ */
+const CONVERSATION_VIEWS_KEY = 'dsh.session-map.conversationViews'
+
+/**
+ * Whether the Conversation tabs are registered when this browser recorded no
+ * preference. The header launcher and both right-column tab types register
+ * either way, so the map stays usable from the right column alone.
+ */
+const DEFAULT_CONVERSATION_VIEWS = false
+
+/**
+ * Read this browser's Conversation-tab preference.
+ * @returns true when the tabs should be registered.
+ */
+function conversationViewsEnabled(): boolean {
+  if (typeof localStorage === 'undefined') return DEFAULT_CONVERSATION_VIEWS
+  try {
+    const stored = localStorage.getItem(CONVERSATION_VIEWS_KEY)
+    if (stored === 'true') return true
+    if (stored === 'false') return false
+  } catch {
+    // Storage can be denied (private mode, blocked site data); the shipped
+    // default is the reading of "no preference recorded".
+  }
+  return DEFAULT_CONVERSATION_VIEWS
+}
+
+/**
  * Client plugin body: inject the stylesheet, build the three bodies over one set
  * of plugin-run switches, and register every seat and tab type.
  * @param ctx - browser root context carrying the slot registry.
@@ -192,15 +227,18 @@ export function apply(ctx: Context): void {
     MapLauncher,
   )), 'session-map: header launcher')
 
-  ctx.effect(() => slots.inject('conversation.view', () => slots.register(
-    { name: 'conversation.view', id: 'session-overview', order: 20, label: '概览' },
-    OverviewTab,
-  )), 'session-overview: conversation view entry')
+  // The Conversation tab entries are opt-in; see DEFAULT_CONVERSATION_VIEWS.
+  if (conversationViewsEnabled()) {
+    ctx.effect(() => slots.inject('conversation.view', () => slots.register(
+      { name: 'conversation.view', id: 'session-overview', order: 20, label: '概览' },
+      OverviewTab,
+    )), 'session-overview: conversation view entry')
 
-  ctx.effect(() => slots.inject('conversation.view', () => slots.register(
-    { name: 'conversation.view', id: 'session-map', order: 30, label: '会话图谱' },
-    SessionMapTab,
-  )), 'session-map: conversation view entry')
+    ctx.effect(() => slots.inject('conversation.view', () => slots.register(
+      { name: 'conversation.view', id: 'session-map', order: 30, label: '会话图谱' },
+      SessionMapTab,
+    )), 'session-map: conversation view entry')
+  }
 
   // The right column's type registry belongs to another package whose own
   // injections are wider, so its apply can land after this one. Reading the
