@@ -86,6 +86,19 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 
 **已完成**：仓库结构、`dsh.bundle` 层、`dsh.client` 声明、宿主半、构建契约，以及全部画布与交互。
 
+## 宿主契约（升版必读）
+
+浏览器半读的是**运行时快照**，产品不承诺它们稳定。已经踩到过两次，都表现为「样式坏了」但其实是契约漂移：
+
+| 读的东西 | 现在怎么读 | 漂移前 |
+|---|---|---|
+| 当前会话 | Session 列表快照里 `retainedBy.mainView > 0` 的那一行（`mainSessionId`），退而用座位上自己的 `sessionId` | 快照曾直接给 `current` |
+| 排队条数 | `pendingSubmissions`（0.1.7 的名字） | 曾叫 `queue` |
+
+判断「当前会话」时不要发明新口径：产品自己的每个包都按 `retainedBy.mainView` 推导（标题栏、open-in-app、agent-preset 皆然）。快照里还没有 `current` 时，旧写法只会拿到 `undefined`，而 `undefined` 不会报错——画布只是安静地退回「整张全局图」，也没有任何卡片亮起当前会话的描边。
+
+同一次审计过了其余接口：`useSessions` 的 `ids` / `byId` / `phase`、`useWorkspaces` 的 `items`、投影键 `title` / `sessionStats` / `turnOutline`、以及会话快照的 `running` / `hasMore` 都还在。
+
 ## 贡献了什么
 
 | 座位 | 内容 |

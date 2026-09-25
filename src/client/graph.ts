@@ -35,8 +35,32 @@ export interface SessionSummary {
   readonly running?: boolean | undefined
   readonly completed?: boolean | undefined
   readonly updatedAt?: number | undefined
+  /**
+   * Retention counts by holder, as the Session controller publishes them. The
+   * foreground Session is the one the main view retains; see
+   * {@link mainSessionId}.
+   */
+  readonly retainedBy?: Readonly<Record<string, number>> | undefined
   /** Host-computed projection values; every field is wire data and re-checked before use. */
   readonly projectionValues?: Readonly<Record<string, unknown>> | null | undefined
+}
+
+/**
+ * The Session the app is showing, taken from the listed rows.
+ *
+ * The Session list snapshot carries no `current` field: the controller publishes
+ * `{ ids, byId, phase, projectionsBySession }` and every shipped package derives
+ * the foreground Session as the row the main view retains. A row without
+ * retention counts is not it, so a list that has not been adopted yet answers
+ * `undefined` rather than naming an arbitrary Session.
+ * @param byId - listed Session summaries, in host order.
+ * @returns the retained Session's id, or `undefined` when nothing retains one.
+ */
+export function mainSessionId(byId: Readonly<Record<string, SessionSummary>>): string | undefined {
+  for (const id of Object.keys(byId)) {
+    if ((byId[id]?.retainedBy?.mainView ?? 0) > 0) return id
+  }
+  return undefined
 }
 
 /** One Workspace group as the map reads it, for tree order and captions. */

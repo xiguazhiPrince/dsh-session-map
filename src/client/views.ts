@@ -26,8 +26,10 @@ import {
   OVERVIEW_KIND,
   PAD,
   WHEEL_LINE,
+  WHEEL_ZOOM_BASE,
+  WHEEL_ZOOM_MAX_STEP,
 } from './constants'
-import { buildGraph, type GraphNode, type LineState, type SessionSummary, type WorkspaceGroup } from './graph'
+import { buildGraph, mainSessionId, type GraphNode, type LineState, type SessionSummary, type WorkspaceGroup } from './graph'
 import { useFlag, withMember, type Flag } from './flags'
 import { clampNumber, errorText, formatCount, formatMs } from './format'
 
@@ -50,13 +52,25 @@ const KEYBOARD_GLYPH = React.createElement(
 export interface SessionListState {
   readonly ids: readonly string[]
   readonly byId: Readonly<Record<string, SessionSummary>>
-  readonly current: string | undefined
+  /**
+   * Foreground Session id, when the build publishes one. The 0.1.7 Session list
+   * snapshot dropped it, so the canvas derives it with
+   * {@link mainSessionId} instead; see {@link foregroundSessionId}.
+   */
+  readonly current?: string | undefined
 }
 
 /** The seat's own Session lifecycle state, narrowed to the fields the overview reads. */
 export interface SessionState {
   readonly running: boolean
-  readonly queue: readonly unknown[]
+  /**
+   * Submissions admitted but not consumed yet, as the current builds name them.
+   * Both names stay declared because the snapshot the seat publishes is wire
+   * data, not a type this plugin controls; see {@link waitingCount}.
+   */
+  readonly pendingSubmissions?: readonly unknown[] | undefined
+  /** The name older builds gave the same list. */
+  readonly queue?: readonly unknown[] | undefined
   readonly hasMore: boolean
 }
 
@@ -169,6 +183,27 @@ export interface MapFlags {
 }
 
 /**
+ * Resolve the Session the app is showing, for one seat.
+ *
+ * A build that publishes `current` on the list snapshot is trusted first. The
+ * 0.1.7 snapshot carries only `{ ids, byId, phase, projectionsBySession }`, so
+ * the row the main view retains answers instead — the same derivation every
+ * shipped package uses. The seat's own Session is the last resort, which is what
+ * a right column bound to a Session reports while nothing holds a main view.
+ *
+ * Without this the id was simply `undefined`, which silently degraded every
+ * "current" answer: no card drew the current ring, and {@link
+ * SessionMapView}'s placement and 定位当前 both fell through to fitting the whole
+ * graph instead of centering on the Session being read.
+ * @param state - the Session list snapshot.
+ * @param sessionId - the Session this seat is drawing.
+ * @returns the foreground Session id, or `undefined` when none can be named.
+ */
+function foregroundSessionId(state: SessionListState, sessionId: string): string | undefined {
+  return state.current ?? mainSessionId(state.byId) ?? sessionId
+}
+
+/**
  * One overview card.
  * @param key - React key.
  * @param label - the card's caption.
@@ -185,6 +220,23 @@ function card(key: string, label: string, value: string): React.ReactElement {
 }
 
 /**
+ * How many submissions one Session is holding.
+ *
+ * The current builds publish the list as `pendingSubmissions`; the `queue` field
+ * this overview was written against is gone, and reading `.length` off it threw
+ * while the overview rendered. Taking whichever field is really an array keeps
+ * both builds working and reports "nothing waiting" instead of crashing when
+ * neither is present.
+ * @param session - the seat's Session snapshot.
+ * @returns the number of waiting submissions.
+ */
+function waitingCount(session: SessionState): number {
+  if (Array.isArray(session.pendingSubmissions)) return session.pendingSubmissions.length
+  if (Array.isArray(session.queue)) return session.queue.length
+  return 0
+}
+
+/**
  * Read everything the overview shows from the seat's props.
  * @param props - composed slot props.
  * @returns the projected title and stats plus the live Session figures.
@@ -193,7 +245,7 @@ function useOverview(props: SessionViewProps): OverviewData {
   const title = props.useProjection('title')
   const stats = props.useProjection('sessionStats')
   const running = props.useSession(s => s.running)
-  const queueLength = props.useSession(s => s.queue.length)
+  const queueLength = props.useSession(s => waitingCount(s))
   const hasMore = props.useSession(s => s.hasMore)
   return { title, stats, running, queueLength, hasMore }
 }
@@ -440,7 +492,7 @@ export function createMapView(
   function SessionMapView(props: SessionViewProps): React.ReactElement {
     const byId = props.useSessions(state => state.byId)
     const ids = props.useSessions(state => state.ids)
-    const current = props.useSessions(state => state.current)
+    const current = props.useSessions(state => foregroundSessionId(state, props.sessionId))
     const workspaces = props.useWorkspaces(state => state.items)
 
     const [hideSubagents, setHideSubagents] = useFlag(flags.hideSubagents)
@@ -554,7 +606,14 @@ export function createMapView(
           const rect = element.getBoundingClientRect()
           const pointerX = event.clientX - rect.left
           const pointerY = event.clientY - rect.top
-          const factor = Math.pow(1.0015, -event.deltaY * unit)
+          // A trackpad pinch is a burst of small deltas, so the base is what its
+          // sensitivity comes from; the cap only ever bites on a coarse wheel
+          // notch, which would otherwise land as one big jump.
+          const factor = clampNumber(
+            Math.pow(WHEEL_ZOOM_BASE, -event.deltaY * unit),
+            1 / WHEEL_ZOOM_MAX_STEP,
+            WHEEL_ZOOM_MAX_STEP,
+          )
           setView(previous => {
             const zoom = clampNumber(previous.zoom * factor, MIN_ZOOM, MAX_ZOOM)
             if (zoom === previous.zoom) return previous

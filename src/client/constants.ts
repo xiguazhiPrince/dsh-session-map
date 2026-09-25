@@ -82,6 +82,16 @@ export const MAX_ZOOM = 2.8
 /** Pixel delta one wheel line stands for. */
 export const WHEEL_LINE = 16
 
+// Trackpad pinch arrives as a ctrl-modified wheel whose deltas are small and
+// arrive in bursts, where a mouse notch arrives as one delta near 100. One base
+// serves both, so the base is set for the pinch and the per-event step is capped
+// to keep a coarse notch from lurching.
+/** Scale one pixel of wheel delta multiplies the canvas by. */
+export const WHEEL_ZOOM_BASE = 1.005
+
+/** Largest scale change one wheel event may apply on its own. */
+export const WHEEL_ZOOM_MAX_STEP = 1.25
+
 // Popovers, used only to keep them inside the panel.
 /** Width of the node/bead action popover. */
 export const MENU_W = 184
