@@ -406,4 +406,257 @@ export const CSS = `
   text-decoration: underline;
   cursor: pointer;
 }
+
+/* The ACP settings page. It renders inside the settings panel's content column
+   rather than inside this plugin's own tabs, so it follows the same material
+   and type scale as the product's own settings pages: every color and radius
+   resolves through a --dsw-alias-* / --dsw-radius-* token, because a literal
+   would stay light under the dark theme. */
+.dsm-acp-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 720px;
+  padding-bottom: 24px;
+  color: var(--dsw-alias-label-primary);
+}
+.dsm-acp-page__title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+.dsm-acp-page__note {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-tertiary);
+}
+.dsm-acp-page__warn {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-warn-label);
+}
+.dsm-acp-page__link { color: var(--dsw-alias-brand-primary); text-decoration: none; }
+.dsm-acp-page__link:hover { text-decoration: underline; }
+.dsm-acp-page__empty {
+  margin: 0;
+  padding: 12px 14px;
+  border: 0.5px dashed var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-xl);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-tertiary);
+}
+.dsm-acp-page__presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.dsm-acp-page__presetLabel {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+.dsm-acp-page__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One agent: the settings-card material the product's own row cards use. */
+.dsm-acp-page__agent {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
+  border-radius: var(--dsw-radius-xl);
+  background: var(--dsw-alias-settings-card-fill);
+}
+.dsm-acp-page__agent--off { opacity: 0.72; }
+.dsm-acp-page__agentHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-bottom: 10px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+.dsm-acp-page__name {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+/* An annotation on the name, at caption size, so it never competes with it. */
+.dsm-acp-page__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The product's own status badge recipe: primary is the readable green in each
+   theme, tertiary the tint it sits on (green-100 light, green-900 dark). */
+.dsm-acp-page__chip--on {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 20%, transparent);
+  background: var(--dsw-alias-state-success-tertiary);
+  color: var(--dsw-alias-state-success-primary);
+}
+.dsm-acp-page__spacer { flex: 1; min-width: 0; }
+.dsm-acp-page__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 12px 16px;
+}
+.dsm-acp-page__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.dsm-acp-page__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-secondary);
+}
+.dsm-acp-page__wide { grid-column: 1 / -1; }
+.dsm-acp-page__check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+}
+.dsm-acp-page__check input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--dsw-alias-button-primary-fill);
+}
+.dsm-acp-page__input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+}
+.dsm-acp-page__input::placeholder { color: var(--dsw-alias-label-dimmed); }
+.dsm-acp-page__input:focus {
+  outline: none;
+  border-color: var(--dsw-alias-state-business-primary);
+}
+.dsm-acp-page__input:disabled {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-tertiary);
+}
+select.dsm-acp-page__input { cursor: pointer; }
+textarea.dsm-acp-page__input {
+  height: auto;
+  min-height: 66px;
+  padding: 6px 10px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* The secondary half of an agent, on the inset editing surface. */
+.dsm-acp-page__more {
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-module-platform);
+  padding: 8px 10px;
+}
+.dsm-acp-page__more > summary {
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-secondary);
+}
+.dsm-acp-page__more[open] > summary { margin-bottom: 10px; }
+.dsm-acp-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+}
+.dsm-acp-page__button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 12px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.dsm-acp-page__button:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.dsm-acp-page__button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+}
+.dsm-acp-page__button:disabled { opacity: 0.45; cursor: default; }
+.dsm-acp-page__button--primary {
+  border-color: transparent;
+  background: var(--dsw-alias-button-primary-fill);
+  color: var(--dsw-alias-label-primary-foreground);
+  font-weight: 500;
+}
+.dsm-acp-page__button--primary:hover:not(:disabled) { background: var(--dsw-alias-button-primary-hover); }
+.dsm-acp-page__button--danger:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+  color: var(--dsw-alias-state-error-primary);
+}
+.dsm-acp-page__problems {
+  margin: 0;
+  padding: 0 0 0 16px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-error-primary);
+}
+.dsm-acp-page__error {
+  margin: 0;
+  padding: 8px 12px;
+  border: 0.5px solid var(--dsw-alias-state-error-primary);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-2);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-error-primary);
+}
+.dsm-acp-page__dirty {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-warn-label);
+}
 `

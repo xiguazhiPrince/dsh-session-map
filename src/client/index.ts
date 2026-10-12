@@ -15,6 +15,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { ReactElement } from 'react'
+import { createAcpCard, type ConfigFormsLike } from './acp-card'
 import { AcpToolRow, ACP_TOOL_KEYS, type AcpToolRowProps } from './acp-tool-row'
 import { CSS } from './css'
 import { MAP_KIND, MAP_TYPE_ID, OVERVIEW_KIND, OVERVIEW_TYPE_ID } from './constants'
@@ -315,5 +316,23 @@ export function apply(ctx: Context): void {
       { name: 'sidebar.right.pane.tab', key: MAP_TYPE_ID },
       SidebarMapBody,
     )), 'session-map: rightbar tab body')
+  })
+
+  // The ACP vendor page. It rides an OPTIONAL injection: a composition that
+  // never mounted the settings domain still gets the whole canvas above, and
+  // only a profile running the ACP route ever has a namespace to edit. The page
+  // registers unconditionally (rather than through `whileServed`) so a profile
+  // that disabled the row still gets the explanation of how to bring it back.
+  ctx.inject(['slots', 'configForms'], (scope) => {
+    const scopedSlots = lookup<SlotsService>(scope, 'slots')
+    const configForms = lookup<ConfigFormsLike>(scope, 'configForms')
+    if (scopedSlots === undefined || configForms === undefined) return
+    const AcpCard = createAcpCard(configForms)
+    // After the shipped presets (agent-presets is 20): an agent is what puts a
+    // card in the new-session picker, so the roster comes first.
+    ctx.effect(() => scopedSlots.inject('settings.section', () => scopedSlots.register(
+      { name: 'settings.section', id: 'acp', order: 25, label: 'ACP' },
+      AcpCard,
+    )), 'session-map: acp vendors settings section')
   })
 }

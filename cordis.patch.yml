@@ -13,11 +13,15 @@
     # agent — `agents` is a list — and each entry also gets a preset card in the
     # new-task picker.
     #
-    # Off by default: an enabled row runs agent code that can write in the
-    # session's working directory, and DSH's sandbox does not apply to the remote
-    # agent's own process. Turn it on in Settings → Plugins, then list the agents
-    # here (`fs: bridge` is what brings the remote agent's file access back under
-    # this Session's sandbox).
+    # ON by default, with an EMPTY agent list, which is what makes the settings
+    # page (Settings → ACP) able to write into this row: the settings service
+    # only serves an entry that is active. An empty list registers nothing at
+    # all — no adapter, no mirrored tool, no preset card — so this default runs
+    # no agent code: the switch that matters is whether `agents` has an entry.
+    # An enabled agent does run agent code that can write in the session's
+    # working directory, and DSH's sandbox does not apply to the remote agent's
+    # own process (`fs: bridge` is what brings the remote agent's file access
+    # back under this Session's sandbox).
     #
     # The subpath specifier is deliberate. Browser client discovery recognizes
     # only a bare package specifier, so a second row of this same package cannot
@@ -28,8 +32,7 @@
     # an agent preset would leak a service and be rejected by the preset audit.
     - id: acp-agent
       name: dsh-session-map/acp-agent
-      disabled: true
       config:
-        # Empty by default: every agent is listed here, and each one becomes both
-        # an `acp` model and a preset card.
+        # The agent list. Settings → ACP edits exactly this field; a patch author
+        # writes the same list by hand.
         agents: []

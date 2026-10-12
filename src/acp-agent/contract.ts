@@ -160,6 +160,8 @@ export interface HostFs {
 export interface HostContext {
   readonly logger: {
     warn(message: string, ...rest: unknown[]): void
+    /** Used for the expected quiet states (`agents` empty is the shipped default). */
+    debug(message: string, ...rest: unknown[]): void
   }
   /** The adapter registry, model catalog, and the re-dispatch entry point. */
   readonly llm: {

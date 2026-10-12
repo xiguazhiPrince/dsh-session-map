@@ -23,6 +23,12 @@ const ID = 'dsh-session-map'
  * handoff itself. Everything the shell shares stays an external `require`; this
  * plugin imports none of it, so the bundle carries only its own code.
  *
+ * `acp-model.js` is the settings page's pure model, built for Node as well as
+ * bundled into the browser half. It decides everything the page does — draft
+ * conversion, validation, list edits, the vendor table, and the schema marker
+ * that finds the row's settings namespace — so the node test suite can drive it
+ * without a DOM or a Host composition.
+ *
  * `entryFileNames` pins both artifacts to the paths package.json declares:
  * tsdown's default extension follows the format, so the ESM half would land on
  * `index.mjs` and the Loader would not find `main`.
@@ -35,6 +41,7 @@ export default (): UserConfig[] => [
       index: 'src/index.ts',
       'acp-agent': 'src/acp-agent/index.ts',
       'acp-preset': 'src/acp-preset/index.ts',
+      'acp-model': 'src/client/acp-model.ts',
     },
     outDir: 'lib',
     format: ['esm'],

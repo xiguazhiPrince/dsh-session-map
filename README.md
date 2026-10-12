@@ -6,7 +6,7 @@
 
 - **ACP 会话**：把整个会话交给任何支持 ACP 的命令行 agent —— DSH 当它的客户端。你在 DSH 里发消息、看思考与正文、看工具卡片、点审批，背后跑的是远端 agent（本机实测过 `cursor-agent acp` 与 `opencode acp`）。见 [ACP 会话（把 ACP agent 直接当成一个会话）](#acp-会话把-acp-agent-直接当成一个会话)。
 
-默认关闭。
+这一行默认开着但**agent 列表是空的**：空列表什么都不注册，加一个 agent 才有东西跑——加的地方是 Settings → **ACP**（或 profile patch 里的 `agents`）。
 
 ## 安装（GitHub 直装）
 
@@ -56,11 +56,13 @@ dsh --profile <name> --dump-config
 
 **把整个会话交给远端 agent**，DSH 当 ACP 客户端：你在 DSH 里发消息、看思考与正文、看工具卡片、点审批，而这一切背后跑的是 `cursor-agent`、`opencode` 或任何说 ACP 的命令行 agent。它自己的会话、模型、工具、上下文都是它的一套。
 
-默认**关闭**。开启是在 profile patch 里把 `acp-agent` 那一行的 `disabled` 改成 `false` 并给出 `agents` 列表：
+默认这一行**开着，但 agent 列表是空的**——空列表什么都不注册，所以默认不跑任何 agent 代码。要加一个 agent，两个入口：
+
+1. **设置页**：Settings → **ACP**。点「+ Cursor CLI / + opencode / + Gemini CLI」任何一个都会按该 vendor 的默认命令填好一张卡片，改完按「保存」即生效（写进当前 profile 的 `cordis.patch.yml`，不用重启；页面上的说明见下）。
+2. **profile patch**：直接写这一行的 `agents` 列表：
 
 ```yaml
 - id: acp-agent
-  disabled: false
   config:
     agents:
       - name: cursor
@@ -71,7 +73,14 @@ dsh --profile <name> --dump-config
 
 然后**新建会话**，在「预设」卡片里选 **ACP · cursor**（每个 agent 一张卡）。选中的会话此后每一次请求都走这个远端 agent——预设会把路由钉死，所以这一行会话里换不了别的模型。
 
-**配置只有 YAML 这一条路**：这一行没有设置页面。
+### 设置页（Settings → ACP）
+
+- 一个 agent 一张卡片：名称、命令、参数、模式、权限、工作目录，`<details>` 里是环境变量与会话选项（都是每行 `KEY=VALUE`）；另有「启用 / 停用」「上移 / 下移」「删除」。
+- 所有改动先留在页面里，按「保存」才一次写入 `agents`——页面校验与后端同源（名称必填/字符集/唯一、命令必填、工作目录必须是绝对路径、`KEY=VALUE` 行号报错），有问题的草稿不会落进 patch。
+- 写入走 settings 服务并带 revision 栅栏：别处（另一个窗口、手改 patch）改了配置，页面会重新读取；被拒的写入保留草稿并提示。
+- **仍然只能在 YAML 里改的**：`approval` / `fs` / `idleDisposeMs` / `utilityProvider` + `utilityModel` / `disposeEofGraceMs` / `disposeGraceMs`。它们是这条行的非 volatile 字段，settings 服务拒绝写——页面里也只读地提了一句。
+- 行的开关（`disabled`）仍在 Settings → 内置插件 里；把那行关掉时页面会显示怎么打开，而不是静默消失。
+- 供应商表就是代码里的三条（Cursor / opencode / Gemini CLI），写错了照旧可以用「+ 自定义」手填；各家文档见页面上的链接。
 
 ### 会话里会出现什么
 
@@ -90,7 +99,7 @@ dsh --profile <name> --dump-config
 | `agents` | `[]` | agent 列表；每个 agent 派生出一张预设卡片与一个 `acp` 模型 |
 | `approval` | `policy` | `policy` 用每个 agent 自己的 `permission` 自动应答。`ask` 把决定交给 DSH 的审批服务：问题出现在该会话的对话里，先过会话自己的审批策略，且和别的审批一样进审计日志。审批服务不可用时**回到** `policy`，不会凭空授权 |
 | `fs` | `bridge` | `bridge` 在握手里声明 `fs/read_text_file` 与 `fs/write_text_file`，并**用 `ctx.fs` 提供**：远端读的是 DSH 执行世界里的文件，写的是带**该会话沙箱策略**的 Host 写入——只读会话会被后端直接拒掉，文件根本不会创建。`isolate` 声明什么都不提供，让 agent 用自己的文件系统 |
-| `idleDisposeMs` | `600000` | 会话安静这么久之后回收那条 agent 进程；`0` 关闭 |
+| `idleDisposeMs` | `600000` | 会话安静这么久之后回收那条 agent 进程。**注意**：`channel.ts` 把 `<= 0` 当「不回收」，但 `src/acp-agent/config.ts` 的解析会把非正数当作未设置、回落到 10 分钟，所以 `0` 目前不可达——见 [docs/p8-acp-settings-page.md](docs/p8-acp-settings-page.md) 最后一节 |
 | `utilityProvider` / `utilityModel` | 未设 | 压缩与标题这类 **Host 工具调用**往哪走。两个必须同时给。不设就是本行拒绝，Host 用自己的兜底标题 |
 
 #### 每个 agent 的字段
@@ -154,6 +163,7 @@ dsh --profile <name> --dump-config
 | P5 | 客户端工具视图：卡片显示远端标题/类型/路径 | [docs/p5-client-tool-views.md](docs/p5-client-tool-views.md) |
 | P6 | 文件系统桥接：远端读写走 `ctx.fs` 与沙箱 | [docs/p6-fs-bridge.md](docs/p6-fs-bridge.md) |
 | P7 | 删除子代理委派：把首次抽取没做完的共享核心接上，移除整条委派链路 | [docs/p7-remove-delegation.md](docs/p7-remove-delegation.md) |
+| P8 | 设置页：Settings → ACP 一页管理 `agents`，含 Cursor / opencode / Gemini CLI 三个供应商预设 | [docs/p8-acp-settings-page.md](docs/p8-acp-settings-page.md) |
 
 本机实测过的 agent：`cursor-agent acp`（真实会话、工具卡片、停止、审批都跑通）。脚本化 agent（`test/mock-acp-agent.mjs`）用于确定性地验审批与文件系统两条路径，因为它不依赖某个 Cursor 版本愿不愿意发问。
 
@@ -161,7 +171,7 @@ dsh --profile <name> --dump-config
 
 ```sh
 pnpm install
-pnpm build        # 产出 lib/index.js、lib/acp-agent.js、lib/acp-preset.js 与 lib/client.js
+pnpm build        # 产出 lib/index.js、lib/acp-agent.js、lib/acp-preset.js、lib/acp-model.js 与 lib/client.js
 pnpm typecheck    # tsc --noEmit
 pnpm test         # node --test，驱动 lib/ 产物
 ```
@@ -175,6 +185,7 @@ pnpm test         # node --test，驱动 lib/ 产物
 `pnpm test` 不需要任何真 agent、不需要登录、不联网。它覆盖的是**与具体路由无关的那一半**——也就是最平台敏感的那一半：
 
 - `test/core.test.mjs` 直接调用构建产物里的纯函数：`resolveAcpCommand`（已知启动器取最新且跳过不完整版本、npm shim 声明的二进制直连、声明了 `%_prog%` 的脚本前面加 node、`.cmd` 走命令解释器、裸 `node` 优先 `.exe`、PATH 上找不到时给配置指引）、`resolveChildCwd` / `assertUsableCwd`，以及 `resolveOptions` / `agentSchema` 的逐 agent 校验（缺失的 `name` / `command`、类型与枚举错误、重名、`cwd` 不可用、以及 graces 的边界）。Windows 专属用例在非 Windows 上跳过。
+- `test/acp-card.test.mjs` 直接调用 `lib/acp-model.js`：草稿 ↔ wire 往返、写回时丢掉默认值、校验规则、`KEY=VALUE` 与参数解析、列表编辑、供应商预设的命名去重，以及用**真实 `Config.toJSON()`** 验的命名空间识别。
 
 会话路由本身没有自动化测试：它的验证靠 `.dsh-dev` 探针 profile（真实 agent / 脚本化 agent）与人工实测，见上面那张阶段表。
 
@@ -188,7 +199,7 @@ dsh plugin --profile dev add "$PWD"
 dsh --profile dev --dump-config      # 应看到 # == dsh-session-map 层与两行
 ```
 
-`.dsh-dev/` 已 gitignore。实测结论：`--dump-config` 里出现的正是 `session-map` 与 `acp-agent`（`dsh-session-map/acp-agent`，默认 `disabled: true`）；profile 侧的裸覆盖能把 `disabled` 改回 `false` 且保住 `name`；把配置写坏时启动会给出带行名的警告（说明 Loader 确实 import 了这个入口并把原始 config 交给了 `apply`）；配置正确时启动**没有** "entry did not activate" 警告。
+`.dsh-dev/` 已 gitignore。实测结论：`--dump-config` 里出现的正是 `session-map` 与 `acp-agent`（`dsh-session-map/acp-agent`，默认**不再** `disabled`，`agents: []`）；设置页写进去的那一份会作为 profile 覆盖出现在同一份 dump 里；把配置写坏时启动会给出带行名的警告（说明 Loader 确实 import 了这个入口并把原始 config 交给了 `apply`）；配置正确时启动**没有** "entry did not activate" 警告。
 
 ## 产物
 
@@ -197,6 +208,7 @@ dsh --profile dev --dump-config      # 应看到 # == dsh-session-map 层与两�
 | `lib/index.js` | ESM | 宿主 Loader 按包名 import（画布那一行） |
 | `lib/acp-agent.js` | ESM | 宿主 Loader 按子路径 `dsh-session-map/acp-agent` import（ACP 会话那一行） |
 | `lib/acp-preset.js` | ESM | 预设卡片为每个新会话挂的子插件；只注册一条 `agent/request` 拦截把路由钉住 |
+| `lib/acp-model.js` | ESM | 设置页的纯模型（草稿转换、校验、列表编辑、供应商表、schema 识别）；同时被 `lib/client.js` 打包进去，给 `test/acp-card.test.mjs` 在 Node 里直接跑 |
 | `lib/client.js` | CJS closure factory | 浏览器内核通过 module table 取用 |
 
 **为什么 ACP 那两行用子路径 specifier。** 浏览器客户端发现只认**裸包名**（`exactPackageSpecifier` 对含 `/` 的 specifier 返回 `undefined`，见 `packages/client/modules/src/index.ts`），所以同一个包的其它入口对客户端模块表**不可见**——不会重复注册、也不会触发「同一包有多个活跃 Loader 来源」的组合错误。先例是 `@deepseek-ai/dsh-tool-subagent-control/list-agents`；这也是同一个入口能被多行同时挂载的原因。
@@ -222,9 +234,9 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 
 **ACP 会话行的验证**（隔离 `DSH_HOME`，见[加载链路验证](#加载链路验证)）：
 
-- `--dump-config` 里 `session-map` 与 `acp-agent` 两行齐全，后者 `disabled: true`；profile 侧裸覆盖能改成 `false` 且保住 `name`；
+- `--dump-config` 里 `session-map` 与 `acp-agent` 两行齐全，后者默认开着、`agents: []`；设置页写进去的 `agents` 会作为 profile 覆盖出现在同一份 dump 里；
 - 配置写坏时那一行仍然加载（schema 负责类型，`apply` 负责语义并记日志），日志里给出一行带 `dsh-session-map/acp-agent` 前缀的原因；
-- `pnpm test`：15 通过、1 跳过（POSIX 专属），覆盖命令解析、cwd 校验与逐 agent 的配置校验——见[测试](#测试)；
+- `pnpm test`：26 通过、1 跳过（POSIX 专属），覆盖命令解析、cwd 校验、逐 agent 的配置校验，以及设置页模型（草稿往返、校验、供应商预设、命名去重、schema 识别）——见[测试](#测试)；
 - **命令解析这条链在本机实测过两种 vendor**：`cursor-agent` 走已知启动器表；`opencode` 走 npm `.cmd` shim 声明的真实二进制，`initialize` / `session/new` / `session/set_config_option`（换模型生效）全部送达。换 vendor 不成功时也没有变成一次泄漏或一次挂死：远端自己的拒绝变成 `stop: error` 与一行固定诊断，原始 payload 只留在子进程的 stderr。
 
 **ACP 会话（P0–P6）的验证**：每一阶段都要有可复现的证据，而不是「看起来能用」——
@@ -239,7 +251,7 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 
 **一个包同时是 bundle 和 client 插件是可行的**：产品随附的布局把两者拆成不同的包（bundle 的 patch 行去引用 `packages/client/*` 里的插件包），但自引用同样能被浏览器 roster 接受。第二个 host 入口用**子路径 specifier**，对客户端发现不可见，因此两个入口不会在同一张模块表里撞车。
 
-**已完成**：仓库结构、`dsh.bundle` 层、`dsh.client` 声明、宿主半侧、构建约定、全部画布与交互，以及 **ACP 会话路由**：预设卡片选中一个 agent、思考/正文/工具卡片/审批卡片/停止按钮都进 DSH 的原生 UI，远端文件访问走 Host 文件系统与沙箱。默认关闭。
+**已完成**：仓库结构、`dsh.bundle` 层、`dsh.client` 声明、宿主半侧、构建约定、全部画布与交互，以及 **ACP 会话路由**：预设卡片选中一个 agent、思考/正文/工具卡片/审批卡片/停止按钮都进 DSH 的原生 UI，远端文件访问走 Host 文件系统与沙箱。这一行默认开着、agent 列表默认为空——加 agent 的地方是 Settings → **ACP**（P8，见 [docs/p8-acp-settings-page.md](docs/p8-acp-settings-page.md)），或直接写 profile patch。
 
 ## 宿主契约（升版必读）
 
@@ -249,6 +261,8 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 |---|---|---|
 | 当前会话 | Session 列表快照里 `retainedBy.mainView > 0` 的那一行（`mainSessionId`），退而用座位上自己的 `sessionId` | 快照曾直接给 `current` |
 | 排队条数 | `pendingSubmissions`（0.1.7 的名字） | 曾叫 `queue` |
+| 插件配置读写 | `ctx.configForms.get(entryId)`（`getSnapshot` / `subscribe` / `set`）与它背后的 `settings.describe` 镜像；`describe()` 的 `view.namespaces[].ns` / `.schema` 用来找自己的命名空间 | settings 服务与 `configForms` 都是 0.1.7 起才有的面 |
+| 设置页座位 | `settings.section`（list，root 作用域，owner props 只有 `{ close }`；注册项 `id` / `order` / `label`） | 无 |
 
 判断「当前会话」时不要发明新口径：产品自己的每个包都按 `retainedBy.mainView` 推导（标题栏、open-in-app、agent-preset 皆然）。快照里还没有 `current` 时，旧写法只会拿到 `undefined`，而 `undefined` 不会报错——画布只是安静地退回「整张全局图」，也没有任何卡片亮起当前会话的描边。
 
@@ -262,6 +276,7 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 | `conversation.session.header.utilities` | 会话头部的「会话图谱」开关（order 40）；右侧栏已打开时再点一次关闭 |
 | `sidebar.right.pane.tab` | 常驻标签页 `dsh-session-map.overview` 与 `dsh-session-map.map` |
 | `tool.call.toolview`（Client，keyed） | 每个 `acp_*` 工具名一条视图：状态点、类型、远端标题、文件路径、可展开的输入与输出 |
+| `settings.section`（Client） | Settings → **ACP** 一页（order 25）：agent 卡片、供应商预设、行级说明；读写的是 `acp-agent` 那一行的 `agents`，写进当前 profile 的 `cordis.patch.yml` |
 | `ctx.llm`（Host） | 一个 `acp` adapter：每个 agent 一个模型，只负责把远端更新流成 DSH 的 chunk 协议 |
 | `ctx.tools`（Host） | 每个 ACP 工具类型一个镜像工具（`acp_read` / `acp_edit` / …），执行它们等于等远端那条调用的结果 |
 | `ctx.agentPresets`（Host） | 每个 agent 一张预设卡片；卡片挂一个只做一件事的子插件——把这条会话的路由钉死 |
@@ -300,6 +315,8 @@ src/acp-agent/presets.ts    预设卡片：id 推导、顺序、子插件 specif
 src/acp-agent/config.ts     本行的 Config（agent 列表 + approval / fs / idleDisposeMs / utility 路由）
 src/acp-agent/contract.ts   对 ctx.llm / ctx.tools / ctx.agentPresets / ctx.fs / ctx.sandboxPolicy 的最小结构化类型 + 出处
 src/acp-preset/index.ts     预设子插件：一条 `agent/request` 拦截，把 provider/model 钉死并丢掉继承来的 reasoningEffort
+src/client/acp-model.ts      设置页的纯模型：草稿形状、写回转换、校验、列表编辑、供应商表、按 schema 形状识别自己的命名空间
+src/client/acp-card.ts       Settings → ACP 那一页（createElement 自绘，只依赖 ctx.configForms 的结构化类型）
 src/client/acp-tool-row.ts  镜像调用的那行工具视图（createElement 自绘，claim 十个 `acp_*` key）
 src/client/index.ts         apply：样式表、插件级开关、座位、标签页与工具视图注册
 src/client/views.ts         概览页、头部按钮、画布视图工厂

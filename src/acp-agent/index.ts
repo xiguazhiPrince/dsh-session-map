@@ -124,7 +124,9 @@ export function apply(ctx: HostContext, config: unknown): Promise<void> {
       teardownRoute()
 
       if (resolved.agents.length === 0) {
-        ctx.logger.warn(`${PREFIX}: no enabled agents configured; the "${PROVIDER}" route is not registered`)
+        // The shipped default. Debug rather than warn: an empty agent list is the
+        // normal state of a fresh install, not a misconfiguration.
+        ctx.logger.debug(`${PREFIX}: no enabled agents configured; the "${PROVIDER}" route is not registered`)
         return
       }
 
