@@ -56,9 +56,3 @@ export interface SubprocessHandle {
    */
   waitForExit(signal?: AbortSignal): Promise<boolean>
 }
-
-/** The process seam itself. */
-export interface SubprocessSeam {
-  /** @param spec - the fully specified spawn request. */
-  spawn(spec: SubprocessSpawnSpec): SubprocessHandle
-}

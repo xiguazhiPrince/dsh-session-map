@@ -35,12 +35,6 @@
 import type { Readable, Writable } from 'node:stream'
 import type { PresetRegistry } from './presets'
 
-/** One text content block the Host block vocabulary accepts. */
-export interface TextBlock {
-  readonly type: 'text'
-  readonly text: string
-}
-
 /**
  * The raw chunk protocol this route emits. Only the variants an ACP update maps
  * onto are modelled; `block-start`/`block-end` are omitted on purpose because

@@ -94,16 +94,6 @@ export const agentSchema = z.object({
   enabled: z.boolean().default(true),
 })
 
-/**
- * The plugin's Config schema. `agents` is volatile so the settings service
- * offers it as a live-editable field; the graces stay ordinary.
- */
-export const Config = z.object({
-  agents: z.array(agentSchema).default([]).volatile(),
-  disposeEofGraceMs: z.number(),
-  disposeGraceMs: z.number(),
-})
-
 /** Diagnostic prefix for configuration failures this schema reports. */
 export const CONFIG_PREFIX = 'dsh-session-map/acp-agent'
 
