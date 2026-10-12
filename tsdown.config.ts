@@ -12,7 +12,7 @@ const ID = 'dsh-session-map'
  *
  * The node half is an ordinary ESM library the Loader imports by package name.
  * Every entry but the first is addressed by a subpath specifier
- * (`dsh-session-map/acp-agent`, `…/acp-preset`, `…/spike`). A subpath row is
+ * (`dsh-session-map/acp-agent`, `…/acp-preset`). A subpath row is
  * invisible to the browser client scan on purpose — that scan recognizes only a
  * bare package specifier — so those entries cannot collide in the browser module
  * table, and the same entry can be mounted by several rows at once.
@@ -35,9 +35,6 @@ export default (): UserConfig[] => [
       index: 'src/index.ts',
       'acp-agent': 'src/acp-agent/index.ts',
       'acp-preset': 'src/acp-preset/index.ts',
-      // Probe only: proves a plugin-registered `llm` adapter reaches the Agent
-      // loop and the Chat UI. Never enabled by a shipped row.
-      spike: 'src/spike/index.ts',
     },
     outDir: 'lib',
     format: ['esm'],

@@ -9,7 +9,6 @@
     ".": "./lib/index.js",
     "./acp-agent": "./lib/acp-agent.js",
     "./acp-preset": "./lib/acp-preset.js",
-    "./spike": "./lib/spike.js",
     "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },

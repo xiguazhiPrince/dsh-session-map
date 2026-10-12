@@ -161,7 +161,7 @@ dsh --profile <name> --dump-config
 
 ```sh
 pnpm install
-pnpm build        # 产出 lib/index.js、lib/acp-agent.js、lib/acp-preset.js、lib/spike.js 与 lib/client.js
+pnpm build        # 产出 lib/index.js、lib/acp-agent.js、lib/acp-preset.js 与 lib/client.js
 pnpm typecheck    # tsc --noEmit
 pnpm test         # node --test，驱动 lib/ 产物
 ```
@@ -197,7 +197,6 @@ dsh --profile dev --dump-config      # 应看到 # == dsh-session-map 层与两�
 | `lib/index.js` | ESM | 宿主 Loader 按包名 import（画布那一行） |
 | `lib/acp-agent.js` | ESM | 宿主 Loader 按子路径 `dsh-session-map/acp-agent` import（ACP 会话那一行） |
 | `lib/acp-preset.js` | ESM | 预设卡片为每个新会话挂的子插件；只注册一条 `agent/request` 拦截把路由钉住 |
-| `lib/spike.js` | ESM | P0 的脚本化 adapter，只在 `.dsh-dev` 探针 profile 里用；不随配置启用 |
 | `lib/client.js` | CJS closure factory | 浏览器内核通过 module table 取用 |
 
 **为什么 ACP 那两行用子路径 specifier。** 浏览器客户端发现只认**裸包名**（`exactPackageSpecifier` 对含 `/` 的 specifier 返回 `undefined`，见 `packages/client/modules/src/index.ts`），所以同一个包的其它入口对客户端模块表**不可见**——不会重复注册、也不会触发「同一包有多个活跃 Loader 来源」的组合错误。先例是 `@deepseek-ai/dsh-tool-subagent-control/list-agents`；这也是同一个入口能被多行同时挂载的原因。
@@ -233,7 +232,7 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 - **路由**：脚本化 adapter 证明 DSH 的循环能被外部驱动（P0）；真实 `cursor-agent` 会话建了文件、回了话，工具卡片带远端 diff（P1）；
 - **预设卡片**：新会话选中卡片后 `agent/request` 瀑布被 `{prepend:true}` 拦下，provider/model 被钉住、`reasoningEffort` 被丢掉——用**真实构建产物**跑的三层瀑布探针，不是读代码推断的（P2）；
 - **停止**：空队列上的等待在 **51ms** 内返回 `aborted`（改动前会一直挂到远端又发了别的东西才结束）；镜像工具同样接受取消；每轮开始重置信号队列（P3）；
-- **utility 委派**：配了 `utilityProvider: spike` 后会话标题由委派路由产出（`source.kind: 'provider'`、标题正是脚本化 adapter 的输出），不配则保留 Host 自己的兜底（`source.kind: 'fallback'`）（P3）；
+- **utility 委派**：当时把 `utilityProvider` 指向一个脚本化 adapter（P0 那个，现已删除），会话标题由委派路由产出（`source.kind: 'provider'`，标题正是那个 adapter 的固定输出），不配则保留 Host 自己的兜底（`source.kind: 'fallback'`）（P3）；
 - **审批**：三次差分（`ask`+`reject`、`ask`+`allow`、`policy` 控制组）证明请求确实到了 Host 审批服务——会话日志里成对的 `approval/asked` / `approval/decided`，内容正是我们传的 `toolName: acp_execute` 与 `reason: Run a command`——且不可路由时回落到行策略而不是凭空授权；浏览器里点出的三次决定（允许/拒绝/允许）让远端 agent 依次收到 `opt-once` / `opt-no` / `opt-once`（P4）；
 - **工具视图**：REA 驱动无头 Chromium 跑真实应用，工具行渲染为 `读取 ignored +`，而不是 `工具调用 · acp_read · session-…::mock#1`（P5）；
 - **文件系统桥接**：同一个脚本化 agent、同一个 profile，只换部署沙箱模式——`workspace-write` 下读回真实内容、写真的落盘；`read-only` 下读仍然成功，写被后端以 `file access denied under read-only mode` 拒绝且文件不存在（P6）。

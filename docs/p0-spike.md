@@ -1,8 +1,9 @@
 # P0 spike record — can a plugin drive a Session through a non-LLM route?
 
 **Date:** 2026-10-12 · **Status:** host half proven; browser rendering awaits human check
-**Scope:** throwaway probe. Nothing here ships; `src/spike/` and the two
-`.dsh-dev/profiles/spike*` profiles delete when P1 lands.
+**Scope:** throwaway probe. `src/spike/` was deleted once every phase had shipped
+(see [P7](p7-remove-delegation.md)); this record stays because the seam shapes it
+established are what the shipped route is built on.
 
 ## The question
 
