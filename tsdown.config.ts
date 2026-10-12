@@ -8,9 +8,22 @@ import type { UserConfig } from 'tsdown'
 const ID = 'dsh-session-map'
 
 /**
- * Two artifacts, one pass.
+ * Four artifacts, one pass.
  *
- * The node half is an ordinary ESM library the Loader imports by package name.
+ * The node half is an ordinary ESM library the Loader imports by package name,
+ * with two entries: `index.js` backs this bundle's own row (the canvas needs no
+ * host behaviour) and `acp.js` backs the ACP subagent provider row, which is
+ * addressed by the subpath specifier `dsh-session-map/acp`. A subpath row is
+ * invisible to the browser client scan on purpose — that scan recognizes only a
+ * bare package specifier — so the two entries cannot collide in the browser
+ * module table, and the same entry can be mounted by several rows at once.
+ *
+ * `acp-model.js` is the settings card's pure model, built for Node as well as
+ * bundled into the browser half. It decides everything the card does — draft
+ * conversion, validation, list edits, and the schema marker that finds the
+ * backend's own namespace — and it imports neither React nor the DOM, so it can
+ * be tested directly instead of through a rendered page.
+ *
  * The browser half is a closure factory: the preset the product's own client
  * packages use is repository-internal (it reads `packages/<group>/<pkg>/package.json` and
  * imports sibling build modules), so this standalone repository states the
@@ -25,15 +38,23 @@ const ID = 'dsh-session-map'
 export default (): UserConfig[] => [
   {
     name: `${ID}/node`,
-    entry: { index: 'src/index.ts' },
+    entry: { index: 'src/index.ts', acp: 'src/acp/index.ts', 'acp-model': 'src/client/acp-model.ts' },
     outDir: 'lib',
     format: ['esm'],
     platform: 'node',
     target: 'es2024',
+    // The ACP driver bundles its own protocol client, and the ACP row's config
+    // schema bundles schemastery so the settings service can derive a form from
+    // it. `@agentclientprotocol/sdk`, its zod peer, and `@deepseek-ai/schemastery`
+    // are devDependencies on purpose: the shipped `lib/acp.js` must stay
+    // self-contained so an install resolves no runtime dependency and runs no
+    // install-time script. Stated explicitly so the intent is not mistaken for
+    // an accident.
+    deps: { onlyBundle: false },
     clean: false,
     dts: false,
     sourcemap: true,
-    outputOptions: { entryFileNames: 'index.js' },
+    outputOptions: { entryFileNames: '[name].js' },
   },
   {
     name: `${ID}/client`,

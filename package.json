@@ -1,12 +1,13 @@
 {
   "name": "dsh-session-map",
   "version": "0.1.0",
-  "description": "Session map: a fork-tree canvas over every DSH session, added as a Conversation tab and a right-sidebar tab",
+  "description": "Session map: a fork-tree canvas over every DSH session, added as a Conversation tab and a right-sidebar tab — plus an optional, vendor-neutral ACP subagent backend that delegates to any ACP CLI agent",
   "type": "module",
   "license": "MIT",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
+    "./acp": "./lib/acp.js",
     "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
@@ -21,14 +22,19 @@
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs",
     "watch": "tsdown --watch"
   },
   "devDependencies": {
+    "@agentclientprotocol/sdk": "1.4.0",
     "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/schemastery": "3.18.4",
+    "@types/node": "^24.19.2",
     "@types/react": "~18.3.1",
     "react": "^18.2.0",
     "tsdown": "^0.22.2",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "zod": "^4.6.5"
   },
   "files": [
     "lib",

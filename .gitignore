@@ -12,3 +12,11 @@ pnpm-lock.yaml
 
 # lib/ is deliberately NOT ignored — see the README. The committed build
 # output is what makes an install run no build script at all.
+
+# Throwaway DSH_HOME for the loader verification loop (`dsh plugin ... add`
+# against a profile whose node_modules links this checkout). See the README.
+.dsh-dev/
+
+# A project-local pnpm store appears if a pnpm run resolves one here instead of
+# the global store; it is install scaffolding, not package content.
+.pnpm-store/
