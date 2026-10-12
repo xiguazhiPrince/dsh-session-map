@@ -333,10 +333,11 @@ export function buildGraph(
 
   // Tree order mirrors the left sidebar's own derivation (ui-workspace
   // tree.ts): Workspace groups in their stored order, and inside a group the
-  // most recently active Session first (the browser's default 按更新时间).
-  // Sessions no Workspace accounts for trail last, newest first. The sidebar's
-  // live mode and its drag order sit in ui-workspace's private store, which a
-  // plugin cannot read, so 手动排序 and 平铺 are not followed.
+  // most recently active Session first (the browser's default sort, shown in
+  // the UI as "按更新时间"). Sessions no Workspace accounts for trail last,
+  // newest first. The sidebar's live mode and its drag order sit in
+  // ui-workspace's private store, which a plugin cannot read, so the sidebar's
+  // "手动排序" and "平铺" modes are not followed.
   const groupRank: Record<string, number> = {}
   for (const [group, workspace] of workspaces.entries()) {
     for (const member of workspace.sessionIds) {
