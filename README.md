@@ -244,7 +244,18 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 - **实机 Cursor**（`cursor-agent` 已登录，2026-10-12）：文本探针 `stop: completed`、输出 `pong`、释放后子进程退出；`--edit` 探针 **PASSED**——Cursor 在 `clientCapabilities: {}`（不提供 `fs/*`、`terminal/*`）的情况下自己把文件写下去了。所以**不需要**实现客户端文件系统能力；
 - **实机 opencode**（同一个组件、换 `command`，2026-10-12）：npm `.cmd` shim 被解析到真实二进制 → `initialize` / `session/new` / `session/set_config_option`（换模型生效）/ `session/prompt` 全部送达；最后一步被 **opencode 自己**拒了（`1.17.15 < 免费档要求的 1.18.0`；换成 Go 模型后又是区域隐私设置）。驱动侧的表现正合预期：`stop: error`、诊断 `ACP failure (provider: live; stage: prompt; category: protocol)`、原始 payload 只留在子进程的 stderr、子进程安静地退出了。**换 vendor 不成功也没变成一次泄漏或一次挂死**，这比一次成功更能说明通用性。
 
-**还没有验证的一步**：设置卡片在真实浏览器里的渲染与点击。它的注册路径（`ctx.inject(['slots','configForms'])` → `settings.section`）、它的纯逻辑、以及它要写入的字段都已经被测到或被真实 schema 印证，但"打开设置页看到这一页、点添加、保存、patch 真的多了那条 agent"这一串还没有在跑起来的 web profile 里走过一遍。这是下一步该做的事，也是这份实现目前唯一没走完的一环。
+**设置卡片已经在真实应用里走完整圈**（2026-10-12，桌面 profile）：卡片渲染出「ACP 代理」这一页 → 添加一个 agent → 保存 → profile patch 里真的出现了那条 agent → 模型侧出现 `subagent_cursor` → 一次真实委派返回 `pong`，子进程回收干净（事后按命令行复查，没有带 `acp` 的残留进程）。这也是派生的工具行第一次在真实部署里被走通。
+
+落盘的 YAML 本身就是卡片写的指纹：`args` 和 `permission` 都不见了，因为两者都在默认值上，而卡片只写真正设过的字段——手写的一般会留着 `args: [acp]`、`permission: allow`。默认值由 schema 补齐，读起来仍然完整：
+
+```yaml
+- id: subagent-acp
+  disabled: false
+  config:
+    agents:
+      - name: cursor
+        command: cursor-agent
+```
 
 **一个包同时是 bundle 和 client 插件是可行的**：产品随附的布局把两者拆成不同的包（bundle 的 patch 行去引用 `packages/client/*` 里的插件包），但自引用同样能被浏览器 roster 接受。第二个 host 入口用**子路径 specifier**，对客户端发现不可见，因此两个入口不会在同一张模块表里撞车。
 
