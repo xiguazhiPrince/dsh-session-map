@@ -15,7 +15,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { ReactElement } from 'react'
-import { createAcpAgentsCard, type ConfigFormsLike } from './acp-card'
+import { AcpToolRow, ACP_TOOL_KEYS, type AcpToolRowProps } from './acp-tool-row'
 import { CSS } from './css'
 import { MAP_KIND, MAP_TYPE_ID, OVERVIEW_KIND, OVERVIEW_TYPE_ID } from './constants'
 import { createFlag } from './flags'
@@ -228,6 +228,19 @@ export function apply(ctx: Context): void {
     MapLauncher,
   )), 'session-map: header launcher')
 
+  // The mirrored ACP tool rows. `tool.call.toolview` is keyed by wire tool name
+  // and its key domain is open by contract, so claiming our own names is the
+  // supported route; without this the shell's generic row labels each call with
+  // the tool name and an internal call id. The slot declares one entry per key,
+  // so the loop registers and disposes them together.
+  ctx.effect(() => slots.inject('tool.call.toolview', () => {
+    const disposers = ACP_TOOL_KEYS.map((key) => slots.register<AcpToolRowProps>(
+      { name: 'tool.call.toolview', key },
+      AcpToolRow,
+    ))
+    return () => { for (const dispose of disposers) dispose() }
+  }), 'session-map: acp tool rows')
+
   // The Conversation tab entries are opt-in; see DEFAULT_CONVERSATION_VIEWS.
   if (conversationViewsEnabled()) {
     ctx.effect(() => slots.inject('conversation.view', () => slots.register(
@@ -240,21 +253,6 @@ export function apply(ctx: Context): void {
       SessionMapTab,
     )), 'session-map: conversation view entry')
   }
-
-  // The ACP agents card. It rides an OPTIONAL injection: a composition that
-  // never mounted the settings domain still gets the whole canvas above, and
-  // only a profile running the ACP backend ever sees a page here (the card
-  // itself waits for a namespace of ours to be served).
-  ctx.inject(['slots', 'configForms'], (scope) => {
-    const scopedSlots = lookup<SlotsService>(scope, 'slots')
-    const configForms = lookup<ConfigFormsLike>(scope, 'configForms')
-    if (scopedSlots === undefined || configForms === undefined) return
-    const AcpAgentsCard = createAcpAgentsCard(configForms)
-    ctx.effect(() => scopedSlots.inject('settings.section', () => scopedSlots.register(
-      { name: 'settings.section', id: 'acp-agents', order: 45, label: 'ACP 子代理' },
-      AcpAgentsCard,
-    )), 'session-map: acp agents settings section')
-  })
 
   // The right column's type registry belongs to another package whose own
   // injections are wider, so its apply can land after this one. Reading the

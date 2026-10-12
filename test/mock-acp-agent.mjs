@@ -142,6 +142,25 @@ async function handle(message) {
         })
         record({ kind: 'permission-answer', answer })
       }
+      if (scenario === 'fs') {
+        // Exercises the client's advertised filesystem capability: the paths come
+        // from the harness so the same scenario can point at a real workspace file.
+        const readPath = process.env['MOCK_ACP_READ']
+        if (readPath !== undefined) {
+          record({ kind: 'fs-read', answer: await request('fs/read_text_file', { sessionId: SESSION_ID, path: readPath }) })
+        }
+        const writePath = process.env['MOCK_ACP_WRITE']
+        if (writePath !== undefined) {
+          record({
+            kind: 'fs-write',
+            answer: await request('fs/write_text_file', {
+              sessionId: SESSION_ID,
+              path: writePath,
+              content: 'written through the host filesystem',
+            }),
+          })
+        }
+      }
       if (scenario === 'extension') {
         const askAnswer = await request('cursor/ask_question', {
           sessionId: SESSION_ID,

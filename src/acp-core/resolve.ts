@@ -18,7 +18,7 @@
  * 3. the command interpreter, for a shim that names no parseable target — only
  *    when the resulting command line is provably safe to hand over unescaped.
  *
- * @module dsh-session-map/acp/resolve
+ * @module dsh-session-map/acp-core/resolve
  */
 import { accessSync, constants, existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { delimiter, dirname, isAbsolute, join } from 'node:path'

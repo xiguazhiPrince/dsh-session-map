@@ -1,18 +1,21 @@
 /**
- * Configuration for the ACP subagent backend: a LIST of agents, one row, one
- * schema.
+ * The vendor- and platform-shaped core of an ACP client: the agent LIST, its
+ * schema, and how one entry resolves.
  *
- * The shape is a list rather than one row per agent for one reason: the Harness
- * settings service edits the config of an EXISTING profile entry, and nothing in
- * the plugin-manager surface can create a new row. A list is therefore the only
- * shape a settings card can grow — the card adds and removes agents, and this
- * module derives one provider and one delegation tool per enabled entry.
+ * This module is deliberately route-neutral. It knows what an ACP CLI agent is
+ * — how it is launched, what a permission policy means, which defaults apply —
+ * and nothing about what a Session does with one. The conversational route in
+ * `../acp-agent` layers its own fields on top of {@link agentSchema} and reads
+ * the resolved agents through {@link resolveOptions}.
+ *
+ * The shape is a list rather than one row per agent because a list is the only
+ * shape a configuration editor can grow: the Harness settings service edits the
+ * config of an EXISTING profile entry, and nothing in the plugin-manager surface
+ * can create a new row.
  *
  * `agents` is `.volatile()`: the settings service exposes only volatile fields
  * as editable, and a volatile write is committed into the running reference
- * without remounting the plugin, so the backend re-syncs live (see
- * `loader/volatile-update` in `src/acp/index.ts`). Every other field is ordinary
- * configuration and keeps normal lifecycle rules.
+ * without remounting the plugin, so a route re-syncs live on an edit.
  *
  * The schema is schemastery — the same library the Harness uses — because the
  * settings service derives its forms by reading the schema's metadata. It is
@@ -21,7 +24,7 @@
  * the package carries no `@deepseek-ai/*` runtime import: the schema never
  * crosses the process boundary, it is read structurally by the Host.
  *
- * @module dsh-session-map/acp/config
+ * @module dsh-session-map/acp-core/config
  */
 import { resolve as resolvePath } from 'node:path'
 import z from '@deepseek-ai/schemastery'
@@ -48,7 +51,7 @@ export type PermissionPolicy = 'allow' | 'reject'
 
 /** One configured ACP agent, as a form or a patch author writes it. */
 export interface AcpAgentConfig {
-  /** Registry name on `ctx.subagents`, and the stem of the default tool name. Unique per row. */
+  /** Model id on the `acp` route, and the name used in diagnostics. Unique per row. */
   name?: string
   /** The ACP agent to launch: a CLI name on `PATH`, or an explicit executable path. */
   command?: string
@@ -64,15 +67,13 @@ export interface AcpAgentConfig {
   permission?: PermissionPolicy
   /** Extra environment entries for the child, merged after the process seam's credential scrub. */
   env?: Record<string, string>
-  /** Delegation tool name (default `subagent_<name>`). */
-  toolName?: string
-  /** Whether this agent is mounted at all (default `true`). */
+  /** Whether this agent is offered at all (default `true`). */
   enabled?: boolean
 }
 
 /** The row configuration as a patch author writes it. */
 export interface Options {
-  /** The configured agents; this is the field the settings card edits. */
+  /** The configured agents. Volatile, so a live settings write is committed in place. */
   agents?: VolatileRef<AcpAgentConfig[]> | AcpAgentConfig[]
   /** Grace (ms) for a child's stdin-EOF quiesce before termination escalates. */
   disposeEofGraceMs?: number
@@ -81,7 +82,7 @@ export interface Options {
 }
 
 /** The agent schema, shared by the row schema and the settings form projection. */
-const agentSchema = z.object({
+export const agentSchema = z.object({
   name: z.string().required(),
   command: z.string().required(),
   args: z.array(z.string()).default(['acp']),
@@ -90,7 +91,6 @@ const agentSchema = z.object({
   configOptions: z.dict(z.union([z.string(), z.number(), z.boolean()])),
   permission: z.union(['allow', 'reject'] as const).default('allow'),
   env: z.dict(z.string()),
-  toolName: z.string(),
   enabled: z.boolean().default(true),
 })
 
@@ -104,11 +104,8 @@ export const Config = z.object({
   disposeGraceMs: z.number(),
 })
 
-/** Diagnostic prefix for every failure this plugin authors. */
-export const PLUGIN_ID = 'dsh-session-map/acp'
-
-/** The name of the Host plugin whose rows expose one delegation tool. */
-export const TOOL_PLUGIN_NAME = '@deepseek-ai/dsh-tool-subagent'
+/** Diagnostic prefix for configuration failures this schema reports. */
+export const CONFIG_PREFIX = 'dsh-session-map/acp-agent'
 
 /** Permission policy used when a row does not set one. */
 export const DEFAULT_PERMISSION: PermissionPolicy = 'allow'
@@ -130,8 +127,11 @@ export const MAX_TIMER_DELAY_MS = 2_147_483_647
 
 /** One agent after resolution: every default applied, `cwd` already validated. */
 export interface ResolvedAgent {
+  /**
+   * The agent's configured `name`. Consumers address an agent by it: it is the
+   * model id on the `acp` route and the stem of that agent's preset card.
+   */
   readonly providerName: string
-  readonly toolName: string
   readonly command: string
   readonly args: readonly string[]
   readonly cwd: string | undefined
@@ -173,7 +173,7 @@ export function readVolatile<T>(field: VolatileRef<T> | T | undefined): T | unde
 function optionalString(raw: unknown, key: string): string | undefined {
   if (raw === undefined || raw === null) return undefined
   if (typeof raw !== 'string' || raw === '') {
-    throw new Error(`${PLUGIN_ID}: \`${key}\` must be a non-empty string`)
+    throw new Error(`${CONFIG_PREFIX}: \`${key}\` must be a non-empty string`)
   }
   return raw
 }
@@ -188,7 +188,7 @@ function optionalString(raw: unknown, key: string): string | undefined {
 function grace(raw: unknown, key: string, fallback: number): number {
   if (raw === undefined || raw === null) return fallback
   if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0 || raw > MAX_TIMER_DELAY_MS) {
-    throw new Error(`${PLUGIN_ID}: \`${key}\` must be a positive finite number no greater than ${MAX_TIMER_DELAY_MS}`)
+    throw new Error(`${CONFIG_PREFIX}: \`${key}\` must be a positive finite number no greater than ${MAX_TIMER_DELAY_MS}`)
   }
   return raw
 }
@@ -204,7 +204,7 @@ function grace(raw: unknown, key: string, fallback: number): number {
 function oneOf<T extends string>(raw: unknown, key: string, allowed: readonly T[], fallback: T): T {
   if (raw === undefined || raw === null) return fallback
   const match = allowed.find(value => value === raw)
-  if (match === undefined) throw new Error(`${PLUGIN_ID}: \`${key}\` must be one of ${allowed.join(', ')}`)
+  if (match === undefined) throw new Error(`${CONFIG_PREFIX}: \`${key}\` must be one of ${allowed.join(', ')}`)
   return match
 }
 
@@ -217,7 +217,7 @@ function oneOf<T extends string>(raw: unknown, key: string, allowed: readonly T[
 function stringList(raw: unknown, key: string): string[] | undefined {
   if (raw === undefined || raw === null) return undefined
   if (!Array.isArray(raw) || raw.some(item => typeof item !== 'string')) {
-    throw new Error(`${PLUGIN_ID}: \`${key}\` must be an array of strings`)
+    throw new Error(`${CONFIG_PREFIX}: \`${key}\` must be an array of strings`)
   }
   return raw as string[]
 }
@@ -233,13 +233,13 @@ function stringList(raw: unknown, key: string): string[] | undefined {
 function scalarMap(raw: unknown, key: string, coerce: boolean): Record<string, string> {
   if (raw === undefined || raw === null) return {}
   if (typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new Error(`${PLUGIN_ID}: \`${key}\` must be a mapping`)
+    throw new Error(`${CONFIG_PREFIX}: \`${key}\` must be a mapping`)
   }
   const result: Record<string, string> = {}
   for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
     if (typeof value === 'string') { result[name] = value; continue }
     if (coerce && (typeof value === 'number' || typeof value === 'boolean')) { result[name] = String(value); continue }
-    throw new Error(`${PLUGIN_ID}: \`${key}.${name}\` must be ${coerce ? 'a string, number, or boolean' : 'a string'}`)
+    throw new Error(`${CONFIG_PREFIX}: \`${key}.${name}\` must be ${coerce ? 'a string, number, or boolean' : 'a string'}`)
   }
   return result
 }
@@ -254,22 +254,16 @@ function scalarMap(raw: unknown, key: string, coerce: boolean): Record<string, s
 function configOptions(raw: unknown, key: string): ReadonlyMap<string, string | number | boolean> {
   if (raw === undefined || raw === null) return new Map()
   if (typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new Error(`${PLUGIN_ID}: \`${key}\` must be a mapping of option ids to values`)
+    throw new Error(`${CONFIG_PREFIX}: \`${key}\` must be a mapping of option ids to values`)
   }
   const options = new Map<string, string | number | boolean>()
   for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
     if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
-      throw new Error(`${PLUGIN_ID}: \`${key}.${name}\` must be a string, number, or boolean`)
+      throw new Error(`${CONFIG_PREFIX}: \`${key}.${name}\` must be a string, number, or boolean`)
     }
     options.set(name, value)
   }
   return options
-}
-
-/** Tool names are model-facing identifiers; anything else is folded to `_`. */
-function toolNameFor(providerName: string): string {
-  const folded = providerName.toLowerCase().replaceAll(/[^a-z0-9]+/g, '_').replaceAll(/^_+|_+$/g, '')
-  return `subagent_${folded === '' ? 'agent' : folded}`
 }
 
 /**
@@ -280,21 +274,20 @@ function toolNameFor(providerName: string): string {
  */
 function resolveAgent(raw: unknown, index: number): ResolvedAgent {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    throw new Error(`${PLUGIN_ID}: \`agents[${index}]\` must be a mapping`)
+    throw new Error(`${CONFIG_PREFIX}: \`agents[${index}]\` must be a mapping`)
   }
   const record = raw as Record<string, unknown>
   const where = (key: string): string => `agents[${index}].${key}`
-  const providerName = optionalString(record['name'], where('name'))
-  if (providerName === undefined) throw new Error(`${PLUGIN_ID}: \`${where('name')}\` is required`)
+  const name = optionalString(record['name'], where('name'))
+  if (name === undefined) throw new Error(`${CONFIG_PREFIX}: \`${where('name')}\` is required`)
   const command = optionalString(record['command'], where('command'))
-  if (command === undefined) throw new Error(`${PLUGIN_ID}: \`${where('command')}\` is required`)
+  if (command === undefined) throw new Error(`${CONFIG_PREFIX}: \`${where('command')}\` is required`)
   const cwd = optionalString(record['cwd'], where('cwd'))
   return {
-    providerName,
-    toolName: optionalString(record['toolName'], where('toolName')) ?? toolNameFor(providerName),
+    providerName: name,
     command,
     args: stringList(record['args'], where('args')) ?? DEFAULT_ARGS,
-    cwd: cwd === undefined ? undefined : assertUsableCwd(PLUGIN_ID, `config ${where('cwd')}`, resolvePath(cwd)),
+    cwd: cwd === undefined ? undefined : assertUsableCwd(CONFIG_PREFIX, `config ${where('cwd')}`, resolvePath(cwd)),
     mode: optionalString(record['mode'], where('mode')),
     configOptions: configOptions(record['configOptions'], where('configOptions')),
     permission: oneOf(record['permission'], where('permission'), ['allow', 'reject'] as const, DEFAULT_PERMISSION),
@@ -309,23 +302,23 @@ function resolveAgent(raw: unknown, index: number): ResolvedAgent {
  * patch or a settings draft is almost always a typo whose silently-ignored form
  * is a run that behaves nothing like the author intended. Disabled agents are
  * parsed and then dropped, so a half-written draft is still a load-time error
- * rather than a surprise at the first delegation.
+ * rather than a surprise at the first turn.
  * @param raw - the configuration the Loader or a settings write produced.
  * @returns the resolved options.
  */
 export function resolveOptions(raw: unknown): ResolvedOptions {
   const record = (raw ?? {}) as Record<string, unknown>
   if (typeof record !== 'object' || Array.isArray(record)) {
-    throw new Error(`${PLUGIN_ID}: config must be a mapping`)
+    throw new Error(`${CONFIG_PREFIX}: config must be a mapping`)
   }
   const agentsField = readVolatile(record['agents'] as AcpAgentConfig[] | undefined) ?? []
-  if (!Array.isArray(agentsField)) throw new Error(`${PLUGIN_ID}: \`agents\` must be an array`)
+  if (!Array.isArray(agentsField)) throw new Error(`${CONFIG_PREFIX}: \`agents\` must be an array`)
   const seen = new Set<string>()
   const agents: ResolvedAgent[] = []
   for (const [index, entry] of agentsField.entries()) {
     const agent = resolveAgent(entry, index)
     if (seen.has(agent.providerName)) {
-      throw new Error(`${PLUGIN_ID}: duplicate agent name "${agent.providerName}" — every agent needs its own \`name\``)
+      throw new Error(`${CONFIG_PREFIX}: duplicate agent name "${agent.providerName}" — every agent needs its own \`name\``)
     }
     seen.add(agent.providerName)
     if ((entry as { enabled?: unknown }).enabled === false) continue

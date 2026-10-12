@@ -1,13 +1,15 @@
 {
   "name": "dsh-session-map",
   "version": "0.1.0",
-  "description": "Session map: a fork-tree canvas over every DSH session, added as a Conversation tab and a right-sidebar tab — plus an optional, vendor-neutral ACP subagent backend that delegates to any ACP CLI agent",
+  "description": "Session map: a fork-tree canvas over every DSH session, added as a Conversation tab and a right-sidebar tab — plus an optional, vendor-neutral ACP route that puts a whole Session behind any ACP CLI agent",
   "type": "module",
   "license": "MIT",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
-    "./acp": "./lib/acp.js",
+    "./acp-agent": "./lib/acp-agent.js",
+    "./acp-preset": "./lib/acp-preset.js",
+    "./spike": "./lib/spike.js",
     "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },

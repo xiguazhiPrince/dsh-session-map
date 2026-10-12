@@ -315,263 +315,95 @@ export const CSS = `
   font-size: 13px;
 }
 
-/* The ACP agents settings card. It renders inside the settings panel's content
-   column rather than inside this plugin's own tabs, so it follows the same
-   material and type scale as the product's own settings pages: every color and
-   radius resolves through a --dsw-alias-* / --dsw-radius-* token, because a
-   literal would stay light under the dark theme. */
-.dsh-acp-card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-width: 720px;
-  padding-bottom: 24px;
-  color: var(--dsw-alias-label-primary);
-}
-.dsh-acp-title {
-  margin: 0;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 500;
-  color: var(--dsw-alias-label-primary);
-}
-.dsh-acp-note {
-  margin: 0;
-  font-size: 14px;
-  line-height: 22px;
-  color: var(--dsw-alias-label-tertiary);
-}
-.dsh-acp-empty {
-  margin: 0;
-  padding: 12px 14px;
-  border: 0.5px dashed var(--dsw-alias-border-l3);
-  border-radius: var(--dsw-radius-xl);
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--dsw-alias-label-tertiary);
-}
-.dsh-acp-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 4px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* One agent: the settings-card material the product's own row cards use. */
-.dsh-acp-agent {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
-  border-radius: var(--dsw-radius-xl);
-  background: var(--dsw-alias-settings-card-fill);
-}
-.dsh-acp-agent-off {
-  opacity: 0.72;
-}
-.dsh-acp-agent-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding-bottom: 10px;
-  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
-}
-.dsh-acp-name {
-  font-size: 14px;
-  line-height: 22px;
-  font-weight: 500;
-  color: var(--dsw-alias-label-primary);
-}
-/* An annotation on the name, at caption size, so it never competes with it. */
-.dsh-acp-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 7px;
-  border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: var(--dsw-radius-sm);
-  font-size: 11px;
-  line-height: 16px;
-  color: var(--dsw-alias-label-secondary);
-  white-space: nowrap;
+/* The mirrored ACP tool row. It is claimed through the keyed tool.call.toolview
+   slot, so it must carry its own layout; the tokens are the product's. */
+.dsm-acp-tool {
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
   overflow: hidden;
-  text-overflow: ellipsis;
 }
-/* The product's own status badge recipe: primary is the readable green in each
-   theme, tertiary the tint it sits on (green-100 light, green-900 dark). Pairing
-   secondary with primary instead is green-on-green and unreadable. */
-.dsh-acp-chip-on {
-  border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 20%, transparent);
-  background: var(--dsw-alias-state-success-tertiary);
-  color: var(--dsw-alias-state-success-primary);
-}
-.dsh-acp-chip-off {
-  border-color: transparent;
-  background: var(--dsw-alias-fill-tsp-secondary);
-  color: var(--dsw-alias-label-secondary);
-}
-.dsh-acp-spacer {
-  flex: 1;
-  min-width: 0;
-}
-.dsh-acp-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
-  gap: 12px 16px;
-}
-.dsh-acp-field {
+.dsm-acp-tool__head {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-.dsh-acp-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  line-height: 18px;
-  font-weight: 500;
-  color: var(--dsw-alias-label-secondary);
-}
-.dsh-acp-wide {
-  grid-column: 1 / -1;
-}
-.dsh-acp-check {
-  flex-direction: row;
   align-items: center;
   gap: 8px;
-  padding-bottom: 6px;
-}
-.dsh-acp-check input[type='checkbox'] {
-  width: 14px;
-  height: 14px;
-  accent-color: var(--dsw-alias-button-primary-fill);
-}
-.dsh-acp-input {
-  box-sizing: border-box;
   width: 100%;
-  min-width: 0;
-  height: 32px;
-  padding: 0 10px;
-  border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-base);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 14px;
-}
-.dsh-acp-input::placeholder {
-  color: var(--dsw-alias-label-dimmed);
-}
-.dsh-acp-input:focus {
-  outline: none;
-  border-color: var(--dsw-alias-state-business-primary);
-}
-.dsh-acp-input:disabled {
-  background: var(--dsw-alias-fill-tsp-secondary);
-  color: var(--dsw-alias-label-tertiary);
-}
-select.dsh-acp-input {
-  cursor: pointer;
-}
-textarea.dsh-acp-input {
-  height: auto;
-  min-height: 66px;
   padding: 6px 10px;
-  resize: vertical;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  line-height: 18px;
-}
-
-/* The secondary half of an agent, on the inset editing surface. */
-.dsh-acp-more {
-  border-radius: var(--dsw-radius-lg);
-  background: var(--dsw-alias-bg-module-platform);
-  padding: 8px 10px;
-}
-.dsh-acp-more > summary {
-  cursor: pointer;
-  font-size: 12px;
-  line-height: 18px;
-  font-weight: 500;
-  color: var(--dsw-alias-label-secondary);
-}
-.dsh-acp-more[open] > summary {
-  margin-bottom: 10px;
-}
-.dsh-acp-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin-top: 4px;
-}
-.dsh-acp-button {
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  height: 32px;
-  padding: 0 12px;
-  border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: var(--dsw-radius-md);
+  border: 0;
   background: transparent;
   color: var(--dsw-alias-label-primary);
   font: inherit;
   font-size: 13px;
+  text-align: left;
   cursor: pointer;
 }
-.dsh-acp-button:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover);
+.dsm-acp-tool__head:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.dsm-acp-tool__dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-tertiary);
 }
-.dsh-acp-button:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
-}
-.dsh-acp-button:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-.dsh-acp-primary {
-  border-color: transparent;
-  background: var(--dsw-alias-button-primary-fill);
-  color: var(--dsw-alias-label-primary-foreground);
-  font-weight: 500;
-}
-.dsh-acp-primary:hover:not(:disabled) {
-  background: var(--dsw-alias-button-primary-hover);
-}
-.dsh-acp-danger:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover-danger);
-  color: var(--dsw-alias-label-error);
-}
-.dsh-acp-problems {
-  margin: 0;
-  padding: 0 0 0 16px;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--dsw-alias-state-error-primary);
-}
-.dsh-acp-error {
-  margin: 0;
-  padding: 8px 12px;
-  border: 0.5px solid var(--dsw-alias-state-error-primary);
-  border-radius: var(--dsw-radius-md);
+.dsm-acp-tool__dot[data-state='running'] { background: var(--dsw-alias-state-warn-primary); }
+.dsm-acp-tool__dot[data-state='ok'] { background: var(--dsw-alias-state-success-primary); }
+.dsm-acp-tool__dot[data-state='error'] { background: var(--dsw-alias-state-error-primary); }
+.dsm-acp-tool__kind {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border-radius: var(--dsw-radius-sm);
   background: var(--dsw-alias-fill-tsp-secondary);
+  color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   line-height: 18px;
-  color: var(--dsw-alias-state-error-primary);
 }
-.dsh-acp-dirty {
+.dsm-acp-tool__headline {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dsm-acp-tool__path {
+  flex: 0 1 auto;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+.dsm-acp-tool__chevron { flex: 0 0 auto; color: var(--dsw-alias-label-tertiary); }
+.dsm-acp-tool__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+.dsm-acp-tool__field { display: flex; flex-direction: column; gap: 4px; }
+.dsm-acp-tool__fieldLabel { color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.dsm-acp-tool__pre {
+  margin: 0;
+  padding: 6px 8px;
+  max-height: 260px;
+  overflow: auto;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
   font-size: 12px;
   line-height: 18px;
-  color: var(--dsw-alias-state-warn-label);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.dsm-acp-tool__files { display: flex; flex-wrap: wrap; gap: 6px; }
+.dsm-acp-tool__file {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--dsw-alias-brand-primary);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
 }
 `

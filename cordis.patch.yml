@@ -7,24 +7,29 @@
     - id: session-map
       name: dsh-session-map
 
-    # The ACP subagent backend. The component is vendor-neutral and ONE row
-    # carries every agent: `agents` is a list, and the backend derives one
-    # subagent provider plus one delegation tool PER agent from it (the tool
-    # rows are mounted at runtime — see src/acp/mount.ts — so they are not
-    # written here).
+    # The ACP session route: one `acp` model provider whose models ARE the
+    # configured agents, so a remote ACP CLI agent can back a whole Session and
+    # the shipped Chat UI renders its traffic unchanged. ONE row carries every
+    # agent — `agents` is a list — and each entry also gets a preset card in the
+    # new-task picker.
     #
-    # This row is off by default: a disabled row is never imported, so
-    # installing this bundle for the canvas costs no agent code at all. Turn it
-    # on in Settings → Plugins, then configure agents in Settings → ACP agents
-    # (the shipped settings card) — no YAML editing needed.
+    # Off by default: an enabled row runs agent code that can write in the
+    # session's working directory, and DSH's sandbox does not apply to the remote
+    # agent's own process. Turn it on in Settings → Plugins, then list the agents
+    # here (`fs: bridge` is what brings the remote agent's file access back under
+    # this Session's sandbox).
     #
     # The subpath specifier is deliberate. Browser client discovery recognizes
     # only a bare package specifier, so a second row of this same package cannot
     # add entries to the boot graph.
-    - id: subagent-acp
-      name: dsh-session-map/acp
+    #
+    # Registered at ROOT scope on purpose. `ctx.llm.registerAdapter` binds its
+    # effect to the `llm` service rather than to this row, so mounting it inside
+    # an agent preset would leak a service and be rejected by the preset audit.
+    - id: acp-agent
+      name: dsh-session-map/acp-agent
       disabled: true
       config:
-        # Empty by default: agents are configured from the settings card, which
-        # is what makes this row the ONLY place a deployment has to touch.
+        # Empty by default: every agent is listed here, and each one becomes both
+        # an `acp` model and a preset card.
         agents: []
