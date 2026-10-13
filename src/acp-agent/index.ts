@@ -41,8 +41,23 @@ import { mirrorToolDefinitions } from './tools'
 
 export { Config }
 export type { AcpAgentConfig, Options, ResolvedAgent } from '../acp-core/config'
-export { AcpChannel, AcpChannelFailure, ToolCallRecord, toolNameForKind, TOOL_KINDS } from './channel'
-export { DEFAULT_IDLE_DISPOSE_MS, PREFIX } from './config'
+export { AcpAgentAdapter } from './adapter'
+export type { AdapterOptions } from './adapter'
+export { AcpChannel, AcpChannelFailure, MODEL_CATEGORY, ToolCallRecord, parseConfigOptions, toolNameForKind, TOOL_KINDS } from './channel'
+export type { ConfigOption, ConfigOptionChoice } from './channel'
+export {
+  DEFAULT_BACKGROUND_DISCOVERY_TIMEOUT_MS,
+  DEFAULT_DISCOVERY_FAILURE_TTL_MS,
+  DEFAULT_DISCOVERY_TIMEOUT_MS,
+  DEFAULT_DISCOVERY_TTL_MS,
+  DEFAULT_IDLE_DISPOSE_MS,
+  DEFAULT_MODEL_DISCOVERY,
+  PREFIX,
+  resolveRouteOptions,
+} from './config'
+export type { ModelDiscoveryMode, ResolvedRouteOptions } from './config'
+export { assertAgentNameUnambiguous, decodeModelId, encodeModelId, MODEL_ID_SEPARATOR } from './model-id'
+export type { DecodedModelId } from './model-id'
 export { PRESET_ORDER, presetIdFor } from './presets'
 // The vendor- and platform-shaped core, re-exported so the Node-side suite can
 // exercise it directly against the built artifact. Command resolution in
@@ -140,6 +155,9 @@ export function apply(ctx: HostContext, config: unknown): Promise<void> {
         utility: resolved.utility,
         approval: resolved.approval,
         fs: resolved.fs,
+        modelDiscovery: resolved.modelDiscovery,
+        discoveryTimeoutMs: resolved.discoveryTimeoutMs,
+        discoveryTtlMs: resolved.discoveryTtlMs,
       })
       const disposers: Array<() => void> = []
       try {

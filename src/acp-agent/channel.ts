@@ -30,6 +30,7 @@ import {
   ndJsonStream,
   PROTOCOL_VERSION,
   RequestError,
+  type ClientCapabilities,
   type PermissionOption,
   type ReadTextFileRequest,
   type RequestPermissionResponse,
@@ -136,6 +137,118 @@ function toolContentText(part: unknown): string {
   }
   if (entry.type === 'terminal') return `[terminal ${String(entry.terminalId ?? '')}]`
   return ''
+}
+
+/** The category ACP reserves for an agent's model selector. */
+export const MODEL_CATEGORY = 'model'
+
+/** One selectable value of a session configuration option. */
+export interface ConfigOptionChoice {
+  /** The value to send back in `session/set_config_option`. */
+  readonly value: string
+  /** The label the agent gave this value. */
+  readonly name: string
+  readonly description?: string
+  /** The group the agent placed this value in, when it grouped its options. */
+  readonly group?: string
+}
+
+/**
+ * One session configuration option as the agent advertised it.
+ *
+ * `category` is a UX hint in ACP, never a contract: an agent may omit it or
+ * invent one, so a consumer must tolerate an option without one and must not
+ * infer meaning from an unknown value.
+ */
+export interface ConfigOption {
+  readonly id: string
+  readonly name: string
+  readonly description?: string
+  readonly category?: string
+  readonly type: 'select' | 'boolean'
+  readonly currentValue: string | boolean
+  /** The advertised values, groups flattened in advertised order. */
+  readonly choices: readonly ConfigOptionChoice[]
+}
+
+/**
+ * Read option values, flattening ACP's two allowed shapes.
+ *
+ * A select's `options` is either a list of `{value, name}` or a list of
+ * `{group, name, options}` — never a mix. An entry is recognized as a group by
+ * having nested `options` rather than by its key name, because that is what
+ * actually distinguishes the two shapes and it keeps a group without a `group`
+ * label readable. The group's label is carried on each of its values so a
+ * consumer can render it without walking the original nesting.
+ * @param raw - the `options` field of a select option.
+ * @param group - the enclosing group's label, when there is one.
+ * @returns the values in advertised order.
+ */
+function readConfigChoices(raw: unknown, group?: string): ConfigOptionChoice[] {
+  if (!Array.isArray(raw)) return []
+  const choices: ConfigOptionChoice[] = []
+  for (const entry of raw) {
+    if (entry === null || typeof entry !== 'object') continue
+    const record = entry as Record<string, unknown>
+    if (Array.isArray(record['options'])) {
+      const label = typeof record['name'] === 'string'
+        ? record['name']
+        : (typeof record['group'] === 'string' ? record['group'] : undefined)
+      choices.push(...readConfigChoices(record['options'], label))
+      continue
+    }
+    const value = record['value']
+    if (typeof value !== 'string') continue
+    choices.push({
+      value,
+      name: typeof record['name'] === 'string' ? record['name'] : value,
+      ...(typeof record['description'] === 'string' ? { description: record['description'] } : {}),
+      ...(group === undefined ? {} : { group }),
+    })
+  }
+  return choices
+}
+
+/**
+ * Read the session configuration options out of an ACP payload.
+ *
+ * Unknown option kinds are dropped rather than guessed at: ACP requires a client
+ * to handle an option it does not understand gracefully, and the alternative —
+ * treating an unrecognized `type` as a select — would let a future protocol
+ * addition masquerade as a model list.
+ * @param raw - `configOptions` from `session/new`, `session/load`,
+ *   `session/resume`, a `set_config_option` response, or an update.
+ * @returns the options in advertised order; an absent or malformed payload is empty.
+ */
+export function parseConfigOptions(raw: unknown): ConfigOption[] {
+  if (!Array.isArray(raw)) return []
+  const options: ConfigOption[] = []
+  for (const entry of raw) {
+    if (entry === null || typeof entry !== 'object') continue
+    const record = entry as Record<string, unknown>
+    const id = record['id']
+    if (typeof id !== 'string') continue
+    const shared = {
+      id,
+      name: typeof record['name'] === 'string' ? record['name'] : id,
+      ...(typeof record['description'] === 'string' ? { description: record['description'] } : {}),
+      ...(typeof record['category'] === 'string' ? { category: record['category'] } : {}),
+    }
+    if (record['type'] === 'select') {
+      options.push({
+        ...shared,
+        type: 'select',
+        currentValue: typeof record['currentValue'] === 'string' ? record['currentValue'] : '',
+        choices: readConfigChoices(record['options']),
+      })
+      continue
+    }
+    if (record['type'] === 'boolean') {
+      options.push({ ...shared, type: 'boolean', currentValue: record['currentValue'] === true, choices: [] })
+      continue
+    }
+  }
+  return options
 }
 
 /** One signal the Host-side adapter consumes, in arrival order. */
@@ -276,6 +389,11 @@ export class AcpChannel {
   private cancelled = false
   private idleTimer: ReturnType<typeof setTimeout> | undefined
   private readonly byAcpId = new Map<string, ToolCallRecord>()
+  /**
+   * The session configuration options the agent currently advertises, replaced
+   * whole on every payload that carries them (ACP sends the full set).
+   */
+  private configOptions: ConfigOption[] = []
 
   /** @param ctx - Host context. @param options - resolved channel configuration. */
   constructor(
@@ -286,6 +404,25 @@ export class AcpChannel {
   /** Whether this channel can still be used for a new turn. */
   get usable(): boolean {
     return !this.closed && this.broken === undefined
+  }
+
+  /** The options the agent currently advertises, in advertised order. */
+  configOptionState(): readonly ConfigOption[] {
+    return this.configOptions
+  }
+
+  /**
+   * The agent's model selector, when it advertises one.
+   *
+   * Only the reserved `model` category counts. ACP states that a category is a
+   * UX hint a client must tolerate the absence of, so an agent that advertises a
+   * differently-named or uncategorized selector simply contributes no inner
+   * models — guessing by option name is exactly the inference the spec warns
+   * against.
+   * @returns the selector, or `undefined`.
+   */
+  modelOption(): ConfigOption | undefined {
+    return this.configOptions.find((option) => option.category === MODEL_CATEGORY && option.type === 'select')
   }
 
   /**
@@ -360,6 +497,19 @@ export class AcpChannel {
 
     const agent = connection.agent
     try {
+      // What this client tells the agent it can serve. The ACP schema puts the
+      // config-option capability under `session`, not at the top level, and
+      // `boolean` is the sub-field that unlocks boolean-valued options — select
+      // options (which is what a model list is) need only the outer key.
+      //
+      // Advertising it states a fact rather than unlocks a feature: this channel
+      // reads whatever option set an agent publishes and writes individual options
+      // back. Measured against cursor-agent, the list arrives whether or not the
+      // capability is present, so nothing here depends on the agent honouring it.
+      const clientCapabilities: ClientCapabilities = {
+        session: { configOptions: { boolean: {} } },
+        ...(bridged ? { fs: { readTextFile: true, writeTextFile: true } } : {}),
+      }
       const initialized = await agent.request(methods.agent.initialize, {
         protocolVersion: PROTOCOL_VERSION,
         // Advertising `fs` is what lets the remote agent's file access travel
@@ -367,7 +517,7 @@ export class AcpChannel {
         // It is only advertised when this row is in `bridge` mode AND the Host
         // service actually exists: declaring a capability nothing implements is
         // how a driver makes an agent read empty files.
-        clientCapabilities: bridged ? { fs: { readTextFile: true, writeTextFile: true } } : {},
+        clientCapabilities,
         clientInfo: { name: CLIENT_NAME, version: CLIENT_VERSION },
       })
       if (initialized.protocolVersion !== PROTOCOL_VERSION) {
@@ -384,6 +534,9 @@ export class AcpChannel {
         throw new AcpChannelFailure('startup', 'protocol', new Error('agent published an ACP session without an id'))
       }
       this.remoteSessionId = sessionId
+      // The model list (and every other selector) arrives with the session, not
+      // from a dedicated call: ACP has no "list models" operation.
+      this.replaceConfigOptions(Reflect.get(session as object, 'configOptions'))
 
       const modes = Reflect.get(session as object, 'modes') as { availableModes?: { id: string }[]; currentModeId?: string } | null | undefined
       if (config.mode !== undefined && modes !== null && modes !== undefined) {
@@ -394,18 +547,12 @@ export class AcpChannel {
         }
       }
       for (const [configId, value] of config.configOptions) {
-        try {
-          await agent.request(
-            methods.agent.session.setConfigOption,
-            typeof value === 'boolean'
-              ? { sessionId, configId, type: 'boolean', value }
-              : { sessionId, configId, value: String(value) },
-          )
-        } catch (error: unknown) {
-          // An explicitly configured option the agent refuses is a deployment
-          // error, not something to fall back from silently.
-          throw new AcpChannelFailure('startup', 'configuration', error)
-        }
+        // Routed through the shared writer so the agent's response updates the
+        // option state too, and so a value the agent refuses fails startup with
+        // the same fixed line it always did: an explicitly configured option the
+        // agent rejects is a deployment error, not something to fall back from
+        // silently.
+        await this.setConfigOption(configId, value, 'startup')
       }
     } catch (error: unknown) {
       throw await this.abortStartup(
@@ -422,6 +569,88 @@ export class AcpChannel {
     this.broken = error
     await this.dispose()
     return error
+  }
+
+  /**
+   * Adopt the option set from one ACP payload.
+   *
+   * An empty array is treated as no news rather than as "the agent has no
+   * options": every request that carries the list also carries the selection
+   * just made, and a client that erased its own state on a bare `[]` would lose
+   * the very value it had successfully written (the scripted agent in this
+   * package's tests answers exactly that way).
+   * @param raw - the `configOptions` field, if the payload had one.
+   */
+  private replaceConfigOptions(raw: unknown): void {
+    const parsed = parseConfigOptions(raw)
+    if (parsed.length === 0) return
+    this.configOptions = parsed
+  }
+
+  /**
+   * Bring one advertised option to `value`, if it is not already there.
+   *
+   * A rejection is deliberately not swallowed: a value the agent refuses is a
+   * deployment or catalog error, and falling back silently would leave the
+   * Session running a model nobody asked for.
+   * @param configId - the option id the agent advertised.
+   * @param value - the value to select.
+   * @param stage - where the failure is attributed.
+   */
+  async setConfigOption(configId: string, value: string | number | boolean, stage: FailureStage = 'prompt'): Promise<void> {
+    const current = this.configOptions.find((option) => option.id === configId)
+    if (current !== undefined && String(current.currentValue) === String(value)) return
+    const connection = this.connection
+    const sessionId = this.remoteSessionId
+    if (connection === undefined || sessionId === undefined) {
+      throw new AcpChannelFailure(stage, 'configuration', new Error(`"${configId}" was configured but the remote session never started`))
+    }
+    try {
+      const response = await connection.agent.request(
+        methods.agent.session.setConfigOption,
+        typeof value === 'boolean'
+          ? { sessionId, configId, type: 'boolean', value }
+          : { sessionId, configId, value: String(value) },
+      )
+      this.replaceConfigOptions((response as { configOptions?: unknown } | null)?.configOptions)
+    } catch (error: unknown) {
+      throw new AcpChannelFailure(stage, 'configuration', error)
+    }
+  }
+
+  /**
+   * Put this session on one of the agent's models, or back on the row's own
+   * configuration.
+   *
+   * The `value` arm is how a model id like `cursor::grok-4.6[…]` reaches the
+   * wire; it is applied when the requested model differs from what is already in
+   * force, so a turn that does not change the model costs no request.
+   *
+   * The `undefined` arm is the agent's own default, which ACP has no "unset" for.
+   * What can be restored is the row's static `configOptions` for every option the
+   * agent advertises, so `<agent>` means "the configured agent default" and not
+   * "whatever the agent last used" — with the documented consequence that an
+   * agent configured with no static model option keeps the last selected model
+   * until a new channel is built.
+   * @param value - the advertised value, or `undefined` for the configured default.
+   */
+  async applyModel(value: string | undefined): Promise<void> {
+    if (value !== undefined) {
+      const option = this.modelOption()
+      if (option === undefined) {
+        throw new AcpChannelFailure(
+          'prompt',
+          'configuration',
+          new Error('the ACP agent advertises no model option'),
+        )
+      }
+      await this.setConfigOption(option.id, value)
+      return
+    }
+    for (const [configId, configured] of this.options.config.configOptions) {
+      if (!this.configOptions.some((option) => option.id === configId)) continue
+      await this.setConfigOption(configId, configured)
+    }
   }
 
   /**
@@ -747,6 +976,12 @@ export class AcpChannel {
         this.push({ kind: 'tool', call: record })
         return
       }
+      case 'config_option_update':
+        // The agent re-published its whole option set, usually because something
+        // changed it (a login, a mode switch, another client). State only: it
+        // carries no assistant content, so nothing is pushed onto the queue.
+        this.replaceConfigOptions(update['configOptions'])
+        return
       default:
         // Plan, commands, mode, config, session-info, usage and compaction
         // updates are protocol-legal and carry no assistant content this route

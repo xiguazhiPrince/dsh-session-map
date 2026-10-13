@@ -59,8 +59,57 @@ const PERMISSION_OPTIONS = [
   { optionId: 'opt-no', name: 'Reject', kind: 'reject_once' },
 ]
 
+/**
+ * The option set the current session published, replaced on every `session/new`.
+ *
+ * It is mutated by `session/set_config_option` and re-published in the response,
+ * because that is what a real agent does (measured against cursor-agent): the
+ * response carries the FULL new option set, which is the only way a client
+ * learns what its selection actually resolved to.
+ */
+let configOptions = []
+
+/** The scripted option set for this scenario. */
+function initialConfigOptions() {
+  const modes = [{ value: 'agent', name: 'Agent' }, { value: 'plan', name: 'Plan' }]
+  if (scenario === 'no-model-option') {
+    return [{ id: 'mode', name: 'Mode', category: 'mode', type: 'select', currentValue: 'agent', options: modes }]
+  }
+  if (scenario === 'model-list' || scenario === 'config-update') {
+    return [
+      { id: 'mode', name: 'Mode', category: 'mode', type: 'select', currentValue: 'agent', options: modes },
+      {
+        id: 'model',
+        name: 'Model',
+        category: 'model',
+        type: 'select',
+        currentValue: 'mock/one',
+        options: [
+          { value: 'mock/one', name: 'Mock One', description: 'the scripted first model' },
+          // A group, in the shape ACP defines (`{group, name, options}` — a group
+          // has no `value` of its own), so the client's flattening is exercised
+          // rather than assumed.
+          { group: 'grouped', name: 'Grouped Values', options: [{ value: 'mock/two', name: 'Mock Two' }] },
+          { value: 'mock/three', name: 'Mock Three' },
+        ],
+      },
+      { id: 'verbose', name: 'Verbose', category: 'thought_level', type: 'boolean', currentValue: false },
+    ]
+  }
+  return [{ id: 'model', name: 'Model', category: 'model', type: 'select', currentValue: 'mock/default', options: [] }]
+}
+
 /** Emit a final assistant chunk, then answer the prompt. */
 async function answerPrompt(id) {
+  if (scenario === 'config-update') {
+    // The agent re-publishes its whole option set mid-turn, as a real one does
+    // when something else changed the selection. It carries no assistant content,
+    // so a client that mistook it for content would append an empty text block.
+    update({
+      sessionUpdate: 'config_option_update',
+      configOptions: configOptions.map((entry) => (entry.id === 'model' ? { ...entry, currentValue: 'mock/three' } : entry)),
+    })
+  }
   const text = scenario === 'empty' ? '' : 'pong'
   if (text !== '') {
     update({ sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'thinking' } })
@@ -107,12 +156,11 @@ async function handle(message) {
       if (scenario === 'mode-missing') {
         modes = { currentModeId: 'ask', availableModes: [{ id: 'ask', name: 'Ask' }] }
       }
+      configOptions = initialConfigOptions()
       respond(message.id, {
         sessionId: SESSION_ID,
         modes,
-        configOptions: [
-          { id: 'model', name: 'Model', category: 'model', type: 'select', currentValue: 'mock/default', options: [] },
-        ],
+        configOptions,
       })
       return
     }
@@ -125,7 +173,13 @@ async function handle(message) {
         respondError(message.id, -32000, 'unknown config option SENTINEL_SECRET')
         return
       }
-      respond(message.id, { configOptions: [] })
+      // Accept the write and re-publish the whole set, with the selection the
+      // client asked for now in force.
+      const option = configOptions.find((entry) => entry.id === message.params?.configId)
+      if (option !== undefined) {
+        option.currentValue = option.type === 'boolean' ? message.params?.value === true : message.params?.value
+      }
+      respond(message.id, { configOptions })
       return
     }
     case 'session/prompt': {

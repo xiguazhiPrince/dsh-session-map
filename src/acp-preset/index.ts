@@ -21,6 +21,7 @@
  * @module dsh-session-map/acp-preset
  */
 import z from '@deepseek-ai/schemastery'
+import { decodeModelId } from '../acp-agent/model-id'
 
 /** Plugin name the Loader reports. */
 export const name = 'acp-preset'
@@ -66,8 +67,21 @@ export function apply(ctx: PresetContext, config: { agent: string; provider?: st
   const model = config.agent
   ctx.effect(() => ctx.on('agent/request', async (_payload, next) => {
     const resolved = await next()
-    // An effort the ACP route cannot honour must not survive the override.
+    // An effort the ACP route cannot honour must not survive EITHER arm below:
+    // the route advertises no reasoning efforts, and the runtime rejects an
+    // explicit effort for a model that declares none.
     const { reasoningEffort: _inheritedEffort, ...rest } = resolved as LlmCallConfig & Record<string, unknown>
+    // What this preset decides is which AGENT the Session talks to. It does not
+    // get a say in which of that agent's models is used: a selection that already
+    // names this agent — `cursor`, or `cursor::<one of the models it advertised>`
+    // — is left alone, which is what lets the composer's model picker switch the
+    // inner model while the agent itself stays pinned. Anything else is this
+    // Session trying to leave the agent, and is overridden.
+    const current = resolved as LlmCallConfig
+    const selected = current.provider === provider && typeof current.model === 'string'
+      ? decodeModelId(current.model)
+      : undefined
+    if (selected?.agent === model) return { ...rest } as LlmCallConfig
     return { ...rest, provider, model } as LlmCallConfig
   }, { prepend: true }), `${name}: pinned route ${provider}/${model}`)
 }

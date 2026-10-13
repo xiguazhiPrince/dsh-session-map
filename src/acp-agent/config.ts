@@ -10,7 +10,13 @@
  * @module dsh-session-map/acp-agent/config
  */
 import z from '@deepseek-ai/schemastery'
-import { agentSchema, resolveOptions as resolveSharedOptions, type ResolvedAgent } from '../acp-core/config'
+import {
+  agentSchema,
+  MAX_TIMER_DELAY_MS,
+  resolveOptions as resolveSharedOptions,
+  type ResolvedAgent,
+} from '../acp-core/config'
+import { assertAgentNameUnambiguous } from './model-id'
 
 /** This row's diagnostic prefix. */
 export const PREFIX = 'dsh-session-map/acp-agent'
@@ -21,6 +27,51 @@ export const PREFIX = 'dsh-session-map/acp-agent'
  * Host knows when a Session has gone quiet, so the route reaps its own.
  */
 export const DEFAULT_IDLE_DISPOSE_MS = 10 * 60 * 1000
+
+/**
+ * How long an `eager` model-list read may wait for one agent's handshake.
+ *
+ * Measured on this machine: `cursor-agent acp` takes 7–14 s from spawn to a
+ * published model list, almost all of it `session/new`, so a timeout much below
+ * this would make `eager` a guaranteed fallback rather than a choice. It bounds
+ * the *background* probe in the default mode too, where nothing waits on it.
+ */
+export const DEFAULT_DISCOVERY_TIMEOUT_MS = 15_000
+
+/** How long a discovered model list stays usable before it is probed again. */
+export const DEFAULT_DISCOVERY_TTL_MS = 5 * 60 * 1000
+
+/**
+ * The bound a *background* probe gets in the shipped `lazy` mode.
+ *
+ * Nothing waits on a background probe, so it gets the generous bound a slow agent
+ * needs, while `eager` — the mode where a caller is waiting — keeps
+ * {@link DEFAULT_DISCOVERY_TIMEOUT_MS}. Measured against cursor-agent: 7–14 s
+ * typically, one 37.6 s outlier, and one transient `session/new` failure out of
+ * five handshakes, which is why a failed or timed-out probe must degrade rather
+ * than fail anything.
+ */
+export const DEFAULT_BACKGROUND_DISCOVERY_TIMEOUT_MS = 60 * 1000
+
+/**
+ * How a failed discovery is remembered. Short, because the usual cause is a
+ * transient one (no login yet, a busy agent) and a stale negative would hide a
+ * model list that has since become available.
+ */
+export const DEFAULT_DISCOVERY_FAILURE_TTL_MS = 60 * 1000
+
+/** When the route may spawn an agent just to read its model list. */
+export type ModelDiscoveryMode = 'off' | 'lazy' | 'eager'
+
+/**
+ * The shipped discovery mode.
+ *
+ * `lazy` because discovery is expensive and `listModels` is a read the Host may
+ * make while rendering: the default answers immediately and warms the cache in
+ * the background, so the second read is enriched and no UI ever waits on an
+ * agent process.
+ */
+export const DEFAULT_MODEL_DISCOVERY: ModelDiscoveryMode = 'lazy'
 
 /**
  * The plugin's Config schema. `agents` stays volatile so the settings service
@@ -35,6 +86,9 @@ export const Config = z.object({
   utilityModel: z.string(),
   approval: z.union(['ask', 'policy'] as const),
   fs: z.union(['bridge', 'isolate'] as const),
+  modelDiscovery: z.union(['off', 'lazy', 'eager'] as const),
+  discoveryTimeoutMs: z.number(),
+  discoveryTtlMs: z.number(),
 })
 
 /** How the route answers an ACP `session/request_permission`. */
@@ -81,6 +135,17 @@ export interface ResolvedRouteOptions {
    * `isolate` restores the pre-bridge behaviour of advertising no file capability.
    */
   readonly fs: FsMode
+  /**
+   * Whether the route may spawn an agent to read the model list it advertises.
+   * `off` keeps the catalog to one entry per configured agent; `lazy` warms a
+   * cache in the background; `eager` waits for the handshake within
+   * {@link ResolvedRouteOptions.discoveryTimeoutMs}.
+   */
+  readonly modelDiscovery: ModelDiscoveryMode
+  /** Upper bound on one discovery handshake, in milliseconds. */
+  readonly discoveryTimeoutMs: number
+  /** How long a discovered list is reused before it is probed again, in milliseconds. */
+  readonly discoveryTtlMs: number
 }
 
 /**
@@ -91,6 +156,21 @@ function optionalString(raw: unknown): string | undefined {
   if (typeof raw !== 'string') return undefined
   const trimmed = raw.trim()
   return trimmed === '' ? undefined : trimmed
+}
+
+/**
+ * Read a positive finite millisecond bound that fits a Node timer.
+ * @param raw - the value as parsed (untrusted).
+ * @param key - the config key, for the diagnostic.
+ * @param fallback - the default applied when absent.
+ * @returns the validated bound.
+ */
+function boundedMs(raw: unknown, key: string, fallback: number): number {
+  if (raw === undefined || raw === null) return fallback
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0 || raw > MAX_TIMER_DELAY_MS) {
+    throw new Error(`${PREFIX}: \`${key}\` must be a positive finite number no greater than ${MAX_TIMER_DELAY_MS}`)
+  }
+  return raw
 }
 
 /**
@@ -107,6 +187,15 @@ export function resolveRouteOptions(raw: unknown): ResolvedRouteOptions {
   const shared = resolveSharedOptions(raw)
   const record = (raw ?? {}) as Record<string, unknown>
 
+  // The model-id scheme needs this, and this is the only place it can be
+  // enforced: a name containing the separator would make "agent::value"
+  // ambiguous, and no later code can recover which of the two the author meant.
+  // Checked over the resolved agents, which is exactly the set whose names
+  // become model ids.
+  for (const agent of shared.agents) {
+    assertAgentNameUnambiguous(PREFIX, agent.providerName, `agents[].name "${agent.providerName}"`)
+  }
+
   const utilityProvider = optionalString(record['utilityProvider'])
   const utilityModel = optionalString(record['utilityModel'])
   if ((utilityProvider === undefined) !== (utilityModel === undefined)) {
@@ -118,6 +207,8 @@ export function resolveRouteOptions(raw: unknown): ResolvedRouteOptions {
     ? idle
     : DEFAULT_IDLE_DISPOSE_MS
 
+  const discovery = record['modelDiscovery']
+
   return {
     agents: shared.agents,
     disposeEofGraceMs: shared.disposeEofGraceMs,
@@ -125,6 +216,9 @@ export function resolveRouteOptions(raw: unknown): ResolvedRouteOptions {
     idleDisposeMs,
     approval: record['approval'] === 'ask' ? 'ask' : 'policy',
     fs: record['fs'] === 'isolate' ? 'isolate' : 'bridge',
+    modelDiscovery: discovery === 'off' || discovery === 'eager' ? discovery : DEFAULT_MODEL_DISCOVERY,
+    discoveryTimeoutMs: boundedMs(record['discoveryTimeoutMs'], 'discoveryTimeoutMs', DEFAULT_DISCOVERY_TIMEOUT_MS),
+    discoveryTtlMs: boundedMs(record['discoveryTtlMs'], 'discoveryTtlMs', DEFAULT_DISCOVERY_TTL_MS),
     utility: utilityProvider === undefined || utilityModel === undefined
       ? undefined
       : { provider: utilityProvider, model: utilityModel },

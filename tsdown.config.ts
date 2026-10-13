@@ -29,6 +29,11 @@ const ID = 'dsh-session-map'
  * that finds the row's settings namespace — so the node test suite can drive it
  * without a DOM or a Host composition.
  *
+ * `model-scope.js` is the same arrangement for P10's per-Session model filter: the
+ * browser half installs it, and the node suite drives the whole installer — wrap,
+ * memoize, react, dispose — against fakes, which is the only way to test a patch
+ * on another plugin's method without a browser.
+ *
  * `entryFileNames` pins both artifacts to the paths package.json declares:
  * tsdown's default extension follows the format, so the ESM half would land on
  * `index.mjs` and the Loader would not find `main`.
@@ -42,6 +47,7 @@ export default (): UserConfig[] => [
       'acp-agent': 'src/acp-agent/index.ts',
       'acp-preset': 'src/acp-preset/index.ts',
       'acp-model': 'src/client/acp-model.ts',
+      'model-scope': 'src/client/model-scope.ts',
     },
     outDir: 'lib',
     format: ['esm'],

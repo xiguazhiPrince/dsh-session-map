@@ -19,8 +19,9 @@
  */
 import type { ResolvedAgent } from '../acp-core/config'
 import { resolveChildCwd } from '../acp-core/resolve'
-import { AcpChannel, AcpChannelFailure, type ChannelSignal, type ToolCallRecord } from './channel'
-import type { ApprovalMode, FsMode, UtilityRoute } from './config'
+import { AcpChannel, AcpChannelFailure, MODEL_CATEGORY, type ChannelSignal, type ConfigOption, type ToolCallRecord } from './channel'
+import { DEFAULT_BACKGROUND_DISCOVERY_TIMEOUT_MS, DEFAULT_DISCOVERY_FAILURE_TTL_MS, type ApprovalMode, type FsMode, type ModelDiscoveryMode, type UtilityRoute } from './config'
+import { decodeModelId, encodeModelId } from './model-id'
 import type {
   GenerateOptions,
   HostContext,
@@ -58,7 +59,18 @@ export interface AdapterOptions {
   readonly approval: ApprovalMode
   /** Whether the Host filesystem is advertised to the remote agent. */
   readonly fs: FsMode
+  /** Whether the route may spawn an agent to read its own model list. */
+  readonly modelDiscovery: ModelDiscoveryMode
+  /** Upper bound on one discovery handshake, in milliseconds. */
+  readonly discoveryTimeoutMs: number
+  /** How long a discovered model list is reused, in milliseconds. */
+  readonly discoveryTtlMs: number
 }
+
+/** One agent's cached model-list outcome. */
+type Discovery =
+  | { readonly ok: true; readonly options: readonly ConfigOption[]; readonly at: number }
+  | { readonly ok: false; readonly at: number }
 
 /**
  * Map an ACP terminal reason onto the Host's finish vocabulary. An unrecognized
@@ -117,6 +129,10 @@ export class AcpAgentAdapter {
   private readonly channels = new Map<string, AcpChannel>()
   /** Per-channel set of remote tool calls already emitted as tool-call blocks. */
   private readonly emitted = new Map<string, Set<string>>()
+  /** Each agent's own model list, read once per TTL from a throwaway session. */
+  private readonly discovered = new Map<string, Discovery>()
+  /** In-flight discovery per agent, so concurrent catalog reads spawn one probe. */
+  private readonly discovering = new Map<string, Promise<readonly ConfigOption[]>>()
   private disposed = false
 
   /**
@@ -153,29 +169,65 @@ export class AcpAgentAdapter {
   }
 
   /**
+   * The models this route offers.
+   *
+   * Every agent contributes its own model id first — the id P1 shipped, which
+   * means "whatever this agent's own default is" and is what a preset card pins.
+   * When the agent advertises a model selector, each of its values follows as
+   * `<agent>::<value>`, which is what makes an agent's inner models selectable in
+   * the Host's own model picker without a second UI.
+   *
+   * Discovery is deliberately not on this path in the default mode: the list is
+   * answered from cache, and a cold entry warms in the background so that no
+   * caller — the Host's catalog, a settings page, a picker opening — ever waits
+   * on an agent process.
    * @param provider - the route being listed.
-   * @returns one model per configured agent; the model id IS the agent name.
+   * @returns the legacy entry per agent, plus whatever models are known right now.
    */
   async listModels(provider: string): Promise<ModelInfo[]> {
-    return this.options.agents.map((agent) => ({
-      provider,
-      id: agent.providerName,
-      name: `ACP · ${agent.providerName}`,
-      description: `${agent.command} ${agent.args.join(' ')}`.trim(),
-    }))
+    const models: ModelInfo[] = []
+    for (const agent of this.options.agents) {
+      models.push({
+        provider,
+        id: encodeModelId(agent.providerName),
+        name: `ACP · ${agent.providerName}`,
+        description: `${agent.command} ${agent.args.join(' ')}`.trim(),
+      })
+      if (this.options.modelDiscovery === 'off') continue
+
+      const cached = this.freshDiscovery(agent.providerName)
+      if (cached?.ok === true) {
+        models.push(...this.modelEntries(provider, agent, cached.options))
+        continue
+      }
+      // A fresh failure is honoured too: respawning on every read is exactly the
+      // cost the negative cache exists to bound.
+      if (cached !== undefined) continue
+
+      if (this.options.modelDiscovery === 'eager') {
+        models.push(...this.modelEntries(provider, agent, await this.discover(agent, this.options.discoveryTimeoutMs)))
+        continue
+      }
+      void this.discover(agent, DEFAULT_BACKGROUND_DISCOVERY_TIMEOUT_MS)
+    }
+    return models
   }
 
   /**
    * @param provider - the route being resolved.
-   * @param model - the agent name.
+   * @param model - the agent name, optionally followed by one of its model values.
    * @returns resolved metadata for the exact route.
    */
   async resolveModel(provider: string, model: string): Promise<ResolvedModelInfo> {
-    const agent = this.agentFor(model)
+    const { agent: agentName, value } = decodeModelId(model)
+    const agent = this.agentFor(agentName)
     return {
       provider,
       id: model,
-      name: `ACP · ${agent.providerName}`,
+      name: value === undefined
+        ? `ACP · ${agent.providerName}`
+        : `ACP · ${agent.providerName} · ${value}`,
+      description: `${agent.command} ${agent.args.join(' ')}`.trim(),
       context: { contextWindow: ASSUMED_CONTEXT_WINDOW },
     }
   }
@@ -189,6 +241,134 @@ export class AcpAgentAdapter {
   async prepareCall(provider: string, model: string): Promise<PreparedCall> {
     const resolved = await this.resolveModel(provider, model)
     return { model: resolved, stream: (options: GenerateOptions) => this.stream(options) }
+  }
+
+  /**
+   * One agent's model list, from cache when it is still fresh.
+   * @param agentName - the configured agent name.
+   * @returns the entry, or `undefined` when nothing fresh is known.
+   */
+  private freshDiscovery(agentName: string): Discovery | undefined {
+    const entry = this.discovered.get(agentName)
+    if (entry === undefined) return undefined
+    const ttl = entry.ok ? this.options.discoveryTtlMs : DEFAULT_DISCOVERY_FAILURE_TTL_MS
+    return Date.now() - entry.at < ttl ? entry : undefined
+  }
+
+  /**
+   * Turn one agent's advertised options into catalog entries.
+   * @param provider - the route.
+   * @param agent - the agent they came from.
+   * @param options - the agent's advertised options.
+   * @returns one entry per value of its model selector; none when it has none.
+   */
+  private modelEntries(provider: string, agent: ResolvedAgent, options: readonly ConfigOption[]): ModelInfo[] {
+    const selector = options.find((option) => option.category === MODEL_CATEGORY && option.type === 'select')
+    if (selector === undefined) return []
+    const command = `${agent.command} ${agent.args.join(' ')}`.trim()
+    return selector.choices.map((choice) => ({
+      provider,
+      id: encodeModelId(agent.providerName, choice.value),
+      // The group label leads, because an agent that grouped its values meant
+      // the group to be part of how a value is told apart.
+      name: `ACP · ${agent.providerName} · ${choice.group === undefined ? choice.name : `${choice.group} · ${choice.name}`}`,
+      description: `${command} · ${selector.name}`,
+    }))
+  }
+
+  /**
+   * Read one agent's model list, at most once at a time.
+   * @param agent - the agent to interrogate.
+   * @param timeoutMs - the bound for this probe.
+   * @returns its options, or `[]` when the probe failed or timed out.
+   */
+  private discover(agent: ResolvedAgent, timeoutMs: number): Promise<readonly ConfigOption[]> {
+    const existing = this.discovering.get(agent.providerName)
+    if (existing !== undefined) return existing
+    const run = this.probe(agent, timeoutMs).finally(() => { this.discovering.delete(agent.providerName) })
+    this.discovering.set(agent.providerName, run)
+    return run
+  }
+
+  /**
+   * Open a throwaway session purely to read what the agent advertises.
+   *
+   * It reuses `AcpChannel` rather than speaking ACP here so that spawning,
+   * handshaking, environment scrubbing and the teardown ladder are the same code
+   * the conversation path uses — and it is deliberately NOT entered into
+   * {@link channels} and gets its own tool-call registry, so a probe can never
+   * collide with a Session's channel or publish a mirror tool call.
+   *
+   * Every failure is a fact about the agent, not an error to raise: an agent that
+   * is not logged in, is slow, or advertises no selector simply contributes its
+   * legacy entry, and the negative result is remembered briefly so a catalog read
+   * loop cannot turn into a spawn loop.
+   *
+   * The working directory is the agent's own, else the Host's launching directory:
+   * a catalog read has no Session to inherit one from, and the launching directory
+   * is the same meaning a relative `cwd` already carries at load. Nothing is
+   * prompted on this session, so the directory is where the agent starts, not
+   * somewhere it is asked to work.
+   * @param agent - the agent to interrogate.
+   * @param timeoutMs - the bound on its handshake.
+   * @returns its options, or `[]`.
+   */
+  private async probe(agent: ResolvedAgent, timeoutMs: number): Promise<readonly ConfigOption[]> {
+    const key = `discovery::${agent.providerName}`
+    const channel = new AcpChannel(this.ctx, {
+      prefix: this.options.prefix,
+      config: agent,
+      disposeEofGraceMs: this.options.disposeEofGraceMs,
+      disposeGraceMs: this.options.disposeGraceMs,
+      idleDisposeMs: 0,
+      cwd: resolveChildCwd(this.options.prefix, agent.cwd, process.cwd()),
+      sessionId: key,
+      approval: this.options.approval,
+      fs: this.options.fs,
+      key,
+      records: new Map(),
+    })
+    const startup = channel.ensureReady()
+    // A timed-out probe abandons this promise while the teardown below kills the
+    // process underneath it; without a handler that late rejection surfaces as an
+    // unhandled rejection rather than as the outcome already recorded.
+    startup.catch(() => {})
+    try {
+      await this.withTimeout(startup, timeoutMs)
+      const options = channel.configOptionState()
+      this.discovered.set(agent.providerName, { ok: true, options, at: Date.now() })
+      return options
+    } catch (error: unknown) {
+      this.discovered.set(agent.providerName, { ok: false, at: Date.now() })
+      this.ctx.logger.debug(
+        `${this.options.prefix}: could not read the model list of agent "${agent.providerName}": %o`,
+        error,
+      )
+      return []
+    } finally {
+      await channel.dispose()
+    }
+  }
+
+  /**
+   * @param work - the operation to bound.
+   * @param ms - the bound in milliseconds.
+   * @returns the operation's result.
+   * @throws when the bound elapses first.
+   */
+  private async withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      return await Promise.race([
+        work,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => { reject(new Error(`the ACP handshake exceeded ${String(ms)}ms`)) }, ms)
+          timer.unref?.()
+        }),
+      ])
+    } finally {
+      if (timer !== undefined) clearTimeout(timer)
+    }
   }
 
   private agentFor(model: string): ResolvedAgent {
@@ -271,7 +451,8 @@ export class AcpAgentAdapter {
       return
     }
 
-    const agent = this.agentFor(options.model)
+    const { agent: agentName, value: modelValue } = decodeModelId(options.model)
+    const agent = this.agentFor(agentName)
     const key = `${sessionId}::${agent.providerName}`
     let channel = this.channels.get(key)
     if (channel === undefined || !channel.usable) {
@@ -308,6 +489,18 @@ export class AcpAgentAdapter {
     // produced; a fresh turn ends with the user's text.
     const continuing = (options.messages ?? []).at(-1)?.role === 'tool'
     if (!continuing) {
+      // The model can only change between turns, and a channel keeps whatever it
+      // was last put on, so the requested value is reconciled here: a turn that
+      // does not change it costs no request, and one that does reaches the agent
+      // before the prompt that depends on it. A refused value fails this turn
+      // rather than silently answering from a model nobody asked for.
+      try {
+        await channel.applyModel(modelValue)
+      } catch (error: unknown) {
+        const described = this.describe(agent.providerName, error)
+        yield { type: 'finish', reason: { kind: 'error', failure: { message: described.message, code: described.code } } }
+        return
+      }
       const text = lastUserText(options)
       if (text === '') {
         yield { type: 'finish', reason: { kind: 'stop' } }

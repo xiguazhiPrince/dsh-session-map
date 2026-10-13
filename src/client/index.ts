@@ -20,6 +20,7 @@ import { AcpToolRow, ACP_TOOL_KEYS, type AcpToolRowProps } from './acp-tool-row'
 import { CSS } from './css'
 import { MAP_KIND, MAP_TYPE_ID, OVERVIEW_KIND, OVERVIEW_TYPE_ID } from './constants'
 import { createFlag } from './flags'
+import { installModelScope, readModelScopeMode, type PresetFace } from './model-scope'
 import {
   createMapLauncher,
   createMapView,
@@ -109,6 +110,53 @@ interface UiWorkspaceService {
 /** Session Controller navigation, the fallback when the Workspace UI is absent. */
 interface SessionsService {
   open(sessionId: string): void
+  /**
+   * The sessions store, which is where a Session's own preset is readable.
+   *
+   * Not `binding.session.projections.faceOf('agentPreset')`: the projection faces
+   * this product exposes are `inbox`, `goal`, `userQuestions`, `modelSelection`,
+   * `plan` and `permissions`, while every preset read in the shipped client goes
+   * through this store's `projectionValues.agentPreset`
+   * (`ui-agent-preset`, `ui-session`, the sidebar).
+   */
+  readonly list?: {
+    getSnapshot(): {
+      readonly byId?: Record<string, {
+        readonly projectionValues?: { readonly agentPreset?: unknown }
+      } | undefined>
+    }
+    subscribe(listener: () => void): () => void
+  }
+}
+
+/**
+ * The client `modelDirectories` service, as far as the model scope uses it.
+ *
+ * Untyped by the product's own packages on purpose (this repository pins none of
+ * them); the shape is the one `@deepseek-ai/dsh-client-ui-model-selection` calls.
+ */
+interface ModelDirectoriesService {
+  /**
+   * @param sessionId - the Session whose model directory is wanted.
+   * @returns the per-Session directory both model pickers read.
+   */
+  directoryFor(sessionId: string): unknown
+}
+
+/**
+ * The client Remote gateway, as far as the model scope uses it.
+ *
+ * The Session namespace is the same wire face the shipped picker writes through,
+ * so a reconciliation is indistinguishable from a person choosing that model.
+ */
+interface RemoteService {
+  readonly session?: {
+    /**
+     * @param request - the Session and the provider/model to record for it.
+     * @returns the Remote outcome.
+     */
+    selectModel?(request: { sessionId: string; provider: string; model: string }): Promise<unknown>
+  }
 }
 
 /** A lifecycle effect body: what it installs, and the disposer that releases it. */
@@ -126,7 +174,14 @@ type EffectBody = () => () => void
  */
 function lookup<T>(ctx: Context, name: string): T | undefined {
   const locator = ctx as unknown as ServiceLocator
-  return locator.get(name) as T | undefined
+  // Never throws. Inside an *inject scope* `get` throws for a service the scope did
+  // not declare, and Cordis swallows an exception thrown from an inject callback —
+  // which is exactly how the ACP model scope previously died without a trace.
+  try {
+    return locator.get(name) as T | undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -334,5 +389,76 @@ export function apply(ctx: Context): void {
       { name: 'settings.section', id: 'acp', order: 25, label: 'ACP' },
       AcpCard,
     )), 'session-map: acp vendors settings section')
+  })
+
+  // The ACP model scope (P10). The composer's model card is the product's and
+  // stays untouched, so the filter goes where both of its pickers read: the
+  // per-Session directory. `directoryFor` is wrapped rather than the service
+  // replaced — the product resolves the service once and captures it, while it
+  // calls this method on every render.
+  //
+  // Injected rather than read once, because a composition may mount the service
+  // after this plugin, and because a browser half that never finds it must stay
+  // exactly as it was: `installModelScope` fails open and this block does nothing.
+  ctx.inject(['modelDirectories', 'remote', 'remote.session'], (scope) => {
+    // Property access on the injected scope, exactly as the shipped client reads
+    // these services. `get` is NOT equivalent here: inside an inject scope it throws
+    // for any name the scope did not declare (`cannot get property "remote.session"
+    // without inject`), and Cordis swallows what an inject callback throws — which is
+    // how this whole feature first died without leaving a trace anywhere. The
+    // declared list is therefore exactly what the shipped picker declares for the
+    // model card: the directory service and the session Remote it writes through.
+    const models = (scope as { modelDirectories?: ModelDirectoriesService }).modelDirectories
+    if (models === undefined) return
+    const sessionRemote = (scope as { remote?: { session?: RemoteService['session'] } }).remote?.session
+      ?? lookup<RemoteService>(ctx, 'remote')?.session
+    // The sessions store comes from the plugin context: `sessions` is not an
+    // injectable name (the scope rejects it) while `get` resolves it.
+    const sessionsStore = lookup<SessionsService>(ctx, 'sessions')?.list
+    try {
+      // The preset is read from the sessions store, which is where this product
+      // keeps it. Every read is guarded: an unexpected shape here must leave the
+      // feature inert, never throw out of a React render.
+      const readPreset = (sessionId: string): unknown => {
+        try {
+          return sessionsStore?.getSnapshot?.()?.byId?.[sessionId]?.projectionValues?.agentPreset
+        } catch (error: unknown) {
+          console.warn('dsh-session-map: could not read a Session preset projection', error)
+          return undefined
+        }
+      }
+      // The write a preset card cannot make itself: a card Session routes to its
+      // agent while its stored selection is still the profile default, and the
+      // reconciliation puts the two back in agreement — in both directions.
+      const selectModel = sessionRemote?.selectModel
+      ctx.effect(() => installModelScope(
+        {
+          models,
+          presetFaceOf: typeof sessionsStore?.getSnapshot !== 'function' || typeof sessionsStore.subscribe !== 'function'
+            ? undefined
+            : (sessionId) => ({
+              getSnapshot: () => readPreset(sessionId),
+              subscribe: (listener) => {
+                try {
+                  return sessionsStore.subscribe(listener)
+                } catch {
+                  return () => {}
+                }
+              },
+            }),
+          selectModel: typeof selectModel === 'function'
+            ? (request) => selectModel.call(sessionRemote, request)
+            : undefined,
+        },
+        {
+          mode: () => readModelScopeMode(),
+          warn: (message, detail) => { console.warn(message, detail) },
+        },
+      ), 'session-map: acp model scope')
+    } catch (error: unknown) {
+      // Fail open, but say so: an exception from a Cordis inject callback is silent
+      // otherwise, and that is the failure mode that cost the most time here.
+      console.warn('dsh-session-map: the ACP model scope could not be installed', error)
+    }
   })
 }
