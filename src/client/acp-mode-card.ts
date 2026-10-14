@@ -112,9 +112,27 @@ export function createAcpModeSelect(commands: AcpModeCommandsFace | undefined): 
     // A single advertised mode is not a choice, and without the command there is
     // nothing this control could do. The slot registry types a cell as returning an
     // element, so "nothing to show" is an empty fragment rather than `null`.
-    if (commands === undefined || agent === undefined || state === undefined || state.available.length < 2) {
-      return createElement(Fragment, null)
+    if (commands === undefined || agent === undefined) return createElement(Fragment, null)
+
+    // Reading the modes is a handshake with a real process, and a Session whose agent
+    // has not connected has no channel to answer from — measured at 7–14 s on this
+    // machine. Saying so beats rendering nothing for that long, which reads as a
+    // control that never loaded.
+    if (state === undefined) {
+      if (!busy) return createElement(Fragment, null)
+      return createElement(
+        'span',
+        {
+          className: 'dsm-acp-mode--waiting',
+          'data-dsm-acp-mode': 'waiting',
+          'aria-label': 'ACP mode',
+          title: failure ?? 'Reading the agent’s collaboration modes…',
+        },
+        'ACP…',
+      )
     }
+
+    if (state.available.length < 2) return createElement(Fragment, null)
 
     const current = state.current ?? state.available[0]!.id
     const change = (modeId: string): void => {

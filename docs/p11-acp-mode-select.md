@@ -129,7 +129,12 @@ default). The append path was then removed from the code.
   no hidden flag. It is also a power-user path — `/acp-mode @cursor plan` works from
   the input box.
 - The first read of a Session whose agent has not connected spawns one discovery
-  handshake (~10s), which the model catalog usually triggers anyway.
+  handshake (~10s), which the model catalog usually triggers anyway. P12 cut the
+  avoidable part of that wait: the read returns when `session/new` answers instead
+  of six seconds later, a previously successful answer is served immediately and
+  re-read behind the read, a waiter's own deadline is no longer replaced by a
+  background probe's, and a Session that connects feeds the cache for the next
+  reader.
 
 ## 7. Decision, and the alternatives that were measured
 

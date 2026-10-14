@@ -160,6 +160,12 @@ that may not spawn never does.
   the cache, so the models appear on the *next* read. If the picker caches for the
   page's lifetime, the default should become `eager` (or the settings page needs a
   refresh control) — a product-side fact, not a route-side one.
+  **[Answered in P12](p12-discovery-latency.md): it caches for the page's lifetime.**
+  `ModelCatalogDirectory.load()` returns the loaded value while its status is
+  `ready`, and only `connection/reset`, `llm/adapters-updated`,
+  `settings/document-updated` and credential events invalidate it — so a `lazy`
+  probe's models were never read. P12 keeps `lazy` and has the route announce
+  `llm/adapters-updated` through the LLM service once a probe has landed.
 - **The browser path.** The route, the discovery and the write are proven against
   a real agent; that the picker renders 45 entries and that selecting one changes
   what Cursor actually uses was not driven in a browser here. Steps below.

@@ -200,6 +200,18 @@ export interface HostContext {  readonly logger: {
      * @returns that adapter's raw chunk stream.
      */
     stream(options: unknown): AsyncIterable<unknown>
+    /**
+     * Announce that the model lists behind the registered routes changed, so every
+     * consumer re-reads them.
+     *
+     * Optional because it belongs to the shipped LLM service rather than to the
+     * registry contract this plugin depends on. What makes it useful here is that
+     * the service dispatches the forwarded `llm/adapters-updated` event, which the
+     * browser's model catalog re-reads on — and a runtime plugin has no other way
+     * to make that happen. Absent in a composition without it, where a warmed
+     * background probe stays silent and is simply picked up by the next read.
+     */
+    emitAdaptersUpdated?(): void
   }
   /** The tool registry the mirror tools are published through. */
   readonly tools: {

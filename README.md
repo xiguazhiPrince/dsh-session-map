@@ -144,6 +144,7 @@ dsh --profile <name> --dump-config
 - **远端进程死了就没有远端上下文了。** DSH 的 transcript 还在，通道会自动重建，但远端会话不保留（`session/load` 没实现）。
 - **`terminal/*` 没有桥接。** 远端 agent 用自己的 shell（P1 起就是这样，Cursor 也验证过能自己写文件）。桥接它换来的是 Host 渲染的终端，而 `fs` 桥接换来的是**强制**——沙箱围栏是一条安全边界，终端桥接只是呈现。理由与取舍记在 [docs/p6-fs-bridge.md](docs/p6-fs-bridge.md)。
 - **未知扩展方法**：ACP 之外的阻塞请求（已知的是 Cursor 的 `cursor/ask_question`、`cursor/create_plan`）被确定性回绝（空对象）并记入诊断，不会把一轮挂死；`cursor/update_todos`、`cursor/task`、`cursor/generate_image` 是通知，注册为空处理。表在 `src/acp-core/client.ts`，换 agent 出新扩展方法时往那里加。
+- **第一次读某个 agent 的模式/模型要等一次真实握手。** ACP 没有「列模式」「列模型」的调用——两者都只在 `session/new` 的结果里返回——所以第一次问必须现场起一个 CLI 进程。本机实测 `cursor-agent`：`initialize` 约 1 s、`session/new` 约 7–8 s（P9 五次采样 7.2–14.2 s，一次 37.6 s 离群）。P12 之后这份等待不再被放大：冷读只等到 `session/new` 回答（以前还要多等 6 s 等进程收尾）；等待方自己的超时生效（以前可能被后台探测的 60 s 盖住）；过期结果照常供出并在后台重读；会话连上之后（发过一条消息）模式读取瞬时，且那次握手会喂给缓存；后台探测拿到模型列表时会主动通知浏览器刷新 catalog，所以默认 `lazy` 下那几十条内层模型会在十几秒后自己出现，不必再去碰设置页。见 [docs/p12-discovery-latency.md](docs/p12-discovery-latency.md)。
 - **MCP 不桥接**：`session/new` 的 `mcpServers` 传空数组，agent 用自己的配置（Cursor 读 `.cursor/mcp.json`）。
 - **工具卡片显示的是公告时刻的参数快照。** Cursor 的 `rawInput` 往往在后续 `tool_call_update` 里才补全，那时它已经进了输出而不是输入。
 - **从 `agents` 里删掉一个 agent 之后，用它建过的会话打不开了。** 会话日志记着当初的 `agentPreset`，重建会话时 Host 会去解析那个 id；id 不存在就报 `agent-preset/not-found`（错误详情里带 `available` 列表）。删掉那些旧会话即可，或者把 agent 加回去。**注意这不是浏览器缓存问题**：`session/create` 请求本身不带 preset，那个 id 是从磁盘上那条会话记录里读出来的，所以刷新、清 localStorage、换标签页都没用。
@@ -164,6 +165,7 @@ dsh --profile <name> --dump-config
 | P6 | 文件系统桥接：远端读写走 `ctx.fs` 与沙箱 | [docs/p6-fs-bridge.md](docs/p6-fs-bridge.md) |
 | P7 | 删除子代理委派：把首次抽取没做完的共享核心接上，移除整条委派链路 | [docs/p7-remove-delegation.md](docs/p7-remove-delegation.md) |
 | P8 | 设置页：Settings → ACP 一页管理 `agents`，含 Cursor / opencode / Gemini CLI 三个供应商预设 | [docs/p8-acp-settings-page.md](docs/p8-acp-settings-page.md) |
+| P12 | 读取延迟：冷读不再等进程收尾、等待方自己的超时生效、过期结果照常供、连接的会话喂缓存、探测完成后通知浏览器刷新 catalog | [docs/p12-discovery-latency.md](docs/p12-discovery-latency.md) |
 
 本机实测过的 agent：`cursor-agent acp`（真实会话、工具卡片、停止、审批都跑通）。脚本化 agent（`test/mock-acp-agent.mjs`）用于确定性地验审批与文件系统两条路径，因为它不依赖某个 Cursor 版本愿不愿意发问。
 
@@ -186,8 +188,9 @@ pnpm test         # node --test，驱动 lib/ 产物
 
 - `test/core.test.mjs` 直接调用构建产物里的纯函数：`resolveAcpCommand`（已知启动器取最新且跳过不完整版本、npm shim 声明的二进制直连、声明了 `%_prog%` 的脚本前面加 node、`.cmd` 走命令解释器、裸 `node` 优先 `.exe`、PATH 上找不到时给配置指引）、`resolveChildCwd` / `assertUsableCwd`，以及 `resolveOptions` / `agentSchema` 的逐 agent 校验（缺失的 `name` / `command`、类型与枚举错误、重名、`cwd` 不可用、以及 graces 的边界）。Windows 专属用例在非 Windows 上跳过。
 - `test/acp-card.test.mjs` 直接调用 `lib/acp-model.js`：草稿 ↔ wire 往返、写回时丢掉默认值、校验规则、`KEY=VALUE` 与参数解析、列表编辑、供应商预设的命名去重，以及用**真实 `Config.toJSON()`** 验的命名空间识别。
+- `test/model-options.test.mjs`、`test/acp-modes.test.mjs`、`test/discovery-latency.test.mjs` 用真实构建产物驱动真实子进程（`test/mock-acp-agent.mjs` 按场景回放 ACP 帧）：模型选择写在使用它的 prompt 之前、中途的 `config_option_update` 不被当成正文、`/acp-mode` 的语法与「先选后连」的保持，以及 P12 的读取时序（冷读不等进程收尾、等待方自己的超时、过期结果照常供出、连接的会话喂缓存、列表变化只通报一次 catalog 刷新）。
 
-会话路由本身没有自动化测试：它的验证靠 `.dsh-dev` 探针 profile（真实 agent / 脚本化 agent）与人工实测，见上面那张阶段表。
+会话路由的端到端行为仍然靠 `.dsh-dev` 探针 profile（真实 agent / 脚本化 agent）与人工实测，见上面那张阶段表。
 
 ### 加载链路验证
 
@@ -236,7 +239,7 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 
 - `--dump-config` 里 `session-map` 与 `acp-agent` 两行齐全，后者默认开着、`agents: []`；设置页写进去的 `agents` 会作为 profile 覆盖出现在同一份 dump 里；
 - 配置写坏时那一行仍然加载（schema 负责类型，`apply` 负责语义并记日志），日志里给出一行带 `dsh-session-map/acp-agent` 前缀的原因；
-- `pnpm test`：26 通过、1 跳过（POSIX 专属），覆盖命令解析、cwd 校验、逐 agent 的配置校验，以及设置页模型（草稿往返、校验、供应商预设、命名去重、schema 识别）——见[测试](#测试)；
+- `pnpm test`：74 通过、1 跳过（POSIX 专属），覆盖命令解析、cwd 校验、逐 agent 的配置校验、设置页模型（草稿往返、校验、供应商预设、命名去重、schema 识别），以及 P9/P11/P12 在真实子进程上的行为——见[测试](#测试)；
 - **命令解析这条链在本机实测过两种 vendor**：`cursor-agent` 走已知启动器表；`opencode` 走 npm `.cmd` shim 声明的真实二进制，`initialize` / `session/new` / `session/set_config_option`（换模型生效）全部送达。换 vendor 不成功时也没有变成一次泄漏或一次挂死：远端自己的拒绝变成 `stop: error` 与一行固定诊断，原始 payload 只留在子进程的 stderr。
 
 **ACP 会话（P0–P6）的验证**：每一阶段都要有可复现的证据，而不是「看起来能用」——

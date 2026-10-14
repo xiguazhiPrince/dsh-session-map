@@ -683,4 +683,21 @@ textarea.dsm-acp-page__input {
   box-shadow: 0 0 0 2px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
 }
 .dsm-acp-mode:disabled { opacity: 0.5; cursor: default; }
+/* Before the agent answers. Reading the modes means a real handshake with a real
+   process, so the cell keeps its seat and says it is waiting instead of rendering
+   nothing for the duration. */
+.dsm-acp-mode--waiting {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  max-width: 132px;
+  height: 24px;
+  padding: 0 2px;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 24px;
+  opacity: 0.6;
+  cursor: default;
+}
 `

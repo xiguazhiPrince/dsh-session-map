@@ -133,6 +133,21 @@ function lastUserText(options: GenerateOptions): string {
   return fallback
 }
 
+/**
+ * Fingerprint the model selector a discovery published.
+ *
+ * Only the selector's own values matter: they are what {@link AcpAgentAdapter.listModels}
+ * turns into catalog entries, and a `currentValue` that moved because a Session
+ * selected something is not a catalog change.
+ * @param options - one agent's advertised option set.
+ * @returns a stable fingerprint, or `''` when it advertises no usable selector.
+ */
+function modelSelectorFingerprint(options: readonly ConfigOption[]): string {
+  const selector = options.find((option) => option.category === MODEL_CATEGORY && option.type === 'select')
+  if (selector === undefined || selector.choices.length === 0) return ''
+  return JSON.stringify(selector.choices.map((choice) => [choice.value, choice.group ?? null, choice.name]))
+}
+
 /** The ACP-backed model route. */
 export class AcpAgentAdapter {
   private readonly channels = new Map<string, AcpChannel>()
@@ -147,6 +162,19 @@ export class AcpAgentAdapter {
   private readonly discovered = new Map<string, Discovery>()
   /** In-flight discovery per agent, so concurrent catalog reads spawn one probe. */
   private readonly discovering = new Map<string, Promise<readonly ConfigOption[]>>()
+  /**
+   * The model-selector set already announced per agent, so a catalog refresh is
+   * published when — and only when — what this route would list really changed.
+   */
+  private readonly announced = new Map<string, string>()
+  /**
+   * Probes whose teardown has been started but not awaited.
+   *
+   * The read path must not pay the EOF grace once the handshake has answered, but
+   * unloading the row still has to reap every process it started: this is what
+   * {@link dispose} awaits.
+   */
+  private readonly teardowns = new Set<Promise<void>>()
   private disposed = false
 
   /**
@@ -195,6 +223,12 @@ export class AcpAgentAdapter {
    * answered from cache, and a cold entry warms in the background so that no
    * caller — the Host's catalog, a settings page, a picker opening — ever waits
    * on an agent process.
+   *
+   * Two rules keep that promise while the cache ages. A list that outlived its TTL
+   * is still served, because the alternative is a catalog that regresses to the
+   * legacy entry every few minutes; it is re-read behind the read. And `eager`
+   * waits under **its own** bound ({@link AdapterOptions.discoveryTimeoutMs}) even
+   * when the probe it joined was started with the background one.
    * @param provider - the route being listed.
    * @returns the legacy entry per agent, plus whatever models are known right now.
    */
@@ -209,20 +243,29 @@ export class AcpAgentAdapter {
       })
       if (this.options.modelDiscovery === 'off') continue
 
-      const cached = this.freshDiscovery(agent.providerName)
-      if (cached?.ok === true) {
-        models.push(...this.modelEntries(provider, agent, cached.options))
+      const fresh = this.freshDiscovery(agent.providerName)
+      if (fresh?.ok === true) {
+        models.push(...this.modelEntries(provider, agent, fresh.options))
         continue
       }
       // A fresh failure is honoured too: respawning on every read is exactly the
       // cost the negative cache exists to bound.
-      if (cached !== undefined) continue
+      if (fresh !== undefined) continue
 
-      if (this.options.modelDiscovery === 'eager') {
-        models.push(...this.modelEntries(provider, agent, await this.discover(agent, this.options.discoveryTimeoutMs)))
+      // Stale but successful: serve it now, revalidate behind the read.
+      const stale = this.discovered.get(agent.providerName)
+      if (stale?.ok === true) {
+        models.push(...this.modelEntries(provider, agent, stale.options))
+        void this.discover(agent)
         continue
       }
-      void this.discover(agent, DEFAULT_BACKGROUND_DISCOVERY_TIMEOUT_MS)
+
+      if (this.options.modelDiscovery === 'eager') {
+        const options = await this.settleWithin(this.discover(agent), this.options.discoveryTimeoutMs)
+        models.push(...this.modelEntries(provider, agent, options ?? []))
+        continue
+      }
+      void this.discover(agent)
     }
     return models
   }
@@ -275,6 +318,12 @@ export class AcpAgentAdapter {
    * Read through the same handshake the model list uses. Deliberately *not* gated by
    * `modelDiscovery`: a catalog read may skip spawning an agent, while someone asking
    * a Session's mode control what modes exist is asking for exactly that probe.
+   *
+   * What it is gated by is staleness: a mode set that was successfully read before is
+   * answered straight away and re-read behind the answer. The control renders nothing
+   * until it gets an answer, and a remote agent's modes do not change on a clock, so
+   * making the composer wait for a handshake it does not need is the one cost this
+   * read must not pay.
    * @param agentName - the configured agent name.
    * @returns its modes, or `undefined` when it advertises none or cannot be reached.
    */
@@ -286,8 +335,16 @@ export class AcpAgentAdapter {
       return undefined
     }
     const fresh = this.freshDiscovery(agentName)
-    if (fresh !== undefined && fresh.ok && fresh.modes !== undefined) return fresh.modes
-    await this.discover(agent, this.options.discoveryTimeoutMs)
+    if (fresh?.ok === true) return fresh.modes
+    if (fresh !== undefined) return undefined
+
+    const stale = this.discovered.get(agentName)
+    if (stale?.ok === true) {
+      void this.discover(agent)
+      return stale.modes
+    }
+
+    await this.settleWithin(this.discover(agent), this.options.discoveryTimeoutMs)
     const entry = this.discovered.get(agentName)
     return entry !== undefined && entry.ok ? entry.modes : undefined
   }
@@ -314,16 +371,37 @@ export class AcpAgentAdapter {
 
   /**
    * Read one agent's model list, at most once at a time.
+   *
+   * The shared probe carries the *background* bound, never a waiter's: a caller
+   * that joined someone else's probe applies its own deadline with
+   * {@link settleWithin} rather than silently inheriting a longer one. A caller
+   * that gives up leaves the probe running, so its answer is still recorded — and
+   * announced — for the next read.
    * @param agent - the agent to interrogate.
-   * @param timeoutMs - the bound for this probe.
    * @returns its options, or `[]` when the probe failed or timed out.
    */
-  private discover(agent: ResolvedAgent, timeoutMs: number): Promise<readonly ConfigOption[]> {
+  private discover(agent: ResolvedAgent): Promise<readonly ConfigOption[]> {
     const existing = this.discovering.get(agent.providerName)
     if (existing !== undefined) return existing
-    const run = this.probe(agent, timeoutMs).finally(() => { this.discovering.delete(agent.providerName) })
+    const run = this.probe(agent).finally(() => { this.discovering.delete(agent.providerName) })
     this.discovering.set(agent.providerName, run)
     return run
+  }
+
+  /**
+   * Await a shared probe under the caller's own bound.
+   * @param work - the in-flight probe.
+   * @param ms - the caller's deadline.
+   * @returns the probe's value, or `undefined` when the deadline elapsed first.
+   */
+  private async settleWithin<T>(work: Promise<T>, ms: number): Promise<T | undefined> {
+    try {
+      return await this.withTimeout(work, ms)
+    } catch {
+      // Giving up is not a failure of the probe: it is still running, and whatever
+      // it finds is cached and announced for the next read.
+      return undefined
+    }
   }
 
   /**
@@ -346,10 +424,9 @@ export class AcpAgentAdapter {
    * prompted on this session, so the directory is where the agent starts, not
    * somewhere it is asked to work.
    * @param agent - the agent to interrogate.
-   * @param timeoutMs - the bound on its handshake.
    * @returns its options, or `[]`.
    */
-  private async probe(agent: ResolvedAgent, timeoutMs: number): Promise<readonly ConfigOption[]> {
+  private async probe(agent: ResolvedAgent): Promise<readonly ConfigOption[]> {
     const key = `discovery::${agent.providerName}`
     const channel = new AcpChannel(this.ctx, {
       prefix: this.options.prefix,
@@ -369,21 +446,90 @@ export class AcpAgentAdapter {
     // process underneath it; without a handler that late rejection surfaces as an
     // unhandled rejection rather than as the outcome already recorded.
     startup.catch(() => {})
+    let options: readonly ConfigOption[] = []
     try {
-      await this.withTimeout(startup, timeoutMs)
-      const options = channel.configOptionState()
-      this.discovered.set(agent.providerName, { ok: true, options, modes: channel.modeState(), at: Date.now() })
-      return options
+      await this.withTimeout(startup, DEFAULT_BACKGROUND_DISCOVERY_TIMEOUT_MS)
+      options = [...channel.configOptionState()]
+      this.remember(agent.providerName, options, channel.modeState())
     } catch (error: unknown) {
       this.discovered.set(agent.providerName, { ok: false, at: Date.now() })
       this.ctx.logger.debug(
         `${this.options.prefix}: could not read the model list of agent "${agent.providerName}": %o`,
         error,
       )
-      return []
     } finally {
-      await channel.dispose()
+      // The answer is in hand by now, and the EOF grace belongs to teardown, not to
+      // the caller: a measured `cursor-agent` probe had `session/new` answer at
+      // 8.6 s and the child exit at 14.7 s, so awaiting this would hand every
+      // catalog and mode read six seconds it does not owe. {@link dispose} awaits it.
+      this.detachDispose(channel)
     }
+    return options
+  }
+
+  /**
+   * Record a successful discovery, and announce it when the list really changed.
+   * @param agentName - the agent the facts belong to.
+   * @param options - its advertised option set.
+   * @param modes - its advertised modes.
+   */
+  private remember(agentName: string, options: readonly ConfigOption[], modes: AcpModeState): void {
+    this.discovered.set(agentName, { ok: true, options, modes, at: Date.now() })
+    this.announceModels(agentName, options)
+  }
+
+  /**
+   * Start a throwaway channel's teardown without holding the caller that already
+   * has its answer.
+   * @param channel - the probe channel.
+   */
+  private detachDispose(channel: AcpChannel): void {
+    const done = channel.dispose().catch((error: unknown) => {
+      this.ctx.logger.debug(`${this.options.prefix}: ACP probe teardown failed: %o`, error)
+    })
+    this.teardowns.add(done)
+    void done.then(() => { this.teardowns.delete(done) })
+  }
+
+  /**
+   * Publish a catalog refresh when the models this route would list changed.
+   *
+   * The Host offers a plugin no way to make the browser re-read the model catalog;
+   * the product re-reads it on its own `llm/adapters-updated` fan-out, which is
+   * payload-free by design (its consumers re-read the registries). That makes it
+   * exactly the right signal for a warmed background probe: without it, the inner
+   * models a `lazy` probe discovered stay invisible for the rest of the browser's
+   * host generation, because the client caches one catalog per generation.
+   * @param agentName - the agent whose selector may have changed.
+   * @param options - what it advertised.
+   */
+  private announceModels(agentName: string, options: readonly ConfigOption[]): void {
+    const fingerprint = modelSelectorFingerprint(options)
+    // An agent with no model selector contributes nothing the catalog does not
+    // already list, and a selector that has not moved is not news.
+    if (fingerprint === '' || this.announced.get(agentName) === fingerprint) return
+    this.announced.set(agentName, fingerprint)
+    const notify = this.ctx.llm.emitAdaptersUpdated
+    if (typeof notify !== 'function') return
+    try {
+      notify.call(this.ctx.llm)
+    } catch (error: unknown) {
+      this.ctx.logger.debug(`${this.options.prefix}: could not announce the updated model list: %o`, error)
+    }
+  }
+
+  /**
+   * Adopt a live Session channel's own advertised state as the discovery cache.
+   *
+   * A conversation channel learned the same facts from the same `session/new`, so a
+   * Session that connected is a free, current discovery result for every other
+   * Session — and the reason the composer's mode control answers instantly once the
+   * agent is connected instead of paying another handshake.
+   * @param agent - the agent the channel serves.
+   * @param channel - the ready channel.
+   */
+  private recordLive(agent: ResolvedAgent, channel: AcpChannel): void {
+    this.remember(agent.providerName, [...channel.configOptionState()], channel.modeState())
   }
 
   /**
@@ -537,6 +683,11 @@ export class AcpAgentAdapter {
       yield { type: 'finish', reason: { kind: 'error', failure: { message: described.message, code: 'acp/startup' } } }
       return
     }
+
+    // The Session's own handshake just answered the same question a throwaway probe
+    // would: adopt it, so the catalog and the composer's mode control are warm for
+    // every other Session without a second process.
+    this.recordLive(agent, channel)
 
     // A collaboration mode chosen before this Session's agent had a channel is
     // adopted now: the composer already shows the choice, and this is the first
@@ -747,6 +898,20 @@ export class AcpAgentAdapter {
     this.channels.clear()
     this.emitted.clear()
     this.records.clear()
-    await Promise.all(channels.map(async (channel) => { await channel.dispose() }))
+    // Three things can still own a process: a live Session channel, a probe that
+    // already handed its answer back, and a probe still in flight. None of them may
+    // outlive the row. A probe is awaited first because settling is when it registers
+    // its teardown, and the teardowns are awaited last.
+    const teardowns = [...this.teardowns]
+    this.teardowns.clear()
+    const probes = [...this.discovering.values()]
+    await Promise.all([
+      ...channels.map(async (channel) => { await channel.dispose() }),
+      ...teardowns,
+      ...probes.map(async (probe) => { await probe.catch(() => {}) }),
+    ])
+    const late = [...this.teardowns]
+    this.teardowns.clear()
+    await Promise.all(late)
   }
 }

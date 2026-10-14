@@ -149,6 +149,13 @@ async function handle(message) {
         respondError(message.id, -32000, 'authentication required SENTINEL_SECRET')
         return
       }
+      if (scenario === 'delay-new-session') {
+        // The one slow leg a real agent has (measured: `session/new` is 7.6 s of a
+        // 8.6 s handshake), scaled down so a test can bound a read around it.
+        await new Promise((resolve) => {
+          setTimeout(resolve, Number(process.env['MOCK_ACP_NEW_SESSION_DELAY_MS'] ?? 2000))
+        })
+      }
       let modes = { currentModeId: 'agent', availableModes: [{ id: 'agent', name: 'Agent' }] }
       if (scenario === 'mode') {
         modes = { currentModeId: 'ask', availableModes: [{ id: 'ask', name: 'Ask' }, { id: 'plan', name: 'Plan' }] }
@@ -256,3 +263,17 @@ process.stdin.on('data', (chunk) => {
 
 // Keep the loop alive until the client closes stdin.
 process.stdin.resume()
+
+/**
+ * The `linger` scenario ignores the client's stdin EOF for a while.
+ *
+ * That window is exactly the `disposeEofGraceMs` a real agent spends on its way out
+ * (`cursor-agent` was measured taking 6.1 s after `session/new` had already
+ * answered). Holding it open here is what makes "the read does not wait for
+ * teardown" an assertion rather than a hope.
+ */
+process.stdin.on('end', () => {
+  if (scenario !== 'linger') return
+  const ms = Number(process.env['MOCK_ACP_LINGER_MS'] ?? 2000)
+  setTimeout(() => { process.exit(0) }, ms)
+})
