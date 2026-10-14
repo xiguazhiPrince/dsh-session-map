@@ -21,6 +21,7 @@ import { CSS } from './css'
 import { MAP_KIND, MAP_TYPE_ID, OVERVIEW_KIND, OVERVIEW_TYPE_ID } from './constants'
 import { createFlag } from './flags'
 import { installModelScope, readModelScopeMode, type PresetFace } from './model-scope'
+import { ACP_MODE_CELL_ID, createAcpModeSelect, type AcpModeCommandsFace } from './acp-mode-card'
 import {
   createMapLauncher,
   createMapView,
@@ -460,5 +461,22 @@ export function apply(ctx: Context): void {
       // otherwise, and that is the failure mode that cost the most time here.
       console.warn('dsh-session-map: the ACP model scope could not be installed', error)
     }
+  })
+
+  // The composer's ACP mode control (P11). `conversation.input.left` is the list slot
+  // the composer bar declares immediately after the access-mode seat, which is what
+  // puts this control to that seat's right — the position the request named. The cell
+  // reads the agent's modes by executing the `/acp-mode` command and parsing its
+  // answer, because a runtime plugin has no other Host→client channel (see
+  // `docs/p11-acp-mode-select.md` §3), and switches them through the same command.
+  ctx.inject(['slots', 'remote', 'remote.commands'], (scope) => {
+    const scopedSlots = lookup<SlotsService>(scope, 'slots')
+    if (scopedSlots === undefined) return
+    const commands = (scope as { remote?: { commands?: AcpModeCommandsFace } }).remote?.commands
+    const AcpModeSelect = createAcpModeSelect(commands)
+    ctx.effect(() => scopedSlots.inject('conversation.input.left', () => scopedSlots.register(
+      { name: 'conversation.input.left', id: ACP_MODE_CELL_ID, order: 0 },
+      AcpModeSelect,
+    )), 'session-map: acp mode control')
   })
 }

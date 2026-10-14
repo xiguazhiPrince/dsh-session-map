@@ -22,6 +22,7 @@ import { resolveChildCwd } from '../acp-core/resolve'
 import { AcpChannel, AcpChannelFailure, MODEL_CATEGORY, type ChannelSignal, type ConfigOption, type ToolCallRecord } from './channel'
 import { DEFAULT_BACKGROUND_DISCOVERY_TIMEOUT_MS, DEFAULT_DISCOVERY_FAILURE_TTL_MS, type ApprovalMode, type FsMode, type ModelDiscoveryMode, type UtilityRoute } from './config'
 import { decodeModelId, encodeModelId } from './model-id'
+import { EMPTY_ACP_MODES, type AcpModeController, type AcpModeState, type AcpModeSurface } from './modes'
 import type {
   GenerateOptions,
   HostContext,
@@ -29,6 +30,7 @@ import type {
   PreparedCall,
   ProviderInfo,
   ResolvedModelInfo,
+  SessionLike,
   StreamChunk,
 } from './contract'
 
@@ -65,11 +67,18 @@ export interface AdapterOptions {
   readonly discoveryTimeoutMs: number
   /** How long a discovered model list is reused, in milliseconds. */
   readonly discoveryTtlMs: number
+  /**
+   * The collaboration-mode surface: each live channel's mode state is published
+   * through it, and the composer's control writes back through the channel.
+   * Absent in a composition without the projection registry or a command registry,
+   * where the control simply never appears.
+   */
+  readonly modes?: AcpModeSurface
 }
 
 /** One agent's cached model-list outcome. */
 type Discovery =
-  | { readonly ok: true; readonly options: readonly ConfigOption[]; readonly at: number }
+  | { readonly ok: true; readonly options: readonly ConfigOption[]; readonly modes?: AcpModeState; readonly at: number }
   | { readonly ok: false; readonly at: number }
 
 /**
@@ -127,7 +136,12 @@ function lastUserText(options: GenerateOptions): string {
 /** The ACP-backed model route. */
 export class AcpAgentAdapter {
   private readonly channels = new Map<string, AcpChannel>()
-  /** Per-channel set of remote tool calls already emitted as tool-call blocks. */
+  /**
+   * Releases each key's registration with the mode surface. Kept per channel key
+   * because the surface keys controllers by Session, while this adapter may hold
+   * one channel per Session *and agent*.
+   */
+  private readonly modeDetachers = new Map<string, () => void>()  /** Per-channel set of remote tool calls already emitted as tool-call blocks. */
   private readonly emitted = new Map<string, Set<string>>()
   /** Each agent's own model list, read once per TTL from a throwaway session. */
   private readonly discovered = new Map<string, Discovery>()
@@ -256,8 +270,30 @@ export class AcpAgentAdapter {
   }
 
   /**
-   * Turn one agent's advertised options into catalog entries.
-   * @param provider - the route.
+   * The collaboration modes an agent advertises.
+   *
+   * Read through the same handshake the model list uses. Deliberately *not* gated by
+   * `modelDiscovery`: a catalog read may skip spawning an agent, while someone asking
+   * a Session's mode control what modes exist is asking for exactly that probe.
+   * @param agentName - the configured agent name.
+   * @returns its modes, or `undefined` when it advertises none or cannot be reached.
+   */
+  async modesFor(agentName: string): Promise<AcpModeState | undefined> {
+    let agent: ResolvedAgent
+    try {
+      agent = this.agentFor(agentName)
+    } catch {
+      return undefined
+    }
+    const fresh = this.freshDiscovery(agentName)
+    if (fresh !== undefined && fresh.ok && fresh.modes !== undefined) return fresh.modes
+    await this.discover(agent, this.options.discoveryTimeoutMs)
+    const entry = this.discovered.get(agentName)
+    return entry !== undefined && entry.ok ? entry.modes : undefined
+  }
+
+  /**
+   * Turn one agent's advertised options into catalog entries.   * @param provider - the route.
    * @param agent - the agent they came from.
    * @param options - the agent's advertised options.
    * @returns one entry per value of its model selector; none when it has none.
@@ -336,7 +372,7 @@ export class AcpAgentAdapter {
     try {
       await this.withTimeout(startup, timeoutMs)
       const options = channel.configOptionState()
-      this.discovered.set(agent.providerName, { ok: true, options, at: Date.now() })
+      this.discovered.set(agent.providerName, { ok: true, options, modes: channel.modeState(), at: Date.now() })
       return options
     } catch (error: unknown) {
       this.discovered.set(agent.providerName, { ok: false, at: Date.now() })
@@ -356,8 +392,7 @@ export class AcpAgentAdapter {
    * @returns the operation's result.
    * @throws when the bound elapses first.
    */
-  private async withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
-    let timer: ReturnType<typeof setTimeout> | undefined
+  private async withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {    let timer: ReturnType<typeof setTimeout> | undefined
     try {
       return await Promise.race([
         work,
@@ -457,6 +492,8 @@ export class AcpAgentAdapter {
     let channel = this.channels.get(key)
     if (channel === undefined || !channel.usable) {
       if (channel !== undefined) await channel.dispose()
+      const modes = this.options.modes
+      const session = this.sessionFor(sessionId)
       channel = new AcpChannel(this.ctx, {
         prefix: this.options.prefix,
         config: agent,
@@ -472,6 +509,20 @@ export class AcpAgentAdapter {
       })
       this.channels.set(key, channel)
       this.emitted.set(key, new Set())
+      if (modes !== undefined) {
+        // A facade rather than the channel: a replacement channel keeps the same
+        // registration, and the Session never accumulates dead controllers.
+        const controller: AcpModeController = {
+          modeState: () => this.channels.get(key)?.modeState() ?? EMPTY_ACP_MODES,
+          setMode: async (modeId) => {
+            const live = this.channels.get(key)
+            if (live === undefined || !live.usable) throw new Error('the ACP session is not open')
+            await live.setMode(modeId)
+          },
+        }
+        this.modeDetachers.get(key)?.()
+        this.modeDetachers.set(key, modes.attach(session, controller))
+      }
     }
 
     try {
@@ -479,10 +530,28 @@ export class AcpAgentAdapter {
     } catch (error: unknown) {
       this.channels.delete(key)
       this.emitted.delete(key)
+      this.modeDetachers.get(key)?.()
+      this.modeDetachers.delete(key)
       await channel.dispose()
       const described = this.describe(agent.providerName, error)
       yield { type: 'finish', reason: { kind: 'error', failure: { message: described.message, code: 'acp/startup' } } }
       return
+    }
+
+    // A collaboration mode chosen before this Session's agent had a channel is
+    // adopted now: the composer already shows the choice, and this is the first
+    // moment the agent can be told. A mode it does not advertise is dropped — the
+    // channel's own startup has already applied the row's configured mode.
+    const wanted = this.options.modes?.takeWanted(this.sessionFor(sessionId))
+    if (wanted !== undefined) {
+      const current = channel.modeState()
+      if (current.current !== wanted && current.available.some((mode) => mode.id === wanted)) {
+        try {
+          await channel.setMode(wanted)
+        } catch (error: unknown) {
+          this.ctx.logger.debug(`${this.options.prefix}: could not adopt the picked ACP mode: %o`, error)
+        }
+      }
     }
 
     // A continuation step ends with the tool result this route's own mirror tool
@@ -651,9 +720,20 @@ export class AcpAgentAdapter {
    * @returns the absolute working directory for the remote session.
    */
   private cwdFor(sessionId: string, agent: ResolvedAgent): string {
-    const agents = this.ctx.get('agents')
-    const parentCwd = agents?.get(sessionId)?.session?.header?.cwd
+    const parentCwd = this.sessionFor(sessionId)?.header?.cwd
     return resolveChildCwd(this.options.prefix, agent.cwd, parentCwd)
+  }
+
+  /**
+   * The Session this route serves, when the Agent registry is composed.
+   *
+   * Read through the registry rather than held: a channel outlives individual
+   * turns, and the Session is what owns the log the mode surface appends to.
+   * @param sessionId - the DSH Session id.
+   * @returns the Session, or `undefined` outside the Agent loop.
+   */
+  private sessionFor(sessionId: string): SessionLike | undefined {
+    return this.ctx.get('agents')?.get(sessionId)?.session
   }
 
   /** Stop every live channel and reap its process range. Idempotent. */
@@ -661,6 +741,9 @@ export class AcpAgentAdapter {
     if (this.disposed) return
     this.disposed = true
     const channels = [...this.channels.values()]
+    const detach = [...this.modeDetachers.values()]
+    this.modeDetachers.clear()
+    for (const release of detach) release()
     this.channels.clear()
     this.emitted.clear()
     this.records.clear()

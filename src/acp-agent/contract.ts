@@ -125,8 +125,7 @@ export interface SubprocessSpawnSpec {
   readonly env: Record<string, string>
 }
 
-/** The Host filesystem surface this route uses. */
-export interface HostFs {
+/** The Host filesystem surface this route uses. */export interface HostFs {
   /**
    * @param path - the model- or peer-supplied path.
    * @param opts - optional cwd override and cancellation signal.
@@ -156,9 +155,34 @@ export interface HostFs {
   ): Promise<unknown>
 }
 
+/**
+ * The slice of a Session this route touches: its immutable header and the one
+ * log-only append the ACP mode surface needs.
+ *
+ * `append` commits one typed event — it snapshots the payload and validates it as
+ * lossless JSON. A log-only event (anything that is not a surface message) needs
+ * no `surfaceOp`. The call can be rejected while a turn is open, which is why the
+ * mode surface queues a rejected state and retries it at the next accepted
+ * in-turn pre-step (see `./modes.ts`).
+ */
+export interface SessionLike {
+  readonly header?: { readonly id?: string; readonly cwd?: string }
+  /**
+   * @param type - the event type.
+   * @param data - the complete post-change state, never a delta.
+   * @returns the accepted event.
+   */
+  append?(type: string, data: unknown): unknown
+}
+
+/** The agent-scoped payload an `agent/pre-step` waterfall receives. */
+export interface PreStepPayload {
+  readonly agent?: { readonly session?: SessionLike } | undefined
+  readonly signal?: AbortSignal
+}
+
 /** The Host services this route injects, narrowed to what it uses. */
-export interface HostContext {
-  readonly logger: {
+export interface HostContext {  readonly logger: {
     warn(message: string, ...rest: unknown[]): void
     /** Used for the expected quiet states (`agents` empty is the shipped default). */
     debug(message: string, ...rest: unknown[]): void
@@ -187,7 +211,7 @@ export interface HostContext {
   }
   /** Optional lookup; `agents` is present whenever the Agent loop is mounted. */
   get(service: 'agents'): {
-    get(id: string): { readonly session?: { readonly header?: { readonly cwd?: string } } } | undefined
+    get(id: string): { readonly session?: SessionLike } | undefined
   } | undefined
   /**
    * Optional lookup of the preset registry. Absent in a base-only composition —
@@ -260,4 +284,20 @@ export interface HostContext {
    * @returns the disposer removing this listener.
    */
   on(event: 'loader/volatile-update', listener: () => void): () => void
+  /**
+   * Subscribe to an agent-scoped waterfall.
+   *
+   * `agent/pre-step` is the one accepted point at which a log-only append may
+   * commit while a turn is open, so a mode state a live turn rejected is retried
+   * here. The listener MUST await `next()` and return its decision unchanged: a
+   * pre-step listener that swallows or rewrites the decision changes what the
+   * model is asked.
+   * @param event - the waterfall name.
+   * @param listener - receives the payload and the next listener in the chain.
+   * @returns the disposer removing this listener.
+   */
+  on(
+    event: 'agent/pre-step',
+    listener: (payload: PreStepPayload, next: () => Promise<unknown>) => Promise<unknown>,
+  ): () => void
 }

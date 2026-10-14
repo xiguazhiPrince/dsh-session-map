@@ -34,6 +34,12 @@ const ID = 'dsh-session-map'
  * memoize, react, dispose — against fakes, which is the only way to test a patch
  * on another plugin's method without a browser.
  *
+ * `acp-modes.js` is the ACP collaboration-mode surface (P11): the event, the
+ * `acpMode` projection unit, the `/acp-mode` grammar, and the installer that
+ * registers the unit and the command. Built for Node so the suite can fold events
+ * and drive the command handler without a Host composition; the browser half reads
+ * the same projection value through DSH's own `useProjection`.
+ *
  * `entryFileNames` pins both artifacts to the paths package.json declares:
  * tsdown's default extension follows the format, so the ESM half would land on
  * `index.mjs` and the Loader would not find `main`.
@@ -48,6 +54,8 @@ export default (): UserConfig[] => [
       'acp-preset': 'src/acp-preset/index.ts',
       'acp-model': 'src/client/acp-model.ts',
       'model-scope': 'src/client/model-scope.ts',
+      'acp-modes': 'src/acp-agent/modes.ts',
+      'acp-mode-model': 'src/client/acp-mode-model.ts',
     },
     outDir: 'lib',
     format: ['esm'],

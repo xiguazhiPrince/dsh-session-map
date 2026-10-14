@@ -659,4 +659,28 @@ textarea.dsm-acp-page__input {
   line-height: 18px;
   color: var(--dsw-alias-state-warn-label);
 }
+
+/* The composer's ACP mode control (P11). It sits in the composer tool row beside the
+   product's own compact controls, so it borrows their weight rather than their box:
+   no border, no background, and the label colour the row uses. */
+.dsm-acp-mode {
+  box-sizing: border-box;
+  max-width: 132px;
+  height: 24px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm, 4px);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 24px;
+  cursor: pointer;
+}
+.dsm-acp-mode:hover:not(:disabled) { color: var(--dsw-alias-label-primary); }
+.dsm-acp-mode:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+}
+.dsm-acp-mode:disabled { opacity: 0.5; cursor: default; }
 `

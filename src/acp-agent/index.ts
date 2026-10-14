@@ -38,6 +38,7 @@ import { Config, PREFIX, resolveRouteOptions, type ResolvedRouteOptions } from '
 import type { HostContext } from './contract'
 import { presetDefinitionFor, type PresetRegistry } from './presets'
 import { mirrorToolDefinitions } from './tools'
+import { installAcpModes, type AcpModeState } from './modes'
 
 export { Config }
 export type { AcpAgentConfig, Options, ResolvedAgent } from '../acp-core/config'
@@ -59,6 +60,8 @@ export type { ModelDiscoveryMode, ResolvedRouteOptions } from './config'
 export { assertAgentNameUnambiguous, decodeModelId, encodeModelId, MODEL_ID_SEPARATOR } from './model-id'
 export type { DecodedModelId } from './model-id'
 export { PRESET_ORDER, presetIdFor } from './presets'
+export { ACP_MODE_COMMAND, EMPTY_ACP_MODES, installAcpModes, planModeSwitch, readModeState } from './modes'
+export type { AcpModeController, AcpModeOption, AcpModeState, AcpModeSurface, ModeSwitchOrReport } from './modes'
 // The vendor- and platform-shaped core, re-exported so the Node-side suite can
 // exercise it directly against the built artifact. Command resolution in
 // particular is the most platform-sensitive code in this package (Windows
@@ -97,9 +100,18 @@ export function apply(ctx: HostContext, config: unknown): Promise<void> {
   let presetsSeen = false
   let queue = Promise.resolve()
 
+  // One mode surface per row, not per generation: its command is process-wide, while
+  // the adapter it serves is rebuilt on every configuration commit. A composition
+  // without a command registry keeps the route working and simply offers no way to
+  // switch modes. The probe hook is what lets a Session with no connected agent still
+  // answer "which modes exist" — the composer control reads that answer.
+  let modeProbe: ((agentName: string) => Promise<AcpModeState | undefined>) | undefined
+  const modeSurface = installAcpModes(ctx, { probe: (agentName) => modeProbe?.(agentName) ?? Promise.resolve(undefined) })
+
   const teardownRoute = (): void => {
     const dispose = mounted
     mounted = undefined
+    modeProbe = undefined
     dispose?.()
   }
 
@@ -158,7 +170,9 @@ export function apply(ctx: HostContext, config: unknown): Promise<void> {
         modelDiscovery: resolved.modelDiscovery,
         discoveryTimeoutMs: resolved.discoveryTimeoutMs,
         discoveryTtlMs: resolved.discoveryTtlMs,
+        modes: modeSurface,
       })
+      modeProbe = (agentName) => adapter.modesFor(agentName)
       const disposers: Array<() => void> = []
       try {
         disposers.push(ctx.llm.registerAdapter([PROVIDER], adapter))

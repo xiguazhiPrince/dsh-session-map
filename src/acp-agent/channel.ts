@@ -42,6 +42,7 @@ import { BLOCKING_EXTENSION_METHODS, DECLINED_EXTENSION_RESPONSE, NOTIFICATION_E
 import { resolveAcpCommand } from '../acp-core/resolve'
 import type { ApprovalMode, FsMode } from './config'
 import type { HostContext, HostFs, SubprocessHandle } from './contract'
+import { EMPTY_ACP_MODES, readModeState, type AcpModeState } from './modes'
 
 /** The ACP client identity this route announces. */
 const CLIENT_NAME = 'dsh-session-map/acp-agent'
@@ -394,6 +395,12 @@ export class AcpChannel {
    * whole on every payload that carries them (ACP sends the full set).
    */
   private configOptions: ConfigOption[] = []
+  /**
+   * The agent's collaboration modes. ACP carries these beside `configOptions` in
+   * `session/new` (`SessionModeState`) and changes them through `session/set_mode`,
+   * not through the option set, so they are tracked separately.
+   */
+  private modes: AcpModeState = EMPTY_ACP_MODES
 
   /** @param ctx - Host context. @param options - resolved channel configuration. */
   constructor(
@@ -409,6 +416,47 @@ export class AcpChannel {
   /** The options the agent currently advertises, in advertised order. */
   configOptionState(): readonly ConfigOption[] {
     return this.configOptions
+  }
+
+  /** The agent's collaboration modes; empty when it advertises none. */
+  modeState(): AcpModeState {
+    return this.modes
+  }
+
+  /**
+   * Change the agent's collaboration mode through `session/set_mode`.
+   *
+   * Refuses an id the agent did not advertise rather than sending it: ACP gives a
+   * client no vocabulary for a mode the agent never offered, so a mismatch is a
+   * caller bug, not an agent refusal to surface.
+   * @param modeId - one id `session/new` advertised.
+   * @returns settlement of the request.
+   */
+  async setMode(modeId: string): Promise<void> {
+    const connection = this.connection
+    const sessionId = this.remoteSessionId
+    if (connection === undefined || sessionId === undefined) {
+      throw new Error('the ACP session is not open')
+    }
+    if (!this.modes.available.some((mode) => mode.id === modeId)) {
+      throw new Error(`the agent does not advertise mode "${modeId}"`)
+    }
+    await connection.agent.request(methods.agent.session.setMode, { sessionId, modeId })
+    // The agent is expected to confirm with `current_mode_update`; adopting the
+    // value here means the control does not wait for a frame that may not come.
+    this.setModeState({ ...this.modes, current: modeId })
+  }
+
+  /**
+   * Record a mode state.
+   *
+   * The state is the channel's own: nothing is published through a Session event,
+   * because a plugin cannot mark one ignorable and an unmarked unknown event makes
+   * the whole log unreadable (see `./modes.ts`).
+   * @param state - the complete new state.
+   */
+  private setModeState(state: AcpModeState): void {
+    this.modes = state
   }
 
   /**
@@ -538,12 +586,16 @@ export class AcpChannel {
       // from a dedicated call: ACP has no "list models" operation.
       this.replaceConfigOptions(Reflect.get(session as object, 'configOptions'))
 
-      const modes = Reflect.get(session as object, 'modes') as { availableModes?: { id: string }[]; currentModeId?: string } | null | undefined
-      if (config.mode !== undefined && modes !== null && modes !== undefined) {
-        if (modes.availableModes?.some((mode) => mode.id === config.mode) === true) {
-          if (modes.currentModeId !== config.mode) {
-            await agent.request(methods.agent.session.setMode, { sessionId, modeId: config.mode })
-          }
+      // The agent's collaboration modes arrive with the session, like the option
+      // set and for the same reason: ACP has no "list modes" call. A configured
+      // `mode` the agent does not advertise is ignored rather than sent.
+      const advertised = readModeState(Reflect.get(session as object, 'modes'))
+      if (advertised !== undefined) {
+        this.setModeState(advertised)
+        if (config.mode !== undefined && advertised.current !== config.mode
+          && advertised.available.some((mode) => mode.id === config.mode)) {
+          await agent.request(methods.agent.session.setMode, { sessionId, modeId: config.mode })
+          this.setModeState({ ...advertised, current: config.mode })
         }
       }
       for (const [configId, value] of config.configOptions) {
@@ -974,6 +1026,16 @@ export class AcpChannel {
         }
         record.apply(update, initial)
         this.push({ kind: 'tool', call: record })
+        return
+      }
+      case 'current_mode_update': {
+        // The agent changed its own collaboration mode (a person typed a command
+        // inside it, or another client did). An id it never advertised is ignored
+        // rather than published as a state the control could not select.
+        const modeId = update['currentModeId']
+        if (typeof modeId === 'string' && this.modes.available.some((mode) => mode.id === modeId)) {
+          this.setModeState({ ...this.modes, current: modeId })
+        }
         return
       }
       case 'config_option_update':
