@@ -238,13 +238,13 @@ test('the route refuses an agent name that would make its model ids ambiguous', 
   )
 })
 
-test('discovery defaults to lazy, with the measured handshake bound', () => {
+test('discovery defaults to eager, with the measured handshake bound', () => {
   const resolved = resolveRouteOptions({ agents: [{ name: 'cursor', command: 'cursor-agent' }] })
-  assert.equal(resolved.modelDiscovery, 'lazy')
+  assert.equal(resolved.modelDiscovery, 'eager')
   assert.equal(resolved.discoveryTimeoutMs, 15_000)
   assert.equal(resolved.discoveryTtlMs, 300_000)
   assert.equal(resolveRouteOptions({ agents: [], modelDiscovery: 'off' }).modelDiscovery, 'off')
-  assert.equal(resolveRouteOptions({ agents: [], modelDiscovery: 'eager' }).modelDiscovery, 'eager')
+  assert.equal(resolveRouteOptions({ agents: [], modelDiscovery: 'lazy' }).modelDiscovery, 'lazy')
 })
 
 test('the option reader flattens groups, keeps booleans, and drops what it cannot read', () => {

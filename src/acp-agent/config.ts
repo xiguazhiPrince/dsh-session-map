@@ -33,8 +33,10 @@ export const DEFAULT_IDLE_DISPOSE_MS = 10 * 60 * 1000
  *
  * Measured on this machine: `cursor-agent acp` takes 7–14 s from spawn to a
  * published model list, almost all of it `session/new`, so a timeout much below
- * this would make `eager` a guaranteed fallback rather than a choice. It bounds
- * the *background* probe in the default mode too, where nothing waits on it.
+ * this would make `eager` a guaranteed fallback rather than a choice. It is also
+ * the bound the composer's mode control uses for its own read, whatever
+ * `modelDiscovery` says; the shared probe underneath both carries the longer
+ * {@link DEFAULT_BACKGROUND_DISCOVERY_TIMEOUT_MS} instead.
  */
 export const DEFAULT_DISCOVERY_TIMEOUT_MS = 15_000
 
@@ -42,14 +44,14 @@ export const DEFAULT_DISCOVERY_TIMEOUT_MS = 15_000
 export const DEFAULT_DISCOVERY_TTL_MS = 5 * 60 * 1000
 
 /**
- * The bound a *background* probe gets in the shipped `lazy` mode.
+ * The bound the shared discovery probe gets.
  *
- * Nothing waits on a background probe, so it gets the generous bound a slow agent
- * needs, while `eager` — the mode where a caller is waiting — keeps
- * {@link DEFAULT_DISCOVERY_TIMEOUT_MS}. Measured against cursor-agent: 7–14 s
- * typically, one 37.6 s outlier, and one transient `session/new` failure out of
- * five handshakes, which is why a failed or timed-out probe must degrade rather
- * than fail anything.
+ * Nothing waits on the probe itself — every caller bounds its own wait with
+ * {@link DEFAULT_DISCOVERY_TIMEOUT_MS} and walks away — so it gets the generous
+ * bound a slow agent needs. Measured against cursor-agent: 7–14 s typically, one
+ * 37.6 s outlier, and one transient `session/new` failure out of five handshakes,
+ * which is why a failed or timed-out probe must degrade rather than fail
+ * anything.
  */
 export const DEFAULT_BACKGROUND_DISCOVERY_TIMEOUT_MS = 60 * 1000
 
@@ -66,12 +68,23 @@ export type ModelDiscoveryMode = 'off' | 'lazy' | 'eager'
 /**
  * The shipped discovery mode.
  *
- * `lazy` because discovery is expensive and `listModels` is a read the Host may
- * make while rendering: the default answers immediately and warms the cache in
- * the background, so the second read is enriched and no UI ever waits on an
- * agent process.
+ * `eager`, so the model picker is **complete the first time it opens** instead of
+ * starting with one entry and growing a few seconds later: `listModels` waits for
+ * the handshake inside {@link DEFAULT_DISCOVERY_TIMEOUT_MS} and answers with the
+ * agent's own entries in that same read.
+ *
+ * The price is stated plainly because it is paid on the render path: a catalog
+ * read now blocks on an agent process — 7–14 s for `cursor-agent`, one 37.6 s
+ * outlier, and one transient `session/new` failure in five handshakes. The wait is
+ * bounded, and a timeout degrades to the legacy entry rather than failing the
+ * read, so the worst case is the old behaviour.
+ *
+ * This constant was `lazy` through P9–P12. That mode remains the right choice for
+ * a deployment that will not block a read on a process: it answers instantly,
+ * warms the same cache in the background, and the route then announces the
+ * enriched list so the browser re-reads it (P12).
  */
-export const DEFAULT_MODEL_DISCOVERY: ModelDiscoveryMode = 'lazy'
+export const DEFAULT_MODEL_DISCOVERY: ModelDiscoveryMode = 'eager'
 
 /**
  * The plugin's Config schema. `agents` stays volatile so the settings service
@@ -138,8 +151,8 @@ export interface ResolvedRouteOptions {
   /**
    * Whether the route may spawn an agent to read the model list it advertises.
    * `off` keeps the catalog to one entry per configured agent; `lazy` warms a
-   * cache in the background; `eager` waits for the handshake within
-   * {@link ResolvedRouteOptions.discoveryTimeoutMs}.
+   * cache in the background; `eager` — the shipped default — waits for the
+   * handshake within {@link ResolvedRouteOptions.discoveryTimeoutMs}.
    */
   readonly modelDiscovery: ModelDiscoveryMode
   /** Upper bound on one discovery handshake, in milliseconds. */
@@ -216,7 +229,12 @@ export function resolveRouteOptions(raw: unknown): ResolvedRouteOptions {
     idleDisposeMs,
     approval: record['approval'] === 'ask' ? 'ask' : 'policy',
     fs: record['fs'] === 'isolate' ? 'isolate' : 'bridge',
-    modelDiscovery: discovery === 'off' || discovery === 'eager' ? discovery : DEFAULT_MODEL_DISCOVERY,
+    // Every value the schema accepts has to survive this. Naming only the two the
+    // default is not, ever, is how an explicit `lazy` silently becomes the default
+    // — which read correctly only while `lazy` *was* the default.
+    modelDiscovery: discovery === 'off' || discovery === 'lazy' || discovery === 'eager'
+      ? discovery
+      : DEFAULT_MODEL_DISCOVERY,
     discoveryTimeoutMs: boundedMs(record['discoveryTimeoutMs'], 'discoveryTimeoutMs', DEFAULT_DISCOVERY_TIMEOUT_MS),
     discoveryTtlMs: boundedMs(record['discoveryTtlMs'], 'discoveryTtlMs', DEFAULT_DISCOVERY_TTL_MS),
     utility: utilityProvider === undefined || utilityModel === undefined
