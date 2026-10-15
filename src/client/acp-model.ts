@@ -423,3 +423,65 @@ export function selectAcpNamespace(
 ): string | undefined {
   return namespaces.find(isAcpNamespace)?.ns ?? namespaces.find(view => view.ns === fallbackId)?.ns
 }
+
+/**
+ * The notice the composer shows while the ACP route has nothing to offer.
+ *
+ * Two different blockers look identical from the composer — the mode menu simply
+ * has no ACP entry — and the notice has to name the right one, because the fix
+ * lives in a different place for each. An empty `agents` list is fixed on the ACP
+ * page; a closed code-tools switch hides every preset and is fixed in General.
+ */
+export interface AcpHint {
+  /** Which blocker this is; the renderer uses it as a stable marker. */
+  readonly kind: 'unconfigured' | 'presets-off'
+  /** The notice's visible text, short enough for one composer tool row. */
+  readonly label: string
+  /** The sentence the notice carries as its tooltip. */
+  readonly detail: string
+}
+
+/**
+ * Decide whether the composer should explain the missing ACP entry, and why.
+ *
+ * Absent by default: a Host that serves no ACP namespace (the row is disabled, or
+ * the package is not installed) gets nothing here — there is no namespace to
+ * configure, so pointing at one would be a dead end, and the settings page is
+ * where that state is explained instead.
+ * @param input - the row's form status and value, the code-tools preference,
+ *   whether the Session is still blank, and whether this browser already
+ *   dismissed the notice.
+ * @returns the notice to render, or undefined when there is nothing to say.
+ */
+export function acpHintFor(input: {
+  readonly status: 'loading' | 'ready' | 'unavailable'
+  readonly value: unknown
+  readonly developerTools: boolean
+  readonly blank: boolean
+  readonly dismissed: boolean
+}): AcpHint | undefined {
+  if (input.dismissed) return undefined
+  // The mode menu this notice is about exists only on the new-session screen: a
+  // Session that has already run was composed under its preset and cannot change
+  // it. Showing the notice in a running conversation would be a non-sequitur.
+  if (!input.blank) return undefined
+  // `loading` has no value to judge and `unavailable` has no row to configure;
+  // showing the notice during either would assert a state this page cannot see.
+  if (input.status !== 'ready') return undefined
+  const { drafts, problems } = draftsFromValue(input.value)
+  // An entry that cannot be read still means the list is not empty. Telling
+  // someone to add an agent they already added is worse than saying nothing.
+  if (drafts.length > 0 || problems.length > 0) return undefined
+  if (!input.developerTools) {
+    return {
+      kind: 'presets-off',
+      label: '预设选择已关闭 · 通用设置',
+      detail: '「通用设置 → 代码工作工具」关着，模式菜单整个不显示，所以也没有 ACP。打开它之后，已经配置好的 ACP agent 会作为一张卡出现在那里。',
+    }
+  }
+  return {
+    kind: 'unconfigured',
+    label: 'ACP 未配置 · 设置 → ACP',
+    detail: 'ACP 组件已启用，但还没有 agent，所以模式菜单里暂时没有 ACP。到「设置 → ACP」添加一个（Cursor CLI / opencode / Gemini CLI），保存后立刻出现，不用重启。',
+  }
+}

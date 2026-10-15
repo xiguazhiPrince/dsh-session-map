@@ -700,4 +700,53 @@ textarea.dsm-acp-page__input {
   opacity: 0.6;
   cursor: default;
 }
+
+/* The composer's ACP setup notice (P13). It reports a state the person did not
+   ask for yet — the component is on, no agent exists, so the mode menu has no ACP
+   — and it is the only place that says so, because a composer cell cannot open
+   Settings on a section. Dashed rather than filled: it is an unfinished-setup
+   marker, not a control, and it leaves by itself once an agent exists. The warn
+   tint is what makes it findable in a row of quiet controls. */
+.dsm-acp-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  box-sizing: border-box;
+  max-width: 220px;
+  height: 24px;
+  padding: 0 2px 0 6px;
+  border: 0.5px dashed var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm, 4px);
+  color: var(--dsw-alias-state-warn-label);
+  font: inherit;
+  font-size: 12px;
+  line-height: 24px;
+  white-space: nowrap;
+  cursor: default;
+}
+.dsm-acp-hint__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dsm-acp-hint__dismiss {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.dsm-acp-hint__dismiss:hover { opacity: 1; }
+.dsm-acp-hint__dismiss:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+}
 `

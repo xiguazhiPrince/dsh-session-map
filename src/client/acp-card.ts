@@ -33,6 +33,7 @@ import {
   type DraftProblem,
   type NamespaceView,
 } from './acp-model'
+import { useSnapshot } from './snapshot'
 
 /** One namespace's form, as `ui-settings` provides it. */
 export interface ConfigFormLike {
@@ -66,20 +67,26 @@ export interface ConfigFormsLike {
     getSnapshot(): { readonly view?: { readonly namespaces: readonly NamespaceView[] } | undefined }
     subscribe(listener: () => void): () => void
   }
-}
-
-/**
- * Subscribe one component to a snapshot source.
- * @param source - the store.
- * @returns the current snapshot, re-rendering on change.
- */
-function useSnapshot<T>(source: { getSnapshot(): T; subscribe(listener: () => void): () => void }): T {
-  const [snapshot, setSnapshot] = useState(() => source.getSnapshot())
-  useEffect(() => {
-    setSnapshot(() => source.getSnapshot())
-    return source.subscribe(() => { setSnapshot(() => source.getSnapshot()) })
-  }, [source])
-  return snapshot
+  /**
+   * The shared code-tools preference, which is the single gate over preset
+   * selection in this product.
+   *
+   * Optional because it is the providing service's own field rather than part of
+   * the form contract: a composition whose settings provider predates the switch
+   * has none, and the composer notice reads that absence as "presets are
+   * available" rather than inventing a blocker the person cannot find.
+   */
+  readonly developerTools?: {
+    readonly enabled: {
+      /** @returns whether code tools — and therefore preset selection — are on. */
+      getSnapshot(): boolean
+      /**
+       * @param listener - invoked after each change.
+       * @returns the disposer removing this listener.
+       */
+      subscribe(listener: () => void): () => void
+    }
+  }
 }
 
 /** A form-shaped placeholder so the hook order never depends on discovery. */
@@ -163,6 +170,10 @@ export function createAcpCard(forms: ConfigFormsLike): () => ReactElement {
     const unavailable = !loading && (namespace === undefined || snapshot.status === 'unavailable')
     const readOnly = snapshot.writable !== true || snapshot.mode === 'memory'
     const servedPage = !loading && !unavailable
+    // Nothing drafted and nothing stored: this page's one chance to state the
+    // order of operations (configure an agent → its card appears), which is the
+    // reading most people arrive with backwards.
+    const emptyAgents = servedPage && state.drafts.length === 0
 
     return createElement(
       'section',
@@ -171,7 +182,7 @@ export function createAcpCard(forms: ConfigFormsLike): () => ReactElement {
       createElement(
         'p',
         { className: 'dsm-acp-page__note' },
-        '这里配置的 agent 会成为 acp 路由上的一个模型，并在新会话的预设卡片里出现一张卡。保存后立即生效，不用重启，也不用改配置文件。',
+        '这里配置的 agent 会成为 acp 路由上的一个模型，并在新会话的模式菜单里出现一张卡。顺序上容易误会：组件本身默认已经启用，但列表为空时它什么都不注册——所以「ACP 组件已启用」不等于「菜单里有 ACP」。保存后立即生效，不用重启，也不用改配置文件。',
       ),
       createElement(
         'p',
@@ -271,9 +282,12 @@ export function createAcpCard(forms: ConfigFormsLike): () => ReactElement {
       ) : null,
 
       state.failure === null ? null : createElement('p', { className: 'dsm-acp-page__error' }, state.failure),
-      !servedPage || state.drafts.length > 0
-        ? null
-        : createElement('p', { className: 'dsm-acp-page__empty' }, '还没有 agent。点上面的「+ Cursor」或「+ 自定义」，填上 CLI 名字就行。'),
+      emptyAgents
+        ? createElement('p', { className: 'dsm-acp-page__empty' }, '还没有 agent。点上面的「+ Cursor CLI」或「+ 自定义」，填上 CLI 名字再保存。')
+        : null,
+      emptyAgents
+        ? createElement('p', { className: 'dsm-acp-page__note' }, '保存后不用重启、也不用刷新：回到新会话页，模式菜单里就会出现「ACP · 名称」。第一次真的用它时会现场启动这个 CLI 完成握手（本机 cursor-agent 约 7–8 秒）。')
+        : null,
     )
   }
 }

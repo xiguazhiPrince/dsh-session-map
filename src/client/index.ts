@@ -16,6 +16,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { ReactElement } from 'react'
 import { createAcpCard, type ConfigFormsLike } from './acp-card'
+import { ACP_HINT_CELL_ID, createAcpHint } from './acp-hint'
 import { AcpToolRow, ACP_TOOL_KEYS, type AcpToolRowProps } from './acp-tool-row'
 import { CSS } from './css'
 import { MAP_KIND, MAP_TYPE_ID, OVERVIEW_KIND, OVERVIEW_TYPE_ID } from './constants'
@@ -123,6 +124,8 @@ interface SessionsService {
   readonly list?: {
     getSnapshot(): {
       readonly byId?: Record<string, {
+        /** Whether no turn has run yet, which is what the composer notice gates on. */
+        readonly blank?: unknown
         readonly projectionValues?: { readonly agentPreset?: unknown }
       } | undefined>
     }
@@ -390,6 +393,45 @@ export function apply(ctx: Context): void {
       { name: 'settings.section', id: 'acp', order: 25, label: 'ACP' },
       AcpCard,
     )), 'session-map: acp vendors settings section')
+
+    // The composer's setup notice (P13) rides the same service from the other end
+    // of the problem: the page above is where an agent is added, this is where its
+    // absence is felt. `conversation.input.right` is the composer bar's trailing
+    // list slot — the notice belongs with the compact tool controls, not in the
+    // transcript. Reaching Settings *on a section* is the onboarding owner share's
+    // `openSection`, which a composer cell does not receive, so the notice names
+    // the page in its own text and stays non-interactive.
+    //
+    // The blank-Session gate comes from the Sessions store: the mode menu the notice
+    // is about exists only on the new-session screen. `sessions` is not an
+    // injectable name (an inject scope rejects it) while `get` resolves it, which
+    // is how the model scope below reads the same store.
+    const sessionsStore = lookup<SessionsService>(ctx, 'sessions')?.list
+    const blankOf = (sessionId: string): boolean | undefined => {
+      try {
+        const row = sessionsStore?.getSnapshot?.()?.byId?.[sessionId]
+        return row === undefined ? undefined : row.blank === true
+      } catch (error: unknown) {
+        // Guarded for the same reason the model scope guards its reads: an
+        // unexpected shape here must not throw out of a React render.
+        console.warn('dsh-session-map: could not read a Session summary', error)
+        return undefined
+      }
+    }
+    const AcpHintCell = createAcpHint(configForms, {
+      isBlank: blankOf,
+      subscribe: (listener) => {
+        try {
+          return sessionsStore?.subscribe?.(listener) ?? (() => {})
+        } catch {
+          return () => {}
+        }
+      },
+    })
+    ctx.effect(() => scopedSlots.inject('conversation.input.right', () => scopedSlots.register(
+      { name: 'conversation.input.right', id: ACP_HINT_CELL_ID, order: 0 },
+      AcpHintCell,
+    )), 'session-map: acp setup notice')
   })
 
   // The ACP model scope (P10). The composer's model card is the product's and

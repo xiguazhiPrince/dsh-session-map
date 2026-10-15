@@ -144,7 +144,7 @@ dsh --profile <name> --dump-config
 - **远端进程死了就没有远端上下文了。** DSH 的 transcript 还在，通道会自动重建，但远端会话不保留（`session/load` 没实现）。
 - **`terminal/*` 没有桥接。** 远端 agent 用自己的 shell（P1 起就是这样，Cursor 也验证过能自己写文件）。桥接它换来的是 Host 渲染的终端，而 `fs` 桥接换来的是**强制**——沙箱围栏是一条安全边界，终端桥接只是呈现。理由与取舍记在 [docs/p6-fs-bridge.md](docs/p6-fs-bridge.md)。
 - **未知扩展方法**：ACP 之外的阻塞请求（已知的是 Cursor 的 `cursor/ask_question`、`cursor/create_plan`）被确定性回绝（空对象）并记入诊断，不会把一轮挂死；`cursor/update_todos`、`cursor/task`、`cursor/generate_image` 是通知，注册为空处理。表在 `src/acp-core/client.ts`，换 agent 出新扩展方法时往那里加。
-- **第一次读某个 agent 的模式/模型要等一次真实握手。** ACP 没有「列模式」「列模型」的调用——两者都只在 `session/new` 的结果里返回——所以第一次问必须现场起一个 CLI 进程。本机实测 `cursor-agent`：`initialize` 约 1 s、`session/new` 约 7–8 s（P9 五次采样 7.2–14.2 s，一次 37.6 s 离群）。P12 之后这份等待不再被放大：冷读只等到 `session/new` 回答（以前还要多等 6 s 等进程收尾）；等待方自己的超时生效（以前可能被后台探测的 60 s 盖住）；过期结果照常供出并在后台重读；会话连上之后（发过一条消息）模式读取瞬时，且那次握手会喂给缓存；后台探测拿到模型列表时会主动通知浏览器刷新 catalog，所以默认 `lazy` 下那几十条内层模型会在十几秒后自己出现，不必再去碰设置页。见 [docs/p12-discovery-latency.md](docs/p12-discovery-latency.md)。
+- **第一次读某个 agent 的模式/模型要等一次真实握手。** ACP 没有「列模式」「列模型」的调用——两者都只在 `session/new` 的结果里返回——所以第一次问必须现场起一个 CLI 进程。本机实测 `cursor-agent`：`initialize` 约 1 s、`session/new` 约 7–8 s（P9 五次采样 7.2–14.2 s，一次 37.6 s 离群）。P12 之后这份等待不再被放大：冷读只等到 `session/new` 回答（以前还要多等 6 s 等进程收尾）；等待方自己的超时生效（以前可能被后台探测的 60 s 盖住）；过期结果照常供出并在后台重读；会话连上之后（发过一条消息）模式读取瞬时，且那次握手会喂给缓存。**默认 `eager`**：读目录时等一下（通常 7–8 s，上限 `discoveryTimeoutMs` 15 s），返回的列表一次就是完整的；不想让渲染路径阻塞就把它改成 `lazy`——那一刻立刻返回 `ACP · <agent>` 这一条 legacy 条目、并在后台探测，拿到模型列表后主动通知浏览器刷新 catalog，所以那几十条内层模型会在十几秒后自己出现，不必再去碰设置页。见 [docs/p12-discovery-latency.md](docs/p12-discovery-latency.md)。
 - **MCP 不桥接**：`session/new` 的 `mcpServers` 传空数组，agent 用自己的配置（Cursor 读 `.cursor/mcp.json`）。
 - **工具卡片显示的是公告时刻的参数快照。** Cursor 的 `rawInput` 往往在后续 `tool_call_update` 里才补全，那时它已经进了输出而不是输入。
 - **从 `agents` 里删掉一个 agent 之后，用它建过的会话打不开了。** 会话日志记着当初的 `agentPreset`，重建会话时 Host 会去解析那个 id；id 不存在就报 `agent-preset/not-found`（错误详情里带 `available` 列表）。删掉那些旧会话即可，或者把 agent 加回去。**注意这不是浏览器缓存问题**：`session/create` 请求本身不带 preset，那个 id 是从磁盘上那条会话记录里读出来的，所以刷新、清 localStorage、换标签页都没用。
@@ -166,6 +166,7 @@ dsh --profile <name> --dump-config
 | P7 | 删除子代理委派：把首次抽取没做完的共享核心接上，移除整条委派链路 | [docs/p7-remove-delegation.md](docs/p7-remove-delegation.md) |
 | P8 | 设置页：Settings → ACP 一页管理 `agents`，含 Cursor / opencode / Gemini CLI 三个供应商预设 | [docs/p8-acp-settings-page.md](docs/p8-acp-settings-page.md) |
 | P12 | 读取延迟：冷读不再等进程收尾、等待方自己的超时生效、过期结果照常供、连接的会话喂缓存、探测完成后通知浏览器刷新 catalog | [docs/p12-discovery-latency.md](docs/p12-discovery-latency.md) |
+| P13 | 空状态可读：新会话页的「ACP 未配置」提示与设置页的三段式说明，让「组件已启用但菜单里没有 ACP」有解释、有去处 | [docs/p13-acp-empty-state.md](docs/p13-acp-empty-state.md) |
 
 本机实测过的 agent：`cursor-agent acp`（真实会话、工具卡片、停止、审批都跑通）。脚本化 agent（`test/mock-acp-agent.mjs`）用于确定性地验审批与文件系统两条路径，因为它不依赖某个 Cursor 版本愿不愿意发问。
 
@@ -266,6 +267,8 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 | 排队条数 | `pendingSubmissions`（0.1.7 的名字） | 曾叫 `queue` |
 | 插件配置读写 | `ctx.configForms.get(entryId)`（`getSnapshot` / `subscribe` / `set`）与它背后的 `settings.describe` 镜像；`describe()` 的 `view.namespaces[].ns` / `.schema` 用来找自己的命名空间 | settings 服务与 `configForms` 都是 0.1.7 起才有的面 |
 | 设置页座位 | `settings.section`（list，root 作用域，owner props 只有 `{ close }`；注册项 `id` / `order` / `label`） | 无 |
+| 代码工作工具开关 | `ctx.configForms.developerTools.enabled`（`getSnapshot` / `subscribe`）。它是「能不能选预设」的总闸：关掉之后产品整个不渲染预设 chip | 无 |
+| 空白会话 | Session 列表快照里那一行的 `blank`（没跑过任何一轮） | 无 |
 
 判断「当前会话」时不要发明新口径：产品自己的每个包都按 `retainedBy.mainView` 推导（标题栏、open-in-app、agent-preset 皆然）。快照里还没有 `current` 时，旧写法只会拿到 `undefined`，而 `undefined` 不会报错——画布只是安静地退回「整张全局图」，也没有任何卡片亮起当前会话的描边。
 
@@ -280,6 +283,7 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 | `sidebar.right.pane.tab` | 常驻标签页 `dsh-session-map.overview` 与 `dsh-session-map.map` |
 | `tool.call.toolview`（Client，keyed） | 每个 `acp_*` 工具名一条视图：状态点、类型、远端标题、文件路径、可展开的输入与输出 |
 | `settings.section`（Client） | Settings → **ACP** 一页（order 25）：agent 卡片、供应商预设、行级说明；读写的是 `acp-agent` 那一行的 `agents`，写进当前 profile 的 `cordis.patch.yml` |
+| `conversation.input.right`（Client） | 新会话页工具行里的一条 **ACP 状态提示**：只在「组件已启用、`agents` 还是空的、当前会话还没跑过」时出现，写明路径并可就地关掉；配好 agent 后自己消失。见 [docs/p13-acp-empty-state.md](docs/p13-acp-empty-state.md) |
 | `ctx.llm`（Host） | 一个 `acp` adapter：每个 agent 一个模型，只负责把远端更新流成 DSH 的 chunk 协议 |
 | `ctx.tools`（Host） | 每个 ACP 工具类型一个镜像工具（`acp_read` / `acp_edit` / …），执行它们等于等远端那条调用的结果 |
 | `ctx.agentPresets`（Host） | 每个 agent 一张预设卡片；卡片挂一个只做一件事的子插件——把这条会话的路由钉死 |
@@ -299,6 +303,16 @@ localStorage.removeItem('dsh.session-map.conversationViews')        // 恢复出
 ```
 
 出厂默认写在 `src/client/index.ts` 的 `DEFAULT_CONVERSATION_VIEWS`。
+
+### 「ACP 未配置」提示可以关掉
+
+新会话页那条提示只在**配置之前**出现，配好任何 agent 之后就自然消失。不想看的人可以按它右侧的 ×；那个选择是浏览器本地偏好，**刷新后仍生效**，重置方式与控制台写法：
+
+```js
+localStorage.removeItem('dsh.session-map.acpHintDismissed')   // 让提示重新出现
+```
+
+键名定义在 `src/client/acp-hint.ts` 的 `DISMISSED_KEY`。
 
 **为什么不用 profile 里的 `config`**：浏览器半侧由 web boot 用**裸 `{ name }`** 创建（`packages/client/web/src/boot-client.ts:50`），而 boot manifest 的插件行只带 `id` / `inject` / `immediately`——宿主行的 `config` 到不了客户端插件。给这个包写 `config` 不会有任何效果。
 
