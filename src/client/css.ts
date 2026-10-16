@@ -117,6 +117,36 @@ export const CSS = `
   cursor: pointer;
   user-select: none;
 }
+/* The canvas-scope switch: one segmented control whose active option is filled,
+   because "which Sessions am I looking at" is a state the bar has to state. */
+.dsm__seg {
+  display: inline-flex;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.dsm__segBtn {
+  appearance: none;
+  border: 0;
+  border-radius: 0;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  padding: 5px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dsm__segBtn + .dsm__segBtn { border-left: 1px solid var(--dsw-alias-border-l2); }
+.dsm__segBtn:hover { color: var(--dsw-alias-brand-primary); }
+.dsm__segBtn[data-active='true'] {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-brand-primary);
+  font-weight: 600;
+}
+/* A neutral explanation in the toolbar, next to the error text it is not. */
+.dsm__note { color: var(--dsw-alias-label-secondary); font-size: 11px; }
 /* The keyboard affordance keeps the shortcut list out of the toolbar until it
    is asked for: one glyph, and a panel anchored under it. */
 .dsm__help { position: relative; display: inline-flex; }

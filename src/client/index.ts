@@ -22,6 +22,7 @@ import {
   createMapLauncher,
   createMapView,
   createOverviewTab,
+  DEFAULT_MAP_SCOPE,
   SidebarOverviewBody,
   type MapFlags,
   type SessionMapRuntime,
@@ -182,6 +183,10 @@ export function apply(ctx: Context): void {
 
   // Toolbar preferences live on the plugin run, not on one mounted View:
   // switching Session unmounts and remounts this View.
+  // How much of the map to draw: the Session being read has a tree of its own,
+  // and a reader who arrived in one Session usually wants that tree. Asking for
+  // every Session is one gesture away, on this same switch.
+  const scopeFlag = createFlag(DEFAULT_MAP_SCOPE)
   const showPromptsFlag = createFlag(false)
   const hideSubagentsFlag = createFlag(true)
   // Per-line overrides. Two sets, each recording one user gesture in the mode
@@ -193,6 +198,7 @@ export function apply(ctx: Context): void {
   const expandedInheritedFlag = createFlag(new Set<string>())
 
   const flags: MapFlags = {
+    scope: scopeFlag,
     showPrompts: showPromptsFlag,
     hideSubagents: hideSubagentsFlag,
     openedLines: openedLinesFlag,

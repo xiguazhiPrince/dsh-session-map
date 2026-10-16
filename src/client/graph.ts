@@ -63,6 +63,33 @@ export function mainSessionId(byId: Readonly<Record<string, SessionSummary>>): s
   return undefined
 }
 
+/**
+ * The root of one listed Session's fork tree: the last ancestor the row map
+ * still lists.
+ *
+ * A tree on this canvas is the connected component of the parent links, so its
+ * root is the node whose own parent is absent or unlisted. The walk stops at an
+ * already-visited id as well, so a Session whose ancestry loops answers with
+ * itself rather than never returning; that is the same fallback
+ * {@link buildGraph}'s own parent walk takes.
+ * @param id - the Session to resolve.
+ * @param byId - listed Session summaries.
+ * @returns the root ancestor's id, which is `id` itself for a root.
+ */
+export function treeRootId(id: string, byId: Readonly<Record<string, SessionSummary>>): string {
+  const seen: Record<string, true> = {}
+  seen[id] = true
+  let current = id
+  let parentId = byId[current]?.parentId
+  while (parentId !== undefined && seen[parentId] !== true) {
+    if (byId[parentId] === undefined) return current
+    seen[parentId] = true
+    current = parentId
+    parentId = byId[current]?.parentId
+  }
+  return current
+}
+
 /** One Workspace group as the map reads it, for tree order and captions. */
 export interface WorkspaceGroup {
   readonly sessionIds: readonly string[]
@@ -165,6 +192,12 @@ export interface Graph {
   readonly height: number
   /** Fork trees on the canvas. */
   readonly treeCount: number
+  /**
+   * The Session the canvas was restricted to, or `undefined` when every listed
+   * Session was drawn. A request the list cannot satisfy — its Session is not
+   * among the rows — draws everything and reports `undefined` here.
+   */
+  readonly scopeSessionId: string | undefined
 }
 
 /** One turn's compared identity: the two bounded previews the Host projected. */
@@ -226,6 +259,8 @@ function edgePath(from: GraphNode, to: GraphNode): string {
  * @param hideSubagents - whether subagent-origin Sessions are filtered out.
  * @param lines - global bead switch plus each per-line override set.
  * @param expandedInherited - Session ids whose inherited prefix is expanded.
+ * @param scopeSessionId - when given, draw only this Session's own tree; an id
+ * the row map does not carry is ignored and every listed Session is drawn.
  * @returns the positioned graph.
  */
 export function buildGraph(
@@ -235,12 +270,30 @@ export function buildGraph(
   hideSubagents: boolean,
   lines: LineState,
   expandedInherited: ReadonlySet<string>,
+  scopeSessionId?: string | undefined,
 ): Graph {
+  // The canvas draws either every listed Session or one Session's whole tree.
+  // The tree is the connected component of the parent links, so the Session
+  // being read keeps its ancestors, every branch forked off beside it, and all
+  // of their descendants. A scope the list cannot satisfy — the foreground
+  // Session is not among the rows — falls back to everything rather than to an
+  // empty canvas, and `scopeId` reports which of the two happened.
+  let drawnIds = ids
+  let scopeId: string | undefined
+  if (scopeSessionId !== undefined && byId[scopeSessionId] !== undefined) {
+    const root = treeRootId(scopeSessionId, byId)
+    const members = ids.filter(id => treeRootId(id, byId) === root)
+    if (members.length > 0) {
+      drawnIds = members
+      scopeId = scopeSessionId
+    }
+  }
+
   const nodes: Record<string, GraphNode> = {}
   const ordered: GraphNode[] = []
   const outlines: Record<string, readonly TurnPreview[]> = {}
   let outlineCount = 0
-  for (const id of ids) {
+  for (const id of drawnIds) {
     const summary = byId[id]
     if (summary === undefined) continue
     if (hideSubagents && summary.origin === 'subagent') continue
@@ -495,5 +548,6 @@ export function buildGraph(
     width: width + PAD * 2,
     height: Math.max(cursorY - TREE_GAP, 0) + PAD * 2,
     treeCount: roots.length,
+    scopeSessionId: scopeId,
   }
 }

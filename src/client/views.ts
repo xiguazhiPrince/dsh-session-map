@@ -173,8 +173,24 @@ interface PanelSize {
   readonly height: number
 }
 
-/** What the toolbar's two switches and the three per-line sets hold. */
+/**
+ * What the toolbar's scope switch holds: the current Session's own tree, or
+ * every listed Session.
+ */
+export type MapScope = 'current' | 'all'
+
+/**
+ * The scope a canvas opens in before the reader picks one.
+ *
+ * A reader arrives with one Session in mind — the one the app is showing — so
+ * the canvas opens on that Session's tree instead of on the whole map. The
+ * toolbar switch is how the whole map is asked for.
+ */
+export const DEFAULT_MAP_SCOPE: MapScope = 'current'
+
+/** What the toolbar's switches and the three per-line sets hold. */
 export interface MapFlags {
+  readonly scope: Flag<MapScope>
   readonly showPrompts: Flag<boolean>
   readonly hideSubagents: Flag<boolean>
   readonly openedLines: Flag<Set<string>>
@@ -311,6 +327,26 @@ function helpRow(key: string, text: string): React.ReactElement {
     React.createElement('span', { className: 'dsm__helpKey' }, key),
     React.createElement('span', { className: 'dsm__helpText' }, text),
   )
+}
+
+/**
+ * One option of the canvas-scope switch.
+ * @param label - the option's caption.
+ * @param active - whether this option is the one in force.
+ * @param title - the tooltip that spells the option out.
+ * @param onClick - selects this option.
+ * @returns the option button.
+ */
+function scopeOption(label: string, active: boolean, title: string, onClick: () => void): React.ReactElement {
+  return React.createElement('button', {
+    key: label,
+    type: 'button',
+    className: 'dsm__segBtn',
+    'data-active': active ? 'true' : 'false',
+    'aria-pressed': active ? 'true' : 'false',
+    title,
+    onClick,
+  }, label)
 }
 
 /**
@@ -495,6 +531,7 @@ export function createMapView(
     const current = props.useSessions(state => foregroundSessionId(state, props.sessionId))
     const workspaces = props.useWorkspaces(state => state.items)
 
+    const [scope, setScope] = useFlag(flags.scope)
     const [hideSubagents, setHideSubagents] = useFlag(flags.hideSubagents)
     const [showPrompts, setShowPrompts] = useFlag(flags.showPrompts)
     const [openedLines, setOpenedLines] = useFlag(flags.openedLines)
@@ -513,10 +550,11 @@ export function createMapView(
     // pointer and wheel event, so an unmemoized graph would be rebuilt at that
     // rate; the inputs are all stable references between changes (selector
     // snapshots, and the Sets this plugin replaces rather than mutates).
+    const scopeSessionId = scope === 'current' ? current : undefined
     const graph = React.useMemo(() => {
       const lines: LineState = { global: showPrompts, opened: openedLines, collapsed: collapsedLines }
-      return buildGraph(ids, byId, workspaces, hideSubagents, lines, expandedInherited)
-    }, [ids, byId, workspaces, hideSubagents, showPrompts, openedLines, collapsedLines, expandedInherited])
+      return buildGraph(ids, byId, workspaces, hideSubagents, lines, expandedInherited, scopeSessionId)
+    }, [ids, byId, workspaces, hideSubagents, showPrompts, openedLines, collapsedLines, expandedInherited, scopeSessionId])
 
     const panelSize = (): PanelSize => {
       const element = panelRef.current
@@ -572,7 +610,7 @@ export function createMapView(
     // transform starts over at its initial value; a post-paint correction would
     // show that first frame — the graph's top-left corner at the baseline zoom —
     // before snapping to the placed one.
-    React.useLayoutEffect(() => { setPlaced(false) }, [showPrompts, hideSubagents])
+    React.useLayoutEffect(() => { setPlaced(false) }, [showPrompts, hideSubagents, scope])
 
     React.useLayoutEffect(() => {
       if (placed || graph.nodes.length === 0) return
@@ -821,6 +859,12 @@ export function createMapView(
         : null,
     )
 
+    // A "current tree" the list cannot satisfy — the foreground Session is not
+    // among the listed rows — draws everything rather than nothing, so the bar
+    // says which of the two the canvas is actually showing. An empty list is
+    // left to the empty state instead of being reported as a fallback.
+    const scopeFallback = scope === 'current' && graph.nodes.length > 0 && graph.scopeSessionId === undefined
+
     const bar = React.createElement(
       'div',
       { className: 'dsm__bar' },
@@ -838,6 +882,20 @@ export function createMapView(
       React.createElement('span', { className: 'dsm__spacer' }),
       showRightbarButton
         ? React.createElement('button', { type: 'button', className: 'dsm__btn', onClick: openHere }, '在右侧栏打开')
+        : null,
+      React.createElement(
+        'span',
+        { className: 'dsm__seg', role: 'group', 'aria-label': '画布范围' },
+        scopeOption(
+          '当前会话树',
+          scope === 'current',
+          '只画当前会话所在的那棵会话树：父链、与它并列的分支，以及它们的后代',
+          () => { setScope('current') },
+        ),
+        scopeOption('全部会话', scope === 'all', '铺开列表里的全部会话', () => { setScope('all') }),
+      ),
+      scopeFallback
+        ? React.createElement('span', { className: 'dsm__note' }, '当前会话不在列表里，已显示全部会话')
         : null,
       React.createElement(
         'label',
@@ -876,7 +934,15 @@ export function createMapView(
     )
 
     const stage = graph.nodes.length === 0
-      ? React.createElement('div', { className: 'dsm__empty' }, '还没有任何会话')
+      ? React.createElement(
+        'div',
+        { className: 'dsm__empty' },
+        // A list with rows whose every Session is hidden is not an empty list;
+        // the scoped wording only fits when there was something to scope.
+        scope === 'current' && ids.length > 0
+          ? '当前会话所在的会话树里没有可显示的会话'
+          : '还没有任何会话',
+      )
       : React.createElement(
         'div',
         {
