@@ -1,7 +1,7 @@
 {
   "name": "dsh-session-map",
   "version": "0.1.0",
-  "description": "Session map: a fork-tree canvas over every DSH session, added as a Conversation tab and a right-sidebar tab",
+  "description": "Session map: a fork-tree canvas over every DSH session — opens on the current session's own tree, growing downward — as a Conversation tab and two right-sidebar tabs",
   "type": "module",
   "license": "MIT",
   "main": "lib/index.js",
