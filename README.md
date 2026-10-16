@@ -29,8 +29,14 @@ DSH 的会话会从某一轮 **fork** 出去，可左侧栏只是一张平铺列
 GitHub 直装：
 
 ```sh
+# 装进 web profile —— 就是 `dsh web` 启动的那个
+dsh plugin --profile web add github:xiguazhiPrince/dsh-session-map
+
+# 换你自己的 profile 名即可，例如 tui
 dsh plugin --profile <你的 profile> add github:xiguazhiPrince/dsh-session-map
 ```
+
+profile 名要**已经存在**于 `$DSH_HOME/profiles` 下（`dsh --help` 里 `--profile` 那一段就是它）；想新建一个就先用模板派生：`dsh myweb --from-default-profile web` 会照 `web` 模板建出 `myweb` 并启动它。安装走的是 profile 自己的 pnpm，装完这个包会同时写进它的 `dependencies` 与 `dsh.profile.bundles`。
 
 **预构建分发。** 仓库里直接提交了构建产物 `lib/`，并且没有 `prepare` 脚本，所以 pnpm 只下载 tarball 解压，**不执行任何安装期代码**——不需要 `allowBuilds` 放行，也没有构建等待。
 
@@ -39,7 +45,7 @@ dsh plugin --profile <你的 profile> add github:xiguazhiPrince/dsh-session-map
 另外建议**钉住 commit**。不钉的话，仓库之后任何一次 push 都会改变你安装的内容：
 
 ```sh
-dsh plugin --profile <name> add github:xiguazhiPrince/dsh-session-map#<sha>
+dsh plugin --profile web add github:xiguazhiPrince/dsh-session-map#<sha>
 ```
 
 ## 安装后验证
@@ -47,7 +53,7 @@ dsh plugin --profile <name> add github:xiguazhiPrince/dsh-session-map#<sha>
 装完不会立刻生效：**profile 的 bundle 列表是启动时读的**，正在运行的实例不会加载新行。先确认补丁栈里有这一层——
 
 ```sh
-dsh --profile <name> --dump-config
+dsh --profile web --dump-config    # profile 名换成你装的那个
 ```
 
 ```yaml
