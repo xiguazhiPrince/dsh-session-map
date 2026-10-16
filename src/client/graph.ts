@@ -14,8 +14,12 @@ import {
   BEAD_H,
   BEAD_LEAD,
   BEAD_PITCH,
+  BEAD_PITCH_Y,
+  BEAD_W,
   BRANCH_GAP,
   CAPTION_H,
+  COLUMN_GAP,
+  COLUMN_PITCH,
   GAP_Y,
   MARKER_W,
   NODE_H,
@@ -125,12 +129,12 @@ export interface GraphNode {
   readonly updatedAt: number
   /** Direct children drawn under this card. */
   childCount: number
-  /** Row band the card occupies; turns never take one. */
-  row: number
+  /** Band the card occupies across the tree's growth axis; turns never take one. */
+  band: number
   x: number
   y: number
-  /** Right edge of the card's wire, where its branches leave from. */
-  outX: number
+  /** Where the card's wire ends, measured along the tree's growth axis. */
+  outAlong: number
 }
 
 /** One drawn connector. */
@@ -200,6 +204,167 @@ export interface Graph {
   readonly scopeSessionId: string | undefined
 }
 
+/** Which way a fork tree grows across the canvas. */
+export type TreeDirection = 'vertical' | 'horizontal'
+
+/**
+ * The two screen axes one direction lays a tree out on, plus the sizes that
+ * belong to them.
+ *
+ * A tree is a depth axis and a band axis: every card sits one branch further
+ * along than its parent, and siblings occupy bands across that axis. Growing
+ * downward puts depth on y and bands on x; growing rightward swaps the two. The
+ * layout below is written once, in `along` and `across`, and only these numbers
+ * and the final box swap tell the two directions apart — the walk, the wires,
+ * the capsules and the figures are the same code.
+ */
+interface GrowthAxis {
+  /** Whether the tree grows downward, i.e. along the screen's y axis. */
+  readonly vertical: boolean
+  /** Extent of one Session card along the growth axis. */
+  readonly nodeAlong: number
+  /** Extent of one Session card across the growth axis. */
+  readonly nodeAcross: number
+  /** Extent of one turn bead along the growth axis. */
+  readonly beadAlong: number
+  /** Extent of one turn bead across the growth axis. */
+  readonly beadAcross: number
+  /** Distance between the starts of two consecutive beads. */
+  readonly beadPitch: number
+  /** Extent of one line or fold capsule along the growth axis. */
+  readonly markerAlong: number
+  /** Extent of one line or fold capsule across the growth axis. */
+  readonly markerAcross: number
+  /** Gap between a card's far edge and the first capsule on its wire. */
+  readonly lead: number
+  /** Distance between two adjacent bands across the growth axis. */
+  readonly bandPitch: number
+  /** Gap left over inside the last band, before the next tree starts. */
+  readonly bandSlack: number
+  /** Gap kept between the far edge of one tree and the next tree. */
+  readonly treeGap: number
+}
+
+/** Trees that grow rightward: depth along x, sibling bands down y. */
+const RIGHTWARD: GrowthAxis = {
+  vertical: false,
+  nodeAlong: NODE_W,
+  nodeAcross: NODE_H,
+  beadAlong: BEAD_W,
+  beadAcross: BEAD_H,
+  beadPitch: BEAD_PITCH,
+  markerAlong: MARKER_W,
+  markerAcross: BEAD_H,
+  lead: BEAD_LEAD,
+  bandPitch: ROW,
+  // The slack the last row leaves inside its band: the same gap the next tree
+  // used to be pushed down by.
+  bandSlack: GAP_Y,
+  treeGap: TREE_GAP,
+}
+
+/** Trees that grow downward: depth along y, sibling bands across x. */
+const DOWNWARD: GrowthAxis = {
+  vertical: true,
+  nodeAlong: NODE_H,
+  nodeAcross: NODE_W,
+  beadAlong: BEAD_H,
+  beadAcross: BEAD_W,
+  beadPitch: BEAD_PITCH_Y,
+  markerAlong: BEAD_H,
+  markerAcross: MARKER_W,
+  lead: BEAD_LEAD,
+  bandPitch: COLUMN_PITCH,
+  bandSlack: COLUMN_GAP,
+  treeGap: TREE_GAP,
+}
+
+/** One stage rectangle. */
+interface Box {
+  readonly x: number
+  readonly y: number
+  readonly w: number
+  readonly h: number
+}
+
+/**
+ * Place one box given its position and size on the growth and band axes.
+ * @param axis - the direction in force.
+ * @param along - position along the growth axis.
+ * @param across - position across the growth axis.
+ * @param alongSize - extent along the growth axis.
+ * @param acrossSize - extent across the growth axis.
+ * @returns the same rectangle in stage coordinates.
+ */
+function boxOf(axis: GrowthAxis, along: number, across: number, alongSize: number, acrossSize: number): Box {
+  return axis.vertical
+    ? { x: across, y: along, w: acrossSize, h: alongSize }
+    : { x: along, y: across, w: alongSize, h: acrossSize }
+}
+
+/**
+ * The line one card's wire is threaded on: the middle of the edge its turns
+ * leave from.
+ * @param axis - the direction in force.
+ * @param node - the placed card.
+ * @returns the wire's coordinate across the growth axis.
+ */
+function crossCentre(axis: GrowthAxis, node: GraphNode): number {
+  return axis.vertical ? node.x + NODE_W / 2 : node.y + NODE_H / 2
+}
+
+/**
+ * The card edge its own wire leaves from.
+ * @param axis - the direction in force.
+ * @param node - the placed card.
+ * @returns the coordinate along the growth axis.
+ */
+function farEdge(axis: GrowthAxis, node: GraphNode): number {
+  return axis.vertical ? node.y + NODE_H : node.x + NODE_W
+}
+
+/**
+ * The card edge a branch arrives at.
+ * @param axis - the direction in force.
+ * @param node - the placed card.
+ * @returns the coordinate along the growth axis.
+ */
+function nearEdge(axis: GrowthAxis, node: GraphNode): number {
+  return axis.vertical ? node.y : node.x
+}
+
+/**
+ * The straight run from a card's far edge to the end of its wire.
+ * @param axis - the direction in force.
+ * @param node - the placed card.
+ * @returns the path data.
+ */
+function wirePath(axis: GrowthAxis, node: GraphNode): string {
+  const centre = crossCentre(axis, node)
+  const from = farEdge(axis, node)
+  return axis.vertical
+    ? 'M ' + centre + ' ' + from + ' L ' + centre + ' ' + node.outAlong
+    : 'M ' + from + ' ' + centre + ' L ' + node.outAlong + ' ' + centre
+}
+
+/**
+ * The bezier joining one card's wire end to a child card's near edge.
+ * @param axis - the direction in force.
+ * @param from - the parent card.
+ * @param to - the child card.
+ * @returns the path data.
+ */
+function edgePath(axis: GrowthAxis, from: GraphNode, to: GraphNode): string {
+  const x1 = axis.vertical ? crossCentre(axis, from) : from.outAlong
+  const y1 = axis.vertical ? from.outAlong : crossCentre(axis, from)
+  const x2 = axis.vertical ? crossCentre(axis, to) : nearEdge(axis, to)
+  const y2 = axis.vertical ? nearEdge(axis, to) : crossCentre(axis, to)
+  const bend = axis.vertical ? Math.max(18, (y2 - y1) / 2) : Math.max(18, (x2 - x1) / 2)
+  return axis.vertical
+    ? 'M ' + x1 + ' ' + y1 + ' C ' + x1 + ' ' + (y1 + bend) + ' ' + x2 + ' ' + (y2 - bend) + ' ' + x2 + ' ' + y2
+    : 'M ' + x1 + ' ' + y1 + ' C ' + (x1 + bend) + ' ' + y1 + ' ' + (x2 - bend) + ' ' + y2 + ' ' + x2 + ' ' + y2
+}
+
 /** One turn's compared identity: the two bounded previews the Host projected. */
 interface TurnPreview {
   readonly prompt: string
@@ -241,16 +406,6 @@ function outlineOf(summary: SessionSummary | undefined): readonly unknown[] | un
   return entries
 }
 
-/** The bezier joining one card's wire end to a child card's left edge. */
-function edgePath(from: GraphNode, to: GraphNode): string {
-  const x1 = from.outX
-  const y1 = from.y + NODE_H / 2
-  const x2 = to.x
-  const y2 = to.y + NODE_H / 2
-  const bend = Math.max(18, (x2 - x1) / 2)
-  return 'M ' + x1 + ' ' + y1 + ' C ' + (x1 + bend) + ' ' + y1 + ' ' + (x2 - bend) + ' ' + y2 + ' ' + x2 + ' ' + y2
-}
-
 /**
  * Build the canvas: nodes, their wire, the turn beads, and the fold markers.
  * @param ids - listed Session ids in host order.
@@ -261,6 +416,7 @@ function edgePath(from: GraphNode, to: GraphNode): string {
  * @param expandedInherited - Session ids whose inherited prefix is expanded.
  * @param scopeSessionId - when given, draw only this Session's own tree; an id
  * the row map does not carry is ignored and every listed Session is drawn.
+ * @param direction - which way the trees grow.
  * @returns the positioned graph.
  */
 export function buildGraph(
@@ -270,7 +426,8 @@ export function buildGraph(
   hideSubagents: boolean,
   lines: LineState,
   expandedInherited: ReadonlySet<string>,
-  scopeSessionId?: string | undefined,
+  scopeSessionId: string | undefined,
+  direction: TreeDirection,
 ): Graph {
   // The canvas draws either every listed Session or one Session's whole tree.
   // The tree is the connected component of the parent links, so the Session
@@ -309,10 +466,10 @@ export function buildGraph(
       turnsOpen: false,
       updatedAt: typeof summary.updatedAt === 'number' ? summary.updatedAt : 0,
       childCount: 0,
-      row: 0,
+      band: 0,
       x: 0,
       y: 0,
-      outX: 0,
+      outAlong: 0,
     }
     nodes[id] = node
     ordered.push(node)
@@ -351,8 +508,8 @@ export function buildGraph(
     node.turnsOpen = lines.global ? !lines.collapsed.has(node.id) : lines.opened.has(node.id)
   }
 
-  // A pure fork tree: turns never take a row, so opening one leaves the
-  // vertical layout exactly as it was.
+  // A pure fork tree: turns never take a band, so opening one leaves the
+  // layout exactly as it was.
   const hostingParent = (node: GraphNode): string | undefined => {
     const seen: Record<string, boolean> = {}
     seen[node.id] = true
@@ -413,63 +570,74 @@ export function buildGraph(
     const kids = childrenOf[id]
     return kids === undefined ? [] : kids
   }
+  const axis = direction === 'vertical' ? DOWNWARD : RIGHTWARD
   const edges: GraphEdge[] = []
   const captions: GraphCaption[] = []
   const beads: GraphBead[] = []
   const markers: GraphMarker[] = []
-  let cursorY = 0
-  let width = 0
+  // The cursor that walks tree blocks: down the canvas for rightward trees,
+  // across it for downward ones. `along` and `across` below are the growth axis
+  // and the band axis of `axis`, in stage pixels.
+  let treeCursor = 0
+  let alongMax = 0
 
   for (let index = 0; index < roots.length; index += 1) {
     const root = roots[index]
     if (root === undefined) continue
     const visited: Record<string, boolean> = {}
     const collected: GraphNode[] = []
-    let rowCursor = 0
+    let bandCursor = 0
     const walk = (node: GraphNode): void => {
       if (visited[node.id] === true) return
       visited[node.id] = true
       collected.push(node)
       const kids = children(node.id).filter(kid => visited[kid.id] !== true)
       if (kids.length === 0) {
-        node.row = rowCursor
-        rowCursor += 1
+        node.band = bandCursor
+        bandCursor += 1
         return
       }
       for (const kid of kids) walk(kid)
       const first = kids[0]
       const last = kids[kids.length - 1]
       // `kids` is non-empty here, so the guard is total rather than reachable.
-      node.row = first !== undefined && last !== undefined ? (first.row + last.row) / 2 : node.row
+      node.band = first !== undefined && last !== undefined ? (first.band + last.band) / 2 : node.band
     }
     walk(root)
 
-    const top = cursorY + CAPTION_H
-    // Columns are no longer a fixed grid: a Session's children start after its
-    // own chain, so a long history pushes its branches right rather than
-    // opening a parallel column. Pre-order visit puts every parent before its
-    // children, so `outX` is always resolved when a child reads it.
+    // Bands are not a fixed grid either way: a Session's children start past
+    // its own chain, so a long history pushes its branches further along the
+    // growth axis rather than opening a parallel band. Pre-order visit puts
+    // every parent before its children, so `outAlong` is always resolved when a
+    // child reads it.
+    const alongStart = axis.vertical ? CAPTION_H : PAD
+    const acrossBase = axis.vertical ? treeCursor : treeCursor + CAPTION_H
     for (const node of collected) {
       const parent = node.parentId === undefined ? undefined : nodes[node.parentId]
-      node.x = parent === undefined ? PAD : parent.outX + BRANCH_GAP
-      node.y = top + node.row * ROW
-
-      let right = node.x + NODE_W
+      const along = parent === undefined ? alongStart : parent.outAlong + BRANCH_GAP
+      const across = acrossBase + node.band * axis.bandPitch
+      const card = boxOf(axis, along, across, axis.nodeAlong, axis.nodeAcross)
+      node.x = card.x
+      node.y = card.y
+      // The wire leaves the middle of the card's far edge, so every capsule
+      // hangs on the card's own centre line.
+      const centre = across + axis.nodeAcross / 2
+      let alongEnd = along + axis.nodeAlong
       const outline = outlines[node.id]
       if (outline !== undefined && outline.length > 0) {
-        const beadY = node.y + NODE_H / 2 - BEAD_H / 2
-        let cursor = right + BEAD_LEAD
+        let cursor = alongEnd + axis.lead
+        const line = boxOf(axis, cursor, centre - axis.markerAcross / 2, axis.markerAlong, axis.markerAcross)
         markers.push({
           id: node.id + '::line',
           kind: 'line',
           sessionId: node.id,
-          x: cursor,
-          y: beadY,
+          x: line.x,
+          y: line.y,
           count: outline.length,
           open: node.turnsOpen,
         })
-        cursor += MARKER_W + BEAD_GAP
-        right = cursor - BEAD_GAP
+        cursor += axis.markerAlong + BEAD_GAP
+        alongEnd = cursor - BEAD_GAP
         if (node.turnsOpen) {
           // The inherited prefix is folded whenever the line is open, in either
           // mode: the capsule naming the count is itself the way back to those
@@ -478,62 +646,61 @@ export function buildGraph(
           const inheritedOpen = foldInherited && expandedInherited.has(node.id)
           let from = 0
           if (foldInherited) {
+            const fold = boxOf(axis, cursor, centre - axis.markerAcross / 2, axis.markerAlong, axis.markerAcross)
             markers.push({
               id: node.id + '::fold',
               kind: 'fold',
               sessionId: node.id,
-              x: cursor,
-              y: beadY,
+              x: fold.x,
+              y: fold.y,
               count: node.inheritedCount,
               open: inheritedOpen,
             })
-            cursor += MARKER_W + BEAD_GAP
-            right = cursor - BEAD_GAP
+            cursor += axis.markerAlong + BEAD_GAP
+            alongEnd = cursor - BEAD_GAP
             if (!inheritedOpen) from = node.inheritedCount
           }
           for (let turn = from; turn < outline.length; turn += 1) {
             const preview = outline[turn]
             const prompt = preview === undefined ? '' : preview.prompt
+            const bead = boxOf(axis, cursor, centre - axis.beadAcross / 2, axis.beadAlong, axis.beadAcross)
             beads.push({
               id: String(node.id) + '::turn::' + String(turn),
               owner: node.id,
               ordinal: turn + 1,
-              x: cursor,
-              y: beadY,
+              x: bead.x,
+              y: bead.y,
               title: (turn + 1) + '. ' + (prompt === '' ? '(无提示预览)' : prompt),
             })
-            cursor += BEAD_PITCH
-            right = cursor - BEAD_GAP
+            cursor += axis.beadPitch
+            alongEnd = cursor - BEAD_GAP
           }
         }
       }
-      node.outX = right
-      if (node.outX > width) width = node.outX
+      node.outAlong = alongEnd
+      if (alongEnd > alongMax) alongMax = alongEnd
     }
     for (const node of collected) {
-      if (node.outX > node.x + NODE_W) {
-        const cy = node.y + NODE_H / 2
-        edges.push({
-          key: node.id + '>wire',
-          kind: 'wire',
-          d: 'M ' + (node.x + NODE_W) + ' ' + cy + ' L ' + node.outX + ' ' + cy,
-        })
+      if (node.outAlong > farEdge(axis, node)) {
+        edges.push({ key: node.id + '>wire', kind: 'wire', d: wirePath(axis, node) })
       }
       for (const kid of children(node.id)) {
         if (visited[kid.id] !== true) continue
-        edges.push({ key: node.id + '>' + kid.id, kind: kid.subagent ? 'sub' : 'branch', d: edgePath(node, kid) })
+        edges.push({ key: node.id + '>' + kid.id, kind: kid.subagent ? 'sub' : 'branch', d: edgePath(axis, node, kid) })
       }
     }
 
     const owner = workspaces.find(item => item.sessionIds.indexOf(root.id) >= 0)
     const ownerTitle = owner === undefined ? '' : String(owner.title || owner.path)
+    // The caption names its tree from the corner the cards grow away from:
+    // above them for a rightward tree, over their left edge for a downward one.
     captions.push({
       key: 'caption-' + root.id,
-      x: PAD,
-      y: cursorY,
+      x: axis.vertical ? treeCursor : PAD,
+      y: axis.vertical ? 0 : treeCursor,
       text: '会话树 ' + (index + 1) + (ownerTitle === '' ? ' · 未归属工作区' : ' · ' + ownerTitle),
     })
-    cursorY = top + rowCursor * ROW - GAP_Y + TREE_GAP
+    treeCursor = acrossBase + bandCursor * axis.bandPitch - axis.bandSlack + axis.treeGap
   }
 
   return {
@@ -545,8 +712,11 @@ export function buildGraph(
     sessionCount: ordered.length,
     outlineCount,
     openCount: markers.filter(marker => marker.kind === 'line' && marker.open).length,
-    width: width + PAD * 2,
-    height: Math.max(cursorY - TREE_GAP, 0) + PAD * 2,
+    // The canvas spans what the trees span: for rightward trees that is the
+    // furthest wire end across x and the last tree's bands down y; the downward
+    // direction swaps the two.
+    width: Math.max(axis.vertical ? treeCursor - axis.treeGap : alongMax, 0) + PAD * 2,
+    height: Math.max(axis.vertical ? alongMax : treeCursor - axis.treeGap, 0) + PAD * 2,
     treeCount: roots.length,
     scopeSessionId: scopeId,
   }

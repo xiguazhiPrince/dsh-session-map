@@ -41,6 +41,12 @@ export const BEAD_PITCH = 128
 /** Gap left between two beads, or between a bead and a capsule. */
 export const BEAD_GAP = 8
 
+// The same pitch for a tree that grows downward: its beads hang below their card
+// instead of running off to its right, so the distance is measured vertically
+// and every capsule pair keeps the ordinary gap.
+/** Vertical distance between two consecutive beads stacked on a downward wire. */
+export const BEAD_PITCH_Y = BEAD_H + BEAD_GAP
+
 /** Gap between a Session card's right edge and the first capsule on its wire. */
 export const BEAD_LEAD = 22
 
@@ -53,6 +59,12 @@ export const BRANCH_GAP = 56
 
 /** Vertical distance between two rows of the tree. */
 export const ROW = 62
+
+/** Horizontal gap between two sibling Session columns of a downward tree. */
+export const COLUMN_GAP = 30
+
+/** Horizontal distance between two sibling Session columns of a downward tree. */
+export const COLUMN_PITCH = NODE_W + COLUMN_GAP
 
 /** Gap subtracted between two sibling trees. */
 export const GAP_Y = 16

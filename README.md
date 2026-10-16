@@ -1,6 +1,6 @@
 # dsh-session-map
 
-把所有会话的 fork 关系画成一张可平移缩放的画布，作为一个标签页加进 DSH 的 Web 界面。默认只画当前会话所在的那棵树，工具栏上一键切回全图。
+把所有会话的 fork 关系画成一张可平移缩放的画布，作为一个标签页加进 DSH 的 Web 界面。默认只画当前会话所在的那棵树、且自上而下生长，工具栏上都能一键切回。
 
 ## 安装（GitHub 直装）
 
@@ -39,7 +39,7 @@ dsh --profile <name> --dump-config
 | 会话标签栏 | 「概览」与「会话图谱」两个标签页 |
 | 会话头部工具区 | 「会话图谱」开关；右侧栏正显示图谱时再点一次会关闭它 |
 | 右侧栏标签 | `dsh-session-map.map`（标题「会话图谱」）和 `dsh-session-map.overview`（标题「会话概览」） |
-| 图谱页本身 | fork 树画布；默认只画当前会话的那棵树，工具栏的「当前会话树 / 全部会话」可切到全图，旁边显示会话数、树数与当前缩放百分比 |
+| 图谱页本身 | fork 树画布；默认只画当前会话的那棵树、且自左向右改成自上而下，工具栏的「当前会话树 / 全部会话」与「竖向 / 横向」两组开关可切回全图与原方向，旁边显示会话数、树数与当前缩放百分比 |
 
 两件容易被当成故障的事：
 
@@ -117,6 +117,14 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 
 默认值写在 `src/client/views.ts` 的 `DEFAULT_MAP_SCOPE`（`'current'`），由 `src/client/index.ts` 装进插件 run 的开关。和其它工具栏开关一样，它挂在插件 run 上，所以那是**每次页面加载**的默认值：刷新后回到「当前会话树」。
 
+### 画布默认竖向生长
+
+树自**上而下**长：子会话在父会话下方，兄弟分支左右排开，一张卡片的用户输入串挂在它下面、竖着排成一列；分支从父卡片的链尾拉一条曲线到子卡片的顶边。横向模式是自左向右，输入串往右排。
+
+工具栏上的「竖向 / 横向」两段开关切换方向。两个方向共用同一套布局：深度轴与分栏轴互换，画什么、折叠与展开状态、以及同一个节点在两种方向下的相对关系都不变；横向模式与引入竖向之前逐字段一致（含坐标与边路径）。
+
+默认值写在 `src/client/views.ts` 的 `DEFAULT_MAP_DIRECTION`（`'vertical'`），同样由 `src/client/index.ts` 装进插件 run，所以也是**每次页面加载**的默认值。
+
 ### 对话标签栏的两个标签页默认关闭
 
 「概览」和「会话图谱」这两个 `conversation.view` 入口由**浏览器本地偏好**控制，默认不注册。头部开关和右侧栏的两个标签页不受影响，图谱仍然可以从右侧栏正常使用。
@@ -139,7 +147,7 @@ localStorage.removeItem('dsh.session-map.conversationViews')        // 回到出
 src/index.ts            宿主半（空实现，只为占据 bundle 行）
 src/client/index.ts     apply：样式表、插件级开关、座位与标签页注册
 src/client/views.ts     概览页、头部按钮、画布视图工厂
-src/client/graph.ts     布局：范围过滤、fork 树、珠子、折叠标记、连边
+src/client/graph.ts     布局：范围过滤、生长方向、fork 树、珠子、折叠标记、连边
 src/client/css.ts       样式表字符串
 src/client/constants.ts 几何常量与 tab type id
 src/client/flags.ts     跨挂载存活的插件级开关

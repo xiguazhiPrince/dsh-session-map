@@ -22,6 +22,7 @@ import {
   createMapLauncher,
   createMapView,
   createOverviewTab,
+  DEFAULT_MAP_DIRECTION,
   DEFAULT_MAP_SCOPE,
   SidebarOverviewBody,
   type MapFlags,
@@ -187,6 +188,9 @@ export function apply(ctx: Context): void {
   // and a reader who arrived in one Session usually wants that tree. Asking for
   // every Session is one gesture away, on this same switch.
   const scopeFlag = createFlag(DEFAULT_MAP_SCOPE)
+  // Which way the trees grow. A fork reads as a descent, so the canvas opens
+  // top-down and keeps the original left-to-right layout on the same switch.
+  const directionFlag = createFlag(DEFAULT_MAP_DIRECTION)
   const showPromptsFlag = createFlag(false)
   const hideSubagentsFlag = createFlag(true)
   // Per-line overrides. Two sets, each recording one user gesture in the mode
@@ -199,6 +203,7 @@ export function apply(ctx: Context): void {
 
   const flags: MapFlags = {
     scope: scopeFlag,
+    direction: directionFlag,
     showPrompts: showPromptsFlag,
     hideSubagents: hideSubagentsFlag,
     openedLines: openedLinesFlag,

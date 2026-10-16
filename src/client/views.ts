@@ -29,7 +29,15 @@ import {
   WHEEL_ZOOM_BASE,
   WHEEL_ZOOM_MAX_STEP,
 } from './constants'
-import { buildGraph, mainSessionId, type GraphNode, type LineState, type SessionSummary, type WorkspaceGroup } from './graph'
+import {
+  buildGraph,
+  mainSessionId,
+  type GraphNode,
+  type LineState,
+  type SessionSummary,
+  type TreeDirection,
+  type WorkspaceGroup,
+} from './graph'
 import { useFlag, withMember, type Flag } from './flags'
 import { clampNumber, errorText, formatCount, formatMs } from './format'
 
@@ -188,9 +196,19 @@ export type MapScope = 'current' | 'all'
  */
 export const DEFAULT_MAP_SCOPE: MapScope = 'current'
 
+/**
+ * Which way a canvas lays its trees out before the reader picks.
+ *
+ * A fork reads as a descent: the Session being read sits under the ancestor it
+ * forked from, and its own branches hang below it. The toolbar switch is how the
+ * older left-to-right layout is asked for.
+ */
+export const DEFAULT_MAP_DIRECTION: TreeDirection = 'vertical'
+
 /** What the toolbar's switches and the three per-line sets hold. */
 export interface MapFlags {
   readonly scope: Flag<MapScope>
+  readonly direction: Flag<TreeDirection>
   readonly showPrompts: Flag<boolean>
   readonly hideSubagents: Flag<boolean>
   readonly openedLines: Flag<Set<string>>
@@ -330,14 +348,14 @@ function helpRow(key: string, text: string): React.ReactElement {
 }
 
 /**
- * One option of the canvas-scope switch.
+ * One option of a two-option toolbar switch.
  * @param label - the option's caption.
  * @param active - whether this option is the one in force.
  * @param title - the tooltip that spells the option out.
  * @param onClick - selects this option.
  * @returns the option button.
  */
-function scopeOption(label: string, active: boolean, title: string, onClick: () => void): React.ReactElement {
+function segmentOption(label: string, active: boolean, title: string, onClick: () => void): React.ReactElement {
   return React.createElement('button', {
     key: label,
     type: 'button',
@@ -532,6 +550,7 @@ export function createMapView(
     const workspaces = props.useWorkspaces(state => state.items)
 
     const [scope, setScope] = useFlag(flags.scope)
+    const [direction, setDirection] = useFlag(flags.direction)
     const [hideSubagents, setHideSubagents] = useFlag(flags.hideSubagents)
     const [showPrompts, setShowPrompts] = useFlag(flags.showPrompts)
     const [openedLines, setOpenedLines] = useFlag(flags.openedLines)
@@ -553,8 +572,8 @@ export function createMapView(
     const scopeSessionId = scope === 'current' ? current : undefined
     const graph = React.useMemo(() => {
       const lines: LineState = { global: showPrompts, opened: openedLines, collapsed: collapsedLines }
-      return buildGraph(ids, byId, workspaces, hideSubagents, lines, expandedInherited, scopeSessionId)
-    }, [ids, byId, workspaces, hideSubagents, showPrompts, openedLines, collapsedLines, expandedInherited, scopeSessionId])
+      return buildGraph(ids, byId, workspaces, hideSubagents, lines, expandedInherited, scopeSessionId, direction)
+    }, [ids, byId, workspaces, hideSubagents, showPrompts, openedLines, collapsedLines, expandedInherited, scopeSessionId, direction])
 
     const panelSize = (): PanelSize => {
       const element = panelRef.current
@@ -610,7 +629,7 @@ export function createMapView(
     // transform starts over at its initial value; a post-paint correction would
     // show that first frame — the graph's top-left corner at the baseline zoom —
     // before snapping to the placed one.
-    React.useLayoutEffect(() => { setPlaced(false) }, [showPrompts, hideSubagents, scope])
+    React.useLayoutEffect(() => { setPlaced(false) }, [showPrompts, hideSubagents, scope, direction])
 
     React.useLayoutEffect(() => {
       if (placed || graph.nodes.length === 0) return
@@ -886,13 +905,26 @@ export function createMapView(
       React.createElement(
         'span',
         { className: 'dsm__seg', role: 'group', 'aria-label': '画布范围' },
-        scopeOption(
+        segmentOption(
           '当前会话树',
           scope === 'current',
           '只画当前会话所在的那棵会话树：父链、与它并列的分支，以及它们的后代',
           () => { setScope('current') },
         ),
-        scopeOption('全部会话', scope === 'all', '铺开列表里的全部会话', () => { setScope('all') }),
+        segmentOption('全部会话', scope === 'all', '铺开列表里的全部会话', () => { setScope('all') }),
+      ),
+      React.createElement(
+        'span',
+        { className: 'dsm__seg', role: 'group', 'aria-label': '树的生长方向' },
+        segmentOption(
+          '竖向',
+          direction === 'vertical',
+          '会话树自上而下：子会话在父会话下方，用户输入竖着排成一列',
+          () => { setDirection('vertical') },
+        ),
+        segmentOption('横向', direction === 'horizontal', '会话树自左向右：子会话在父会话右侧', () => {
+          setDirection('horizontal')
+        }),
       ),
       scopeFallback
         ? React.createElement('span', { className: 'dsm__note' }, '当前会话不在列表里，已显示全部会话')
