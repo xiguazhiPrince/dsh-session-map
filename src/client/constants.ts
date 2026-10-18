@@ -1,6 +1,6 @@
 /**
- * Session map constants: the two right-sidebar tab type ids, the canvas
- * geometry, and the per-edge-kind stylesheet classes.
+ * Session map constants: the two right-sidebar tab type ids, the turn-tree
+ * canvas geometry, and the per-edge-kind stylesheet classes.
  *
  * The type ids carry this package's own namespace rather than the dynamic
  * runtime's `dynamic.` prefix: a tab type's `id` is the key its body registers
@@ -17,53 +17,43 @@ export const OVERVIEW_KIND = 'session-overview'
 /** Tab-type id the overview body registers under. */
 export const OVERVIEW_TYPE_ID = 'dsh-session-map.overview'
 
-/** Kind (the `openTab` discriminator) of the fork-tree canvas page. */
+/** Kind (the `openTab` discriminator) of the turn-tree canvas page. */
 export const MAP_KIND = 'session-map'
 
 /** Tab-type id the canvas body registers under. */
 export const MAP_TYPE_ID = 'dsh-session-map.map'
 
-/** Width of one Session card, in stage coordinates. */
+/** Width of one turn or session-head card, in stage coordinates. */
 export const NODE_W = 200
 
-/** Height of one Session card, in stage coordinates. */
+/** Height of one turn or session-head card, in stage coordinates. */
 export const NODE_H = 46
 
-/** Width one turn bead is drawn at; it also cuts the bead's own preview text. */
-export const BEAD_W = 120
+/** Distance between a card's far edge and the near edge of any child card. */
+export const NODE_GAP = 36
 
-/** Height of one turn bead, and of every fold capsule, in stage coordinates. */
-export const BEAD_H = 22
-
-/** Horizontal distance between two consecutive beads on one wire. */
-export const BEAD_PITCH = 128
-
-/** Gap left between two beads, or between a bead and a capsule. */
-export const BEAD_GAP = 8
-
-// The same pitch for a tree that grows downward: its beads hang below their card
-// instead of running off to its right, so the distance is measured vertically
-// and every capsule pair keeps the ordinary gap.
-/** Vertical distance between two consecutive beads stacked on a downward wire. */
-export const BEAD_PITCH_Y = BEAD_H + BEAD_GAP
-
-/** Gap between a Session card's right edge and the first capsule on its wire. */
-export const BEAD_LEAD = 22
-
-// The fold capsule that stands in for turns shown somewhere else, or hidden.
-/** Width of a line or fold capsule. */
+/** Width of one folded-run capsule, in stage coordinates. */
 export const MARKER_W = 96
 
-/** Horizontal gap between a Session card and each of its branches. */
-export const BRANCH_GAP = 56
+/** Height of one folded-run capsule, and its extent along a downward tree. */
+export const MARKER_H = 22
+
+/** Runs longer than this many turns collapse their middle stretch. */
+export const RUN_FOLD_MIN = 8
+
+/** Turns kept at the head of a folded run. */
+export const RUN_KEEP_HEAD = 2
+
+/** Turns kept at the tail of a folded run. */
+export const RUN_KEEP_TAIL = 1
 
 /** Vertical distance between two rows of the tree. */
 export const ROW = 62
 
-/** Horizontal gap between two sibling Session columns of a downward tree. */
+/** Horizontal gap between two sibling turn columns of a downward tree. */
 export const COLUMN_GAP = 30
 
-/** Horizontal distance between two sibling Session columns of a downward tree. */
+/** Horizontal distance between two sibling turn columns of a downward tree. */
 export const COLUMN_PITCH = NODE_W + COLUMN_GAP
 
 /** Gap subtracted between two sibling trees. */
@@ -105,21 +95,21 @@ export const WHEEL_ZOOM_BASE = 1.005
 export const WHEEL_ZOOM_MAX_STEP = 1.25
 
 // Popovers, used only to keep them inside the panel.
-/** Width of the node/bead action popover. */
+/** Width of the node action popover. */
 export const MENU_W = 184
 
 /** Height assumed for the action popover when clamping it inside the panel. */
-export const MENU_H = 118
+export const MENU_H = 160
 
 /** Inset the action popover keeps from the panel's edges. */
 export const MENU_INSET = 8
 
-/** The three wire kinds the canvas draws, each with its own stroke treatment. */
-export type EdgeKind = 'branch' | 'sub' | 'wire'
+/** The three edge kinds the canvas draws, each with its own stroke treatment. */
+export type EdgeKind = 'chain' | 'fork' | 'sub'
 
-/** Stylesheet class per wire kind. */
+/** Stylesheet class per edge kind. */
 export const EDGE_CLASS: Readonly<Record<EdgeKind, string>> = {
-  branch: 'dsm__edge',
+  chain: 'dsm__edge dsm__edge--chain',
+  fork: 'dsm__edge dsm__edge--fork',
   sub: 'dsm__edge dsm__edge--sub',
-  wire: 'dsm__edge dsm__edge--wire',
 }

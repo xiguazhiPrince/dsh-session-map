@@ -1,6 +1,6 @@
 /**
  * The three View bodies: the plain Session overview (Conversation tab and
- * right-column tab), the launcher button, and the fork-tree canvas factory.
+ * right-column tab), the launcher button, and the turn-tree canvas factory.
  *
  * They receive everything through their composed props and a {@link
  * SessionMapRuntime}; `ctx` never crosses this boundary, so a body can be
@@ -11,10 +11,9 @@
 import * as React from 'react'
 import {
   BASE_ZOOM,
-  BEAD_H,
-  BEAD_W,
   EDGE_CLASS,
   MAP_KIND,
+  MARKER_H,
   MARKER_W,
   MAX_ZOOM,
   MENU_H,
@@ -25,6 +24,7 @@ import {
   NODE_W,
   OVERVIEW_KIND,
   PAD,
+  RUN_FOLD_MIN,
   WHEEL_LINE,
   WHEEL_ZOOM_BASE,
   WHEEL_ZOOM_MAX_STEP,
@@ -33,9 +33,9 @@ import {
   buildGraph,
   mainSessionId,
   type GraphNode,
-  type LineState,
   type SessionSummary,
   type TreeDirection,
+  type TurnMessage,
   type WorkspaceGroup,
 } from './graph'
 import { useFlag, withMember, type Flag } from './flags'
@@ -127,6 +127,43 @@ export interface SidebarRightFace {
   close(tabId: string): void
 }
 
+/** One loaded Session event row, narrowed to what the canvas reads. */
+export interface SessionEventEntryFace {
+  readonly type: 'event' | 'transient'
+  readonly event?: {
+    readonly type: string
+    readonly seq: number
+    readonly data?: unknown
+  } | undefined
+}
+
+/** One synchronous delta of the loaded event window. */
+export interface SessionEventChangeFace {
+  readonly kind: string
+  readonly entries?: readonly SessionEventEntryFace[] | undefined
+}
+
+/** The observable event window one retained Session binding exposes. */
+export interface SessionEventWindowFace {
+  readonly entries: readonly SessionEventEntryFace[]
+  readonly revision?: number | undefined
+  readonly change?: SessionEventChangeFace | undefined
+}
+
+/** The client Session Controller operations the canvas calls. */
+export interface SessionEventSourceFace {
+  getSnapshot(): SessionEventWindowFace
+  subscribe(listener: () => void): () => void
+}
+
+/** The client Session Controller operations the canvas calls. */
+export interface SessionEventsFace {
+  retain(id: string, options: { readonly source: string }): {
+    readonly binding: { readonly eventSource: SessionEventSourceFace }
+    release(): void
+  }
+}
+
 /**
  * What the bodies call back into the plugin with. Every member resolves its
  * service when it is called, so a mounted body never holds a service handle.
@@ -143,6 +180,13 @@ export interface SessionMapRuntime {
    * @param sessionId - the Session to show.
    */
   openSession(sessionId: string): void
+  /**
+   * The client Session Controller, when the app provides it. The canvas reads
+   * the loaded event windows of the current Session and its ancestors from it;
+   * a composition without it simply keeps the outline's one node per turn.
+   * @returns the service, or `undefined` when absent.
+   */
+  sessions?(): SessionEventsFace | undefined
 }
 
 /** The overview's read of one Session. */
@@ -169,12 +213,6 @@ interface DragState {
   readonly y: number
 }
 
-/** The canvas popover's target: one Session card or one turn bead. */
-interface MenuTarget {
-  readonly kind: 'node' | 'bead'
-  readonly id: string
-}
-
 /** The panel's inner box, in pixels. */
 interface PanelSize {
   readonly width: number
@@ -199,21 +237,26 @@ export const DEFAULT_MAP_SCOPE: MapScope = 'current'
 /**
  * Which way a canvas lays its trees out before the reader picks.
  *
- * A fork reads as a descent: the Session being read sits under the ancestor it
- * forked from, and its own branches hang below it. The toolbar switch is how the
+ * A fork reads as a descent: the turn being read sits under the inherited turns
+ * it came from, and its own branches hang below it. The toolbar switch is how the
  * older left-to-right layout is asked for.
  */
 export const DEFAULT_MAP_DIRECTION: TreeDirection = 'vertical'
 
-/** What the toolbar's switches and the three per-line sets hold. */
+/**
+ * Whether long straight runs fold by default. The reader arrives with the map
+ * meant to show every turn, so only a run long enough to stop being a map is
+ * folded; the toolbar switch is how all of them are asked for.
+ */
+export const DEFAULT_FOLD_RUNS = true
+
+/** What the toolbar's switches and the per-run fold overrides hold. */
 export interface MapFlags {
   readonly scope: Flag<MapScope>
   readonly direction: Flag<TreeDirection>
-  readonly showPrompts: Flag<boolean>
+  readonly foldRuns: Flag<boolean>
+  readonly expandedRuns: Flag<Set<string>>
   readonly hideSubagents: Flag<boolean>
-  readonly openedLines: Flag<Set<string>>
-  readonly collapsedLines: Flag<Set<string>>
-  readonly expandedInherited: Flag<Set<string>>
 }
 
 /**
@@ -530,11 +573,92 @@ export function createMapLauncher(runtime: SessionMapRuntime): () => React.React
 }
 
 /**
+ * Join one user message's text blocks into a single line. Images and other
+ * non-text blocks contribute nothing; a text-less message stays an empty node.
+ * @param content - the event message's content blocks, as wire data.
+ * @returns the space-joined text.
+ */
+function messageText(content: unknown): string {
+  if (!Array.isArray(content)) return ''
+  let text = ''
+  for (const block of content) {
+    if (typeof block !== 'object' || block === null) continue
+    const record = block as { readonly type?: unknown; readonly text?: unknown }
+    if (record.type !== 'text' || typeof record.text !== 'string') continue
+    text += text === '' ? record.text : ' ' + record.text
+  }
+  return text
+}
+
+/**
+ * Extract every human `user/message` from a loaded Session event window, in
+ * order. System prompts, injected context, and assistant events never become
+ * nodes.
+ * @param entries - the retained Session's event-window entries.
+ * @returns the human messages, bound for {@link buildGraph}.
+ */
+export function userMessagesOf(entries: readonly SessionEventEntryFace[]): readonly TurnMessage[] {
+  const messages: TurnMessage[] = []
+  for (const entry of entries) {
+    if (entry.type !== 'event') continue
+    const event = entry.event
+    if (event === undefined || event.type !== 'user/message') continue
+    const data: unknown = event.data
+    if (typeof data !== 'object' || data === null) continue
+    const source = (data as { readonly source?: unknown }).source
+    if (typeof source !== 'object' || source === null) continue
+    if ((source as { readonly kind?: unknown }).kind !== 'user') continue
+    messages.push({ seq: event.seq, text: messageText((data as { readonly content?: unknown }).content) })
+  }
+  return messages
+}
+
+/**
+ * The current Session and its ancestor chain, nearest first. The client event
+ * window is loaded only for Sessions the app has opened; this path is small and
+ * is where the canvas most needs steering inputs (the current tree).
+ * @param current - the foreground Session id, when one is known.
+ * @param byId - listed Session summaries.
+ * @returns the path, empty when no foreground Session is known.
+ */
+function ancestorSessionIds(
+  current: string | undefined,
+  byId: Readonly<Record<string, SessionSummary>>,
+): readonly string[] {
+  if (current === undefined) return []
+  const ids: string[] = []
+  const seen = new Set<string>()
+  let id: string | undefined = current
+  while (id !== undefined && !seen.has(id)) {
+    seen.add(id)
+    ids.push(id)
+    id = byId[id]?.parentId
+    if (id !== undefined && byId[id] === undefined) id = undefined
+  }
+  return ids
+}
+
+/**
+ * The Session tag's text: its display title, keeping a distinguishing head and
+ * tail when it is long. The full title and the per-canvas ordinal stay in the
+ * tooltip and the action menu.
+ * @param title - the Session's display title.
+ * @param ordinal - the per-canvas Session number.
+ * @returns the label rendered in the tag.
+ */
+function sessionTagLabel(title: string, ordinal: number): string {
+  const text = title.trim()
+  if (text === '') return '会话' + String(ordinal)
+  if (text.length <= 14) return text
+  return text.slice(0, 7) + '…' + text.slice(-4)
+}
+
+/**
  * Build one canvas body. One implementation, two seats; `showRightbarButton`
  * only hides the explicit "在右侧栏打开" control where the View already IS the
  * right column.
  * @param runtime - the plugin's live service accessors.
- * @param flags - the switches and per-line sets the plugin run owns.
+ * @param flags - the switches and per-run fold sets the plugin run owns.
  * @param showRightbarButton - whether to offer the "open in the right column" control.
  * @returns the registered canvas component.
  */
@@ -551,29 +675,111 @@ export function createMapView(
 
     const [scope, setScope] = useFlag(flags.scope)
     const [direction, setDirection] = useFlag(flags.direction)
+    const [foldRuns, setFoldRuns] = useFlag(flags.foldRuns)
+    const [expandedRuns, setExpandedRuns] = useFlag(flags.expandedRuns)
     const [hideSubagents, setHideSubagents] = useFlag(flags.hideSubagents)
-    const [showPrompts, setShowPrompts] = useFlag(flags.showPrompts)
-    const [openedLines, setOpenedLines] = useFlag(flags.openedLines)
-    const [collapsedLines, setCollapsedLines] = useFlag(flags.collapsedLines)
-    const [expandedInherited, setExpandedInherited] = useFlag(flags.expandedInherited)
     const [view, setView] = React.useState<ViewState>({ zoom: BASE_ZOOM, x: PAD, y: PAD })
     const [drag, setDrag] = React.useState<DragState | null>(null)
     const [placed, setPlaced] = React.useState(false)
-    // The popover names one canvas target: a Session card or one turn bead.
-    const [menuTarget, setMenuTarget] = React.useState<MenuTarget | null>(null)
+    const [menuTargetId, setMenuTargetId] = React.useState<string | null>(null)
     const [helpOpen, setHelpOpen] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
+    const [turnMessages, setTurnMessages] = React.useState<Readonly<Record<string, readonly TurnMessage[]>>>({})
     const panelRef = React.useRef<HTMLDivElement | null>(null)
+
+    // The outline gives one prompt per turn; steering messages live only in the
+    // loaded event window. Read that window for the current Session and its
+    // ancestors — the path the canvas is most likely to be read along — and
+    // leave every other Session at its outline. The path key keeps a list
+    // snapshot update from re-retaining anything unless the chain moved.
+    const messagePath = React.useMemo(
+      () => ancestorSessionIds(current ?? props.sessionId, byId),
+      [current, props.sessionId, byId],
+    )
+    const messagePathKey = messagePath.join('\u0000')
+    React.useEffect(() => {
+      const sessions = runtime.sessions?.()
+      if (sessions === undefined || messagePath.length === 0) {
+        setTurnMessages({})
+        return undefined
+      }
+      const references: { release(): void }[] = []
+      const unsubscribes: (() => void)[] = []
+      const loaded: Record<string, readonly TurnMessage[]> = {}
+      let signature = ''
+      const publish = (): void => {
+        const next: Record<string, readonly TurnMessage[]> = { ...loaded }
+        const nextSignature = messagePath
+          .map(id => id + ':' + (next[id] ?? []).map(message => String(message.seq) + ':' + message.text).join('\u0001'))
+          .join('\u0002')
+        if (nextSignature === signature) return
+        signature = nextSignature
+        setTurnMessages(next)
+      }
+      for (const id of messagePath) {
+        let reference: ReturnType<SessionEventsFace['retain']> | undefined
+        try {
+          reference = sessions.retain(id, { source: 'dsh-session-map' })
+        } catch {
+          continue
+        }
+        references.push(reference)
+        const source = reference.binding.eventSource
+        let revision: number | undefined
+        let messages: readonly TurnMessage[] = []
+        const read = (): void => {
+          try {
+            const snapshot = source.getSnapshot()
+            const change = snapshot.change
+            if (snapshot.revision !== undefined && snapshot.revision === revision) return
+            revision = snapshot.revision
+            if (change?.kind === 'append' && change.entries !== undefined) {
+              messages = [...messages, ...userMessagesOf(change.entries)]
+            } else if (change?.kind === 'prepend' && change.entries !== undefined) {
+              messages = [...userMessagesOf(change.entries), ...messages]
+            } else if (change?.kind === 'settle-assistant') {
+              // Assistant settlement never adds a human message; the cached list stays.
+            } else {
+              messages = userMessagesOf(snapshot.entries)
+            }
+            loaded[id] = messages
+          } catch {
+            loaded[id] = []
+          }
+          publish()
+        }
+        read()
+        unsubscribes.push(source.subscribe(read))
+      }
+      publish()
+      return () => {
+        for (const unsubscribe of unsubscribes) unsubscribe()
+        for (const reference of references) reference.release()
+      }
+    }, [messagePathKey, runtime])
 
     // Rebuilt only when its inputs move. Panning and zooming re-render on every
     // pointer and wheel event, so an unmemoized graph would be rebuilt at that
     // rate; the inputs are all stable references between changes (selector
     // snapshots, and the Sets this plugin replaces rather than mutates).
     const scopeSessionId = scope === 'current' ? current : undefined
-    const graph = React.useMemo(() => {
-      const lines: LineState = { global: showPrompts, opened: openedLines, collapsed: collapsedLines }
-      return buildGraph(ids, byId, workspaces, hideSubagents, lines, expandedInherited, scopeSessionId, direction)
-    }, [ids, byId, workspaces, hideSubagents, showPrompts, openedLines, collapsedLines, expandedInherited, scopeSessionId, direction])
+    const graph = React.useMemo(() => buildGraph(
+      ids,
+      byId,
+      workspaces,
+      hideSubagents,
+      foldRuns,
+      expandedRuns,
+      scopeSessionId,
+      direction,
+      turnMessages,
+    ), [ids, byId, workspaces, hideSubagents, foldRuns, expandedRuns, scopeSessionId, direction, turnMessages])
+
+    const currentSession = current === undefined ? undefined : graph.sessionsById[current]
+    const currentPath = React.useMemo(
+      () => new Set(currentSession?.inheritedNodeIds ?? []),
+      [currentSession],
+    )
 
     const panelSize = (): PanelSize => {
       const element = panelRef.current
@@ -609,10 +815,13 @@ export function createMapView(
 
     // Center the canvas on the Session the app is showing and magnify it: the
     // point of the gesture is reading that neighbourhood, not seeing the whole
-    // graph. Falls back to fitting when that Session has no node here (filtered
-    // out, or not in the list).
+    // graph. Its tag/head is the anchor; a Session with no own input anchors on
+    // the head chip instead.
     const focusCurrent = (): void => {
-      const node = graph.nodes.find(candidate => candidate.id === current)
+      const session = current === undefined ? undefined : graph.sessionsById[current]
+      const node = session === undefined
+        ? undefined
+        : graph.nodes.find(candidate => candidate.id === session.headNodeId)
       if (node === undefined) {
         fit()
         return
@@ -629,7 +838,7 @@ export function createMapView(
     // transform starts over at its initial value; a post-paint correction would
     // show that first frame — the graph's top-left corner at the baseline zoom —
     // before snapping to the placed one.
-    React.useLayoutEffect(() => { setPlaced(false) }, [showPrompts, hideSubagents, scope, direction])
+    React.useLayoutEffect(() => { setPlaced(false) }, [foldRuns, hideSubagents, scope, direction])
 
     React.useLayoutEffect(() => {
       if (placed || graph.nodes.length === 0) return
@@ -711,16 +920,15 @@ export function createMapView(
       })
     }
 
-    const setLineOpen = (sessionId: string, open: boolean): void => {
-      if (showPrompts) {
-        setCollapsedLines(withMember(collapsedLines, sessionId, !open))
-        return
-      }
-      setOpenedLines(withMember(openedLines, sessionId, open))
+    const openRun = (runKey: string): void => {
+      setExpandedRuns(withMember(expandedRuns, runKey, true))
     }
 
-    const toggleInherited = (sessionId: string): void => {
-      setExpandedInherited(withMember(expandedInherited, sessionId, !expandedInherited.has(sessionId)))
+    // The global switch starts from every long run closed when it is turned on,
+    // so an expansion made in one mode cannot silently survive a round trip.
+    const toggleFoldRuns = (): void => {
+      setFoldRuns(!foldRuns)
+      setExpandedRuns(new Set())
     }
 
     const onPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
@@ -728,7 +936,7 @@ export function createMapView(
       if (target instanceof Element && target.closest('[data-dsm-hit]') !== null) return
       // A press on the canvas dismisses the popovers before it becomes a pan,
       // the same way a click outside a menu closes it.
-      if (menuTarget !== null) setMenuTarget(null)
+      if (menuTargetId !== null) setMenuTargetId(null)
       if (helpOpen) setHelpOpen(false)
       // Cancelling the default here stops the browser from beginning a native
       // text selection for this drag. Presses that start on a target returned
@@ -769,65 +977,70 @@ export function createMapView(
     }
 
     // Placed in panel coordinates on every render, so it stays pinned to its
-    // target while panning and keeps a legible size at any canvas scale. A
-    // Session card and a turn bead share the popover, because the confirmation
-    // gesture is the same for both.
-    const menuTargetId = menuTarget === null ? null : menuTarget.id
-    const menuNode = menuTarget !== null && menuTarget.kind === 'node'
-      ? graph.nodes.find(candidate => candidate.id === menuTargetId)
-      : undefined
-    const menuBead = menuTarget !== null && menuTarget.kind === 'bead'
-      ? graph.beads.find(candidate => candidate.id === menuTargetId)
-      : undefined
-    const menuAnchor = menuNode !== undefined
-      ? { x: menuNode.x, y: menuNode.y, w: NODE_W, h: NODE_H, title: menuNode.title, sessionId: menuNode.id }
-      : menuBead !== undefined
-        ? { x: menuBead.x, y: menuBead.y, w: BEAD_W, h: BEAD_H, title: menuBead.title, sessionId: menuBead.owner }
-        : undefined
+    // target while panning and keeps a legible size at any canvas scale.
+    const menuNode = menuTargetId === null
+      ? undefined
+      : graph.nodes.find(candidate => candidate.id === menuTargetId)
+    const menuSession = menuNode === undefined ? undefined : graph.sessionsById[menuNode.sessionId]
     let menu: React.ReactElement | null = null
-    if (menuAnchor !== undefined) {
+    if (menuNode !== undefined && menuSession !== undefined) {
       const panel = panelSize()
       const zoom = view.zoom
-      const box = menuAnchor
-      let left = view.x + (box.x + box.w) * zoom + 10
+      let left = view.x + (menuNode.x + NODE_W) * zoom + 10
       if (left + MENU_W > panel.width - MENU_INSET) {
-        left = view.x + box.x * zoom - MENU_W - 10
+        left = view.x + menuNode.x * zoom - MENU_W - 10
       }
-      let top = view.y + box.y * zoom
+      let top = view.y + menuNode.y * zoom
       if (top + MENU_H > panel.height - MENU_INSET) top = panel.height - MENU_H - MENU_INSET
       if (left < MENU_INSET) left = MENU_INSET
       if (top < MENU_INSET) top = MENU_INSET
+
+      const title = menuNode.kind === 'turn'
+        ? (menuNode.turn === null ? '' : '#' + String(menuNode.turn) + ' ')
+          + (menuNode.prompt === '' ? '(无提示预览)' : menuNode.prompt)
+        : menuSession.title
+      const note = menuNode.kind === 'turn'
+        ? (current !== undefined && menuNode.sessionId !== current
+          ? '该轮属于「' + sessionTagLabel(menuSession.title, menuSession.ordinal)
+            + '」（继承轮次）；暂不能定位到具体轮次。'
+          : '暂不能定位到具体轮次。')
+        : (menuSession.outlineMissing
+          ? '该会话的轮次投影还没加载。'
+          : menuSession.ownCount === 0
+            ? '该会话还没有自己的用户输入，只是一个分叉头。'
+            : null)
 
       const items: React.ReactElement[] = [React.createElement('button', {
         key: 'jump',
         type: 'button',
         className: 'dsm__menuItem',
         onClick: () => {
-          setMenuTarget(null)
+          setMenuTargetId(null)
           // Sampled before the switch: afterwards the same question would be
           // about the Session being navigated to, not the one being left.
           const follows = sidebarShowsMap(runtime)
-          runtime.openSession(box.sessionId)
+          runtime.openSession(menuSession.id)
           if (follows) followMapIntoNextSession(runtime)
         },
       }, '跳转到该会话')]
-      if (menuNode !== undefined) {
-        items.push(React.createElement('button', {
-          key: 'center',
-          type: 'button',
-          className: 'dsm__menuItem',
-          onClick: () => {
-            setMenuTarget(null)
-            centerOn(menuNode, view.zoom)
-          },
-        }, '在画布中居中'))
-      }
+      items.push(React.createElement('button', {
+        key: 'center',
+        type: 'button',
+        className: 'dsm__menuItem',
+        onClick: () => {
+          setMenuTargetId(null)
+          centerOn(menuNode, view.zoom)
+        },
+      }, '在画布中居中'))
       items.push(React.createElement('button', {
         key: 'cancel',
         type: 'button',
         className: 'dsm__menuItem',
-        onClick: () => { setMenuTarget(null) },
+        onClick: () => { setMenuTargetId(null) },
       }, '取消'))
+      if (note !== null) {
+        items.push(React.createElement('div', { key: 'note', className: 'dsm__menuNote' }, note))
+      }
 
       menu = React.createElement(
         'div',
@@ -837,13 +1050,8 @@ export function createMapView(
           // Keeps a press inside the popover from reaching the pan handler.
           onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => { event.stopPropagation() },
         },
-        React.createElement('div', { className: 'dsm__menuTitle', title: box.title }, box.title),
+        React.createElement('div', { className: 'dsm__menuTitle', title }, title),
         items,
-        menuBead === undefined ? null : React.createElement(
-          'div',
-          { className: 'dsm__menuNote' },
-          '当前只能定位到会话，不能定位到具体轮次。',
-        ),
       )
     }
 
@@ -871,9 +1079,9 @@ export function createMapView(
           helpRow('Shift + 滚轮', '左右平移画布'),
           helpRow('Ctrl / ⌘ + 滚轮', '缩放'),
           helpRow('拖动空白处', '平移画布'),
-          helpRow('点击节点', '打开操作菜单'),
-          helpRow('点击链首标记', '展开 / 收起该线输入'),
-          helpRow('点击输入珠子', '打开该轮的操作'),
+          helpRow('点击轮次节点', '打开该轮操作菜单'),
+          helpRow('点击会话标签 / 会话头', '打开该会话操作菜单'),
+          helpRow('点击 +N 条输入', '展开折叠的直链'),
         )
         : null,
     )
@@ -883,6 +1091,7 @@ export function createMapView(
     // says which of the two the canvas is actually showing. An empty list is
     // left to the empty state instead of being reported as a fallback.
     const scopeFallback = scope === 'current' && graph.nodes.length > 0 && graph.scopeSessionId === undefined
+    const missingOutlineCount = graph.sessions.filter(session => session.outlineMissing).length
 
     const bar = React.createElement(
       'div',
@@ -891,10 +1100,8 @@ export function createMapView(
       React.createElement(
         'span',
         { className: 'dsm__meta' },
-        String(graph.sessionCount) + ' 个会话 · ' + String(graph.treeCount) + ' 棵树'
-        + (graph.outlineCount > 0
-          ? ' · ' + String(graph.openCount) + '/' + String(graph.sessionCount) + ' 条线展开'
-          : '')
+        String(graph.sessionCount) + ' 个会话 · ' + String(graph.turnCount) + ' 个轮次 · '
+        + String(graph.treeCount) + ' 棵树'
         // The toolbar's own scale: BASE_ZOOM reads as 100%.
         + ' · ' + String(Math.round(view.zoom / BASE_ZOOM * 100)) + '%',
       ),
@@ -919,10 +1126,10 @@ export function createMapView(
         segmentOption(
           '竖向',
           direction === 'vertical',
-          '会话树自上而下：子会话在父会话下方，用户输入竖着排成一列',
+          '会话树自上而下：子轮次在父轮次下方，分叉在两侧展开',
           () => { setDirection('vertical') },
         ),
-        segmentOption('横向', direction === 'horizontal', '会话树自左向右：子会话在父会话右侧', () => {
+        segmentOption('横向', direction === 'horizontal', '会话树自左向右：子轮次在父轮次右侧', () => {
           setDirection('horizontal')
         }),
       ),
@@ -931,13 +1138,16 @@ export function createMapView(
         : null,
       React.createElement(
         'label',
-        { className: 'dsm__toggle', title: '一次铺开所有会话的用户输入；关闭后可以逐条线单独展开' },
+        {
+          className: 'dsm__toggle',
+          title: '直链超过 ' + String(RUN_FOLD_MIN) + ' 条输入时折叠中间段；点击画布上的 +N 条输入可展开',
+        },
         React.createElement('input', {
           type: 'checkbox',
-          checked: showPrompts,
-          onChange: () => { setShowPrompts(!showPrompts) },
+          checked: foldRuns,
+          onChange: toggleFoldRuns,
         }),
-        '全局显示用户输入',
+        '折叠长直链',
       ),
       React.createElement(
         'label',
@@ -959,8 +1169,14 @@ export function createMapView(
         onClick: () => { zoomBy(BASE_ZOOM / view.zoom) },
       }, '100%'),
       help,
-      showPrompts && graph.outlineCount === 0
-        ? React.createElement('span', { className: 'dsm__error' }, '列表里没有 turnOutline 投影，读不到用户输入')
+      missingOutlineCount > 0
+        ? React.createElement(
+          'span',
+          { className: missingOutlineCount === graph.sessionCount ? 'dsm__error' : 'dsm__note' },
+          missingOutlineCount === graph.sessionCount
+            ? '列表里没有 turnOutline 投影，只能显示会话头'
+            : String(missingOutlineCount) + ' 个会话没有轮次投影，只显示会话头',
+        )
         : null,
       error === null ? null : React.createElement('span', { className: 'dsm__error' }, error),
     )
@@ -999,86 +1215,106 @@ export function createMapView(
           className: 'dsm__caption',
           style: { left: caption.x + 'px', top: caption.y + 'px' },
         }, caption.text)),
-        graph.beads.map(bead => React.createElement(
-          'button',
-          {
-            key: bead.id,
-            type: 'button',
-            'data-dsm-hit': 'bead',
-            'data-menu': bead.id === menuTargetId ? 'true' : 'false',
-            className: 'dsm__bead',
-            style: {
-              left: bead.x + 'px',
-              top: bead.y + 'px',
-              width: BEAD_W + 'px',
-              height: BEAD_H + 'px',
-            },
-            title: bead.title,
-            onClick: () => { setMenuTarget({ kind: 'bead', id: bead.id }) },
-          },
-          bead.title,
-        )),
         graph.markers.map(marker => React.createElement(
           'button',
           {
             key: marker.id,
             type: 'button',
-            'data-dsm-hit': marker.kind,
-            'data-kind': marker.kind,
+            'data-dsm-hit': 'run',
+            'data-kind': 'run',
             className: 'dsm__marker',
             style: {
               left: marker.x + 'px',
               top: marker.y + 'px',
               width: MARKER_W + 'px',
-              height: BEAD_H + 'px',
+              height: MARKER_H + 'px',
             },
-            title: marker.kind === 'line'
-              ? (marker.open
-                ? '收起这条线的 ' + String(marker.count) + ' 轮用户输入'
-                : '展开这条线的 ' + String(marker.count) + ' 轮用户输入')
-              : ('前 ' + String(marker.count) + ' 轮继承自父会话，已显示在父会话的链上。'
-                + (marker.open ? '点击折叠' : '点击展开')),
-            onClick: () => {
-              if (marker.kind === 'line') setLineOpen(marker.sessionId, !marker.open)
-              else toggleInherited(marker.sessionId)
-            },
+            title: '展开这条直链中间的 ' + String(marker.count) + ' 条用户输入',
+            onClick: () => { openRun(marker.runKey) },
           },
-          (marker.open ? '− ' : '+ ') + String(marker.count)
-          + (marker.kind === 'line' ? ' 输入' : ' 继承'),
+          '+ ' + String(marker.count) + ' 条输入',
         )),
-        graph.nodes.map(node => React.createElement(
-          'button',
-          {
-            key: node.id,
-            type: 'button',
-            'data-dsm-hit': 'node',
-            'data-current': node.id === current ? 'true' : 'false',
-            'data-subagent': node.subagent ? 'true' : 'false',
-            'data-menu': node.id === menuTargetId ? 'true' : 'false',
-            className: 'dsm__node',
-            style: {
-              left: node.x + 'px',
-              top: node.y + 'px',
-              width: NODE_W + 'px',
-              height: NODE_H + 'px',
+        graph.nodes.map(node => {
+          const session = graph.sessionsById[node.sessionId]
+          if (session === undefined) return null
+          const status = session.running ? '运行中' : session.completed ? '已完成' : '空闲'
+          const state = session.running ? 'running' : session.completed ? 'completed' : 'idle'
+          const isCurrent = node.sessionId === current
+          const onCurrentPath = !isCurrent && currentPath.has(node.id)
+          const hiddenNote = node.hiddenInherited > 0
+            ? '继承 ' + String(node.hiddenInherited) + ' 轮（父会话已隐藏）'
+            : ''
+          const titleLines: string[] = node.kind === 'head'
+            ? [
+              session.title,
+              '会话' + String(session.ordinal) + ' · ' + status + (session.subagent ? ' · 子代理' : ''),
+              session.outlineMissing ? '轮次投影未加载' : '尚无自己的用户输入',
+              hiddenNote,
+            ]
+            : [
+              (node.turn === null ? '' : '#' + String(node.turn) + ' ')
+                + (node.prompt === '' ? '(无提示预览)' : node.prompt),
+              node.response,
+              '会话' + String(session.ordinal) + ' · ' + session.title,
+              status + (session.subagent ? ' · 子代理' : ''),
+              node.hiddenInherited > 0 ? hiddenNote : '',
+            ]
+          const title = titleLines.filter(line => line !== '').join('\n')
+          const prompt = node.kind === 'head'
+            ? (session.outlineMissing ? '投影未加载' : hiddenNote !== '' ? hiddenNote : '尚无输入')
+            : (node.turn === null ? '' : '#' + String(node.turn) + ' ')
+              + (node.prompt === '' ? '(无提示预览)' : node.prompt)
+          return React.createElement(
+            'button',
+            {
+              key: node.id,
+              type: 'button',
+              'data-dsm-hit': 'node',
+              'data-kind': node.kind,
+              'data-head': node.isHead ? 'true' : 'false',
+              'data-tone': String(session.tone),
+              'data-current': isCurrent ? 'true' : 'false',
+              'data-on-current-path': onCurrentPath ? 'true' : 'false',
+              'data-subagent': session.subagent ? 'true' : 'false',
+              'data-menu': node.id === menuTargetId ? 'true' : 'false',
+              className: 'dsm__node',
+              style: {
+                left: node.x + 'px',
+                top: node.y + 'px',
+                width: NODE_W + 'px',
+                height: NODE_H + 'px',
+              },
+              title,
+              onClick: () => { setMenuTargetId(node.id) },
             },
-            title: node.title,
-            onClick: () => { setMenuTarget({ kind: 'node', id: node.id }) },
-          },
-          React.createElement('span', { className: 'dsm__nodeTitle' }, node.title),
-          React.createElement(
-            'span',
-            { className: 'dsm__nodeMeta' },
-            React.createElement('span', {
-              className: 'dsm__dot',
-              'data-state': node.running ? 'running' : (node.completed ? 'completed' : 'idle'),
-            }),
-            node.running ? '运行中' : (node.completed ? '已完成' : '空闲'),
-            node.childCount > 0 ? ' · ' + node.childCount + ' 分支' : '',
-            node.subagent ? ' · 子代理' : '',
-            node.inheritedCount > 0 ? ' · 继承 ' + node.inheritedCount : '',
-          ),
-        )),
+            node.isHead
+              ? React.createElement(
+                'span',
+                { className: 'dsm__tagRow' },
+                React.createElement(
+                  'span',
+                  {
+                    className: 'dsm__tag',
+                    title: '会话' + String(session.ordinal) + ' · ' + session.title,
+                  },
+                  React.createElement('span', { className: 'dsm__dot', 'data-state': state }),
+                  React.createElement(
+                    'span',
+                    { className: 'dsm__tagText' },
+                    sessionTagLabel(session.title, session.ordinal),
+                  ),
+                ),
+                node.kind === 'turn' && hiddenNote !== ''
+                  ? React.createElement('span', { className: 'dsm__tagNote' }, String(node.hiddenInherited) + ' 隐藏')
+                  : null,
+              )
+              : null,
+            React.createElement('span', { className: 'dsm__prompt' }, prompt),
+            node.forkCount > 0
+              ? React.createElement('span', { className: 'dsm__branch' }, String(node.forkCount) + ' 分支')
+              : null,
+          )
+        }),
       )
 
     return React.createElement(

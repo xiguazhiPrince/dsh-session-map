@@ -2,7 +2,7 @@
  * Browser half: the Session map plugin.
  *
  * Contributes three bodies and two right-sidebar tab types: a plain overview as
- * a Conversation tab and as a right-column tab, a fork-tree canvas as a
+ * a Conversation tab and as a right-column tab, a turn-tree canvas as a
  * Conversation tab, a right-column tab, and a Session header launcher.
  *
  * Services are read through `ctx.get` against local structural types rather
@@ -22,10 +22,12 @@ import {
   createMapLauncher,
   createMapView,
   createOverviewTab,
+  DEFAULT_FOLD_RUNS,
   DEFAULT_MAP_DIRECTION,
   DEFAULT_MAP_SCOPE,
   SidebarOverviewBody,
   type MapFlags,
+  type SessionEventsFace,
   type SessionMapRuntime,
   type SidebarRightFace,
 } from './views'
@@ -191,24 +193,18 @@ export function apply(ctx: Context): void {
   // Which way the trees grow. A fork reads as a descent, so the canvas opens
   // top-down and keeps the original left-to-right layout on the same switch.
   const directionFlag = createFlag(DEFAULT_MAP_DIRECTION)
-  const showPromptsFlag = createFlag(false)
+  // Long straight runs fold their middle stretch by default; expanding one is a
+  // per-run override, and the toolbar switch asks for every turn at once.
+  const foldRunsFlag = createFlag(DEFAULT_FOLD_RUNS)
+  const expandedRunsFlag = createFlag(new Set<string>())
   const hideSubagentsFlag = createFlag(true)
-  // Per-line overrides. Two sets, each recording one user gesture in the mode
-  // it was made in, so flipping the global switch restores rather than
-  // inverts what the other mode had.
-  const openedLinesFlag = createFlag(new Set<string>())
-  const collapsedLinesFlag = createFlag(new Set<string>())
-  // Session ids whose inherited turn prefix is expanded rather than folded.
-  const expandedInheritedFlag = createFlag(new Set<string>())
 
   const flags: MapFlags = {
     scope: scopeFlag,
     direction: directionFlag,
-    showPrompts: showPromptsFlag,
+    foldRuns: foldRunsFlag,
+    expandedRuns: expandedRunsFlag,
     hideSubagents: hideSubagentsFlag,
-    openedLines: openedLinesFlag,
-    collapsedLines: collapsedLinesFlag,
-    expandedInherited: expandedInheritedFlag,
   }
 
   const runtime: SessionMapRuntime = {
@@ -226,6 +222,9 @@ export function apply(ctx: Context): void {
       const sessions = lookup<SessionsService>(ctx, 'sessions')
       if (sessions !== undefined && typeof sessions.open === 'function') sessions.open(sessionId)
     },
+    // Only the loaded event windows can add steering inputs to the outline;
+    // the canvas reads the current Session and its ancestors, then releases.
+    sessions: () => lookup<SessionEventsFace>(ctx, 'sessions'),
   }
 
   const MapLauncher = createMapLauncher(runtime)
@@ -304,7 +303,7 @@ export function apply(ctx: Context): void {
         MAP_KIND,
         () => '会话图谱',
         () => '会话图谱',
-        () => '所有会话的 fork 树画布',
+        () => '所有会话的轮次树画布',
       ),
       'session-map: rightbar tab type',
     )

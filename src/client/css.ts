@@ -191,10 +191,9 @@ export const CSS = `
 .dsm__stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .dsm__svg { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 .dsm__edge { fill: none; stroke: var(--dsw-alias-border-l2); stroke-width: 1.5; }
+.dsm__edge--chain { stroke: var(--dsw-alias-border-l2); }
+.dsm__edge--fork { stroke: var(--dsw-alias-border-l2); }
 .dsm__edge--sub { stroke-dasharray: 4 4; }
-/* The outgoing wire a Session's turns are threaded on: one straight run from
-   the card's right edge to the point its branches leave from. */
-.dsm__edge--wire { stroke: var(--dsw-alias-border-l2); stroke-width: 1.5; stroke-dasharray: 1 4; stroke-linecap: round; }
 .dsm__caption {
   position: absolute;
   font-size: 11px;
@@ -204,17 +203,18 @@ export const CSS = `
   white-space: nowrap;
 }
 /* border-l2 is the theme's stronger neutral line; unselected cards need it to
-   read as cards at all against the canvas. Selection adds the brand ring on
-   top, so the two states stay distinct. */
+   read as cards at all against the canvas. The left stripe is the Session's own
+   colour, so a chain of own turns reads as one line. */
 .dsm__node {
   position: absolute;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 2px;
+  gap: 1px;
   box-sizing: border-box;
-  padding: 6px 10px;
+  padding: 5px 9px 5px 11px;
   border: 1.5px solid var(--dsw-alias-border-l2);
+  border-left: 3px solid var(--dsm-tone, var(--dsw-alias-border-l2));
   border-radius: 9px;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
@@ -224,71 +224,119 @@ export const CSS = `
   cursor: pointer;
   overflow: hidden;
 }
-.dsm__node:hover { border-color: var(--dsw-alias-brand-primary); }
+.dsm__node:hover {
+  border-color: var(--dsw-alias-brand-primary);
+  border-left-color: var(--dsm-tone, var(--dsw-alias-brand-primary));
+}
 .dsm__node[data-current='true'] {
   border-color: var(--dsw-alias-brand-primary);
+  border-left-color: var(--dsm-tone, var(--dsw-alias-brand-primary));
   box-shadow: 0 0 0 1.5px var(--dsw-alias-brand-primary);
 }
+/* The inherited prefix of the current Session stays visible as context without
+   competing with the Session's own strong ring. */
+.dsm__node[data-on-current-path='true'] {
+  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 45%, var(--dsw-alias-border-l2));
+  border-left-color: var(--dsm-tone, var(--dsw-alias-border-l2));
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 5%, var(--dsw-alias-bg-layer-1));
+}
 .dsm__node[data-subagent='true'] { border-style: dashed; }
-.dsm__node[data-menu='true'] { border-color: var(--dsw-alias-brand-primary); }
-.dsm__nodeTitle { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
-.dsm__nodeMeta {
+.dsm__node[data-menu='true'] {
+  border-color: var(--dsw-alias-brand-primary);
+  border-left-color: var(--dsm-tone, var(--dsw-alias-brand-primary));
+}
+/* A Session with no own turn still gets a place in the tree: its label is the
+   whole card, and the dashed edge says this is an anchor rather than a turn. */
+.dsm__node[data-kind='head'] {
+  border-style: dashed;
+  background: var(--dsw-alias-bg-layer-2);
+}
+.dsm__tagRow {
   display: flex;
   align-items: center;
   gap: 5px;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
+  min-width: 0;
+  padding-right: 34px;
 }
-/* One user turn as a labelled bead threaded on its Session's outgoing wire:
-   an opaque capsule that hides the wire behind it, and a button so it can
-   offer its own actions. The preview is cut by the fixed width; the tooltip
-   always carries the whole line the Host projected. */
-.dsm__bead {
-  position: absolute;
-  display: block;
-  appearance: none;
-  box-sizing: border-box;
-  padding: 0 10px;
-  line-height: 20px;
-  border: 1px solid var(--dsw-alias-border-l2);
+.dsm__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 0 6px;
   border-radius: 999px;
-  background: var(--dsw-alias-bg-base);
-  color: var(--dsw-alias-label-secondary);
-  font-family: inherit;
+  background: color-mix(in srgb, var(--dsm-tone, var(--dsw-alias-border-l2)) 16%, transparent);
+  color: var(--dsm-tone, var(--dsw-alias-label-secondary));
   font-size: 10px;
-  text-align: left;
+  font-weight: 600;
+  line-height: 16px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: pointer;
 }
-.dsm__bead:hover { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
-.dsm__bead[data-menu='true'] { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
-/* A line's state as one clickable capsule on its wire: either this Session's
-   turns are hidden and the capsule carries a plus count, or they are drawn and
-   it carries a minus count that collapses them again. The inherited-prefix
-   folder uses the same shape under its own key. */
+.dsm__tagText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dsm__tagNote {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 9px;
+  white-space: nowrap;
+}
+.dsm__prompt {
+  display: block;
+  padding-right: 34px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 15px;
+}
+.dsm__node[data-kind='head'] .dsm__prompt { color: var(--dsw-alias-label-secondary); }
+.dsm__branch {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 9px;
+  line-height: 13px;
+  white-space: nowrap;
+}
+/* Eight stable session tones. The tag tints itself with the tone and the card's
+   left stripe carries it down the Session's own chain. */
+.dsm__node[data-tone='0'] { --dsm-tone: #4f7cff; }
+.dsm__node[data-tone='1'] { --dsm-tone: #2aa889; }
+.dsm__node[data-tone='2'] { --dsm-tone: #c26a2e; }
+.dsm__node[data-tone='3'] { --dsm-tone: #9a5cd0; }
+.dsm__node[data-tone='4'] { --dsm-tone: #c94f75; }
+.dsm__node[data-tone='5'] { --dsm-tone: #6b8e23; }
+.dsm__node[data-tone='6'] { --dsm-tone: #3f8fa8; }
+.dsm__node[data-tone='7'] { --dsm-tone: #8a6d3b; }
+/* One folded straight run: the plus count that opens the middle again. It sits
+   on the straight chain edge between the run's kept head and tail. */
 .dsm__marker {
   position: absolute;
   display: block;
   box-sizing: border-box;
   padding: 0 10px;
   line-height: 20px;
-  border: 1px dashed var(--dsw-alias-border-l2);
+  border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 999px;
-  background: var(--dsw-alias-bg-base);
-  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
   font-family: inherit;
   font-size: 10px;
+  font-weight: 600;
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
   cursor: pointer;
 }
 .dsm__marker:hover { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
-.dsm__marker[data-kind='line'] { border-style: solid; }
 /* The node's action popover. It lives outside the zoom transform, so its text
    stays legible at any canvas scale; its coordinates are derived from the
    target's screen position on every render, which keeps it pinned while
