@@ -12,3 +12,6 @@ pnpm-lock.yaml
 
 # lib/ is deliberately NOT ignored — see the README. The committed build
 # output is what makes an install run no build script at all.
+
+# pnpm may keep a project-local content-addressable store.
+.pnpm-store/
