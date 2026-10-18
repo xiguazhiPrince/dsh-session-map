@@ -137,22 +137,22 @@ describe('buildGraph turn tree', () => {
     expect(sessionOf(graph, 'grandchild').ownCount).toBe(0)
     expect(graph.edges.every(edge => edge.kind !== 'chain' || edge.d !== '')).toBe(true)
 
-    // The parent's own continuation stays in one band; the two chips are the
-    // side branches, and an empty child hangs straight under its empty parent.
+    // The parent is centered over its branches: one empty chip on the left, the
+    // parent's own continuation in the middle, the other chip on the right.
     const rootTurn1 = turnNodeOf(graph, 'root', 1)
     const rootTurn3 = turnNodeOf(graph, 'root', 3)
     const leftChip = headNodeOf(graph, 'left')
     const rightChip = headNodeOf(graph, 'right')
     const grandchildChip = headNodeOf(graph, 'grandchild')
-    expect(forkTurn?.band).toBe(0)
+    expect(forkTurn?.band).toBe(1)
     expect(rootTurn1?.x).toBe(forkTurn?.x)
     expect(rootTurn3?.x).toBe(forkTurn?.x)
     expect(forkTurn?.y).toBeGreaterThan(rootTurn1?.y ?? 0)
     expect(rootTurn3?.y).toBeGreaterThan(forkTurn?.y ?? 0)
-    expect(leftChip.band).toBe(1)
+    expect(leftChip.band).toBe(0)
     expect(rightChip.band).toBe(2)
-    expect(leftChip.x).toBeGreaterThan(forkTurn?.x ?? 0)
-    expect(rightChip.x).toBeGreaterThan(leftChip.x)
+    expect(leftChip.x).toBeLessThan(forkTurn?.x ?? 0)
+    expect(rightChip.x).toBeGreaterThan(forkTurn?.x ?? 0)
     expect(grandchildChip.band).toBe(leftChip.band)
     expect(grandchildChip.x).toBe(leftChip.x)
     expect(grandchildChip.y).toBeGreaterThan(leftChip.y)

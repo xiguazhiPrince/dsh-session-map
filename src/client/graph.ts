@@ -533,19 +533,20 @@ function nearEdge(axis: GrowthAxis, node: GraphNode): number {
 }
 
 /**
- * The straight run from one turn to the next turn of the same Session.
+ * The run from one turn to the next turn of the same Session. A centered parent
+ * may sit between two fork branches, so the child can be in another band; the
+ * line then runs diagonally instead of pretending both cards share a centre.
  * @param axis - the direction in force.
  * @param from - the parent card.
  * @param to - the child card.
  * @returns the path data.
  */
 function chainPath(axis: GrowthAxis, from: GraphNode, to: GraphNode): string {
-  const centre = crossCentre(axis, from)
-  const start = farEdge(axis, from)
-  const end = nearEdge(axis, to)
-  return axis.vertical
-    ? 'M ' + centre + ' ' + start + ' L ' + centre + ' ' + end
-    : 'M ' + start + ' ' + centre + ' L ' + end + ' ' + centre
+  const x1 = axis.vertical ? crossCentre(axis, from) : farEdge(axis, from)
+  const y1 = axis.vertical ? farEdge(axis, from) : crossCentre(axis, from)
+  const x2 = axis.vertical ? crossCentre(axis, to) : nearEdge(axis, to)
+  const y2 = axis.vertical ? nearEdge(axis, to) : crossCentre(axis, to)
+  return 'M ' + x1 + ' ' + y1 + ' L ' + x2 + ' ' + y2
 }
 
 /**
@@ -1074,20 +1075,35 @@ export function buildGraph(
       visitedBands.add(node.id)
       const chain = visibleChainOf.get(node.id)
       const forks = forkChildrenOf[node.id] ?? []
+      const children: GraphNode[] = []
       if (chain !== undefined) {
-        assignBands(chain)
-        node.band = chain.band
-      } else if (forks.length === 0) {
+        // The Session's own continuation sits between its fork branches, so the
+        // parent is centered and the branches fan out on both sides. With an odd
+        // number of forks the split is arbitrary but still balanced as far as
+        // possible.
+        const before = Math.floor(forks.length / 2)
+        for (let index = 0; index < before; index += 1) {
+          const fork = forks[index]
+          if (fork !== undefined) children.push(fork)
+        }
+        children.push(chain)
+        for (let index = before; index < forks.length; index += 1) {
+          const fork = forks[index]
+          if (fork !== undefined) children.push(fork)
+        }
+      } else {
+        for (const fork of forks) children.push(fork)
+      }
+      for (const child of children) assignBands(child)
+      if (children.length === 0) {
         node.band = bandCursor
         bandCursor += 1
+        return
       }
-      for (const fork of forks) assignBands(fork)
-      if (chain === undefined && forks.length > 0) {
-        const firstFork = forks[0]
-        const lastFork = forks[forks.length - 1]
-        if (firstFork !== undefined && lastFork !== undefined) {
-          node.band = (firstFork.band + lastFork.band) / 2
-        }
+      const first = children[0]
+      const last = children[children.length - 1]
+      if (first !== undefined && last !== undefined) {
+        node.band = (first.band + last.band) / 2
       }
     }
     assignBands(root)
