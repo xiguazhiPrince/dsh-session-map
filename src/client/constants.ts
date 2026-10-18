@@ -85,11 +85,15 @@ export const MAX_ZOOM = 2.8
 export const WHEEL_LINE = 16
 
 // Trackpad pinch arrives as a ctrl-modified wheel whose deltas are small and
-// arrive in bursts, where a mouse notch arrives as one delta near 100. One base
-// serves both, so the base is set for the pinch and the per-event step is capped
-// to keep a coarse notch from lurching.
+// arrive in bursts, where a mouse notch arrives as one delta near 100. The base
+// is tuned for the pinch's short deltas (about 2% per pixel at 1.02), and the
+// minimum below gives a sub-pixel event a usable step too. The per-event cap
+// still keeps a coarse notch from lurching.
 /** Scale one pixel of wheel delta multiplies the canvas by. */
-export const WHEEL_ZOOM_BASE = 1.005
+export const WHEEL_ZOOM_BASE = 1.02
+
+/** Smallest wheel delta a zoom event applies, so trackpad micro-events still move. */
+export const WHEEL_ZOOM_MIN_DELTA = 1
 
 /** Largest scale change one wheel event may apply on its own. */
 export const WHEEL_ZOOM_MAX_STEP = 1.25

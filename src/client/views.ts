@@ -28,6 +28,7 @@ import {
   WHEEL_LINE,
   WHEEL_ZOOM_BASE,
   WHEEL_ZOOM_MAX_STEP,
+  WHEEL_ZOOM_MIN_DELTA,
 } from './constants'
 import {
   buildGraph,
@@ -873,10 +874,13 @@ export function createMapView(
           const pointerX = event.clientX - rect.left
           const pointerY = event.clientY - rect.top
           // A trackpad pinch is a burst of small deltas, so the base is what its
-          // sensitivity comes from; the cap only ever bites on a coarse wheel
-          // notch, which would otherwise land as one big jump.
+          // sensitivity comes from; the minimum keeps a sub-pixel event from
+          // feeling dead, and the cap only bites on a coarse wheel notch that
+          // would otherwise land as one big jump.
+          const delta = -event.deltaY * unit
+          const magnitude = Math.max(Math.abs(delta), WHEEL_ZOOM_MIN_DELTA)
           const factor = clampNumber(
-            Math.pow(WHEEL_ZOOM_BASE, -event.deltaY * unit),
+            Math.pow(WHEEL_ZOOM_BASE, Math.sign(delta) * magnitude),
             1 / WHEEL_ZOOM_MAX_STEP,
             WHEEL_ZOOM_MAX_STEP,
           )
