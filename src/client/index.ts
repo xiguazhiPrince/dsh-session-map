@@ -1,10 +1,12 @@
 /**
  * Browser half: the Session map plugin.
  *
- * Contributes the Session map UI and a composer Git branch badge: a plain
+ * Contributes the Session map UI plus two smaller seats: a composer Git branch
+ * badge and the Settings → Clone from Git page. The map itself is a plain
  * overview as a Conversation tab and as a right-column tab, a turn-tree canvas
- * as a Conversation tab, a right-column tab, a Session header launcher, and the
- * branch reading in `conversation.input.left`.
+ * as a Conversation tab, a right-column tab, and a Session header launcher; the
+ * branch reading lives in `conversation.input.left`, and the clone form is a
+ * `settings.section` page (see `../git-workspace/client`).
  *
  * Services are read through `ctx.get` against local structural types rather
  * than the product's own browser packages: those are published at a prerelease
@@ -20,6 +22,7 @@ import { createGitBranchBadge, type GitBranchRuntime } from './branch'
 import { CSS } from './css'
 import { MAP_KIND, MAP_TYPE_ID, OVERVIEW_KIND, OVERVIEW_TYPE_ID } from './constants'
 import { createFlag } from './flags'
+import { createGitWorkspaceRuntime, createGitWorkspaceSettings } from '../git-workspace/client'
 import {
   createMapLauncher,
   createMapView,
@@ -238,6 +241,15 @@ export function apply(ctx: Context): void {
     { name: 'conversation.session.header.utilities', id: 'session-map-launcher', order: 40 },
     MapLauncher,
   )), 'session-map: header launcher')
+
+  // Clone from Git lives in Settings, not the sidebar: a repository is set up
+  // once per project, so it earns a settings page rather than a permanent
+  // navigation cell. The Host half owns the clone and Workspace registration.
+  const GitWorkspaceSettings = createGitWorkspaceSettings(createGitWorkspaceRuntime(ctx))
+  ctx.effect(() => slots.inject('settings.section', () => slots.register(
+    { name: 'settings.section', id: 'git-workspace', order: 60, label: '从 Git 克隆' },
+    GitWorkspaceSettings,
+  )), 'git-workspace: settings section')
 
   // The branch badge reads `.git/HEAD` through the Host's file Remote. That
   // Remote belongs to another package, so it is an optional capability: a

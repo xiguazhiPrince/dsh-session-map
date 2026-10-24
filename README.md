@@ -21,6 +21,7 @@ DSH 的会话会从某一轮 **fork** 出去，可左侧栏只是一张平铺列
 | **画布手感** | 滚轮平移、Shift + 滚轮横向平移、Ctrl / ⌘ + 滚轮缩放、拖空白平移（不会选中文字），外加适应窗口 / 定位当前 / 100% |
 | **一屏概览** | 另有一个「会话概览」标签页：轮次、步骤、模型耗时、工具耗时、输出 token、运行状态 |
 | **三个入口** | 对话标签页、会话头部开关、右侧栏常驻标签页——哪里顺手用哪里（对话标签页默认关闭，见[使用](#对话标签栏的两个标签页默认关闭)） |
+| **从 Git 克隆** | Settings 里的独立页面：填仓库地址、选存放目录（记住上次选择）、按需打开浅克隆，点「克隆」自动 clone 并添加工作区 |
 
 ![图谱细节：会话颜色、轮次节点、会话标签与当前会话高亮](docs/example-map.png)
 
@@ -155,6 +156,20 @@ localStorage.removeItem('dsh.session-map.conversationViews')        // 回到出
 
 **为什么不用 profile 里的 `config`**：浏览器半由 web boot 用**裸 `{ name }`** 创建（`packages/client/web/src/boot-client.ts:50`），而 boot manifest 的插件行只带 `id` / `inject` / `immediately`——宿主行的 `config` 到不了客户端插件。给这个包写 `config` 不会有任何效果。
 
+### 从 Git 克隆并添加工作区
+
+入口在 **Settings → 从 Git 克隆**（`settings.section`，不占左侧边栏）：填仓库地址 → 选存放目录 → 按需打开「浅克隆」→ 点「克隆」。宿主执行 `git clone`，成功后把克隆出的目录注册成 DSH 工作区；侧边栏通过工作区自己的 follow 流自动出现这一行，不需要刷新页面。
+
+- **存放目录有记忆**：上次的选择存在 `localStorage` 的 `dsh.git-workspace.parentDir`；第一次打开时用工作区列表里排在最前的一个的父目录当默认值（默认顺序下就是最近添加的那个，通常正是你的 projects 根目录），没有工作区才退回宿主默认目录。**浅克隆不记忆**，每次打开都回到关闭状态。
+- **浅克隆默认关闭**：默认克隆完整提交历史；打开后只拉最近一次提交（`--depth 1`）。这个开关是「这一次」的选择，不会被记住。
+- **目标目录** = 所选目录 + 仓库地址最后一段（去掉 `.git`）。目标已存在、父目录不存在、认证失败、仓库不存在、网络不通、超时各有独立文案；git 的 stderr 尾部会显示在错误框里。
+- **克隆期间**：同一时间只允许一个克隆；超时 15 分钟；关闭设置页或刷新页面会中止请求，宿主随之终止正在跑的 `git clone`。
+- **私有仓库**不会弹密码框（`GIT_TERMINAL_PROMPT=0`），请先在终端配好 SSH key / credential helper。
+- **宿主路由**只有两个：`GET /plugin-git-workspace/state`、`POST /plugin-git-workspace/clone`；只接受来自 loopback 连接（`socket.remoteAddress`）并且 Host / Origin 都是 loopback 的请求，`clone` 还要求 `content-type: application/json`。把 GUI 暴露到局域网时，这个页面会被拒绝——克隆只在本机操作。
+- **选目录**用的是工作区自己的原生目录选择器（`ctx.get('uiWorkspace').pickDirectory()`）；远程 / SSH 场景下该能力可能不可用，页面会显示错误并允许手输路径。
+
+实现位置：`src/git-workspace/git.ts`（纯规则：地址校验、目录名推导、argv、失败分类）、`host.ts`（路由 + `git clone` + `workspaceRegistry.create`）、`client.ts`（Settings 页、本地记忆与宿主请求封装）。
+
 ## 本地开发
 
 ```sh
@@ -165,6 +180,8 @@ pnpm test         # 轮次树布局与画布渲染测试（vitest）
 ```
 
 `tsdown.config.ts` 不做类型检查、也不用 project references，所以构建是自包含的，类型检查与测试是独立的两步。
+
+**改了宿主半怎么让正在跑的 GUI 生效**：`pnpm build` 之后，改一下 profile 的 `cordis.patch.yml`（追加或改一行注释即可）触发 HMR 重新组合；DSH 0.2.1 会检测到 link 包的目标文件变化并替换宿主插件，不用重启应用。浏览器半由 `dsh-client-hmr` 轮询 bundle 变化并自动换掉，通常也不需要手动刷新。真实重启仍然是最保险的验证方式。
 
 **提交前务必 `pnpm build`**：`lib/` 是仓库内容的一部分，安装方不会替你构建。
 
@@ -198,6 +215,8 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 
 **0.2.0 轮次树改造**：`pnpm test`（18 个布局与渲染用例）、`pnpm typecheck`、`pnpm build` 均通过；`lib/` 已重建。README 里的两张截图都已换成 0.2.0 的轮次树界面。
 
+**Settings → 从 Git 克隆**：`settings.section` 已实时注册（`Slots.listSubTree` 里能看到 `dsh-session-map` 的 `git-workspace` 条目，order 60、active）；宿主路由用 curl 验证了 state、403 信任校验、参数校验、真实本地仓库 clone 与工作区注册；测试期间注册的临时工作区和临时目录都已清理。原生目录选择器和页面上的点击流程还需要在浏览器里人工确认一次。
+
 ## 宿主契约（升版必读）
 
 浏览器半读的是**运行时快照**，产品不承诺它们稳定。已经踩到过两次，都表现为「样式坏了」但其实是契约漂移：
@@ -216,7 +235,12 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 ## 源码结构
 
 ```
-src/index.ts            宿主半（空实现，只为占据 bundle 行）
+src/index.ts            宿主半：安装 /plugin-git-workspace 路由（缺服务时保持空转）
+src/git-workspace/git.ts    纯规则：地址校验、仓库目录名、argv、失败分类、状态信封类型
+src/git-workspace/host.ts   宿主路由：state / clone，调用 subprocess 与 workspaceRegistry
+src/git-workspace/client.ts Settings 页（settings.section）、本地记忆与宿主请求封装
+src/git-workspace/git.test.ts    规则测试（vitest）
+src/git-workspace/client.test.ts 页面服务端渲染冒烟测试（vitest）
 src/client/index.ts     apply：样式表、插件级开关、座位与标签页注册
 src/client/views.ts     概览页、头部按钮、轮次树画布工厂
 src/client/graph.ts     布局：范围过滤、生长方向、轮次联合树、steering 输入、会话头、长直链折叠、连边
