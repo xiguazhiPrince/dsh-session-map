@@ -38,7 +38,7 @@ import {
 } from './views'
 
 /** Plugin name the Loader reports for this bundle's browser half. */
-export const name = 'dsh-session-map'
+export const name = '@xiguazhiprince/dsh-session-map'
 
 /** Hard dependency: there is nothing to register into before the slot registry exists. */
 export const inject = ['slots']

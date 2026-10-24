@@ -5,7 +5,7 @@ import type { UserConfig } from 'tsdown'
  * It must equal the package name: the shell serves the bundle as
  * `/plugins/<id>/client.js` and looks the row up by the same id.
  */
-const ID = 'dsh-session-map'
+const ID = '@xiguazhiprince/dsh-session-map'
 
 /**
  * Two artifacts, one pass.

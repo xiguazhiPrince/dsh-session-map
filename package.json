@@ -1,7 +1,7 @@
 {
-  "name": "dsh-session-map",
-  "version": "0.2.0",
-  "description": "Session map: a turn-tree canvas over every DSH session — users' turns are nodes, sessions are coloured lines and tags, and forks leave from the exact inherited turn — as a Conversation tab and two right-sidebar tabs",
+  "name": "@xiguazhiprince/dsh-session-map",
+  "version": "0.3.0",
+  "description": "Session map: a turn-tree canvas over every DSH session — users' turns are nodes, sessions are coloured lines and tags, and forks leave from the exact inherited turn — as a Conversation tab and two right-sidebar tabs. Also adds a Settings → Clone from Git page that clones a repository and registers the directory as a workspace",
   "type": "module",
   "license": "MIT",
   "main": "lib/index.js",
@@ -37,5 +37,26 @@
   "files": [
     "lib",
     "cordis.patch.yml"
-  ]
+  ],
+  "author": "xiguazhiPrince",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "session",
+    "fork-tree",
+    "visualization",
+    "git"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xiguazhiPrince/dsh-session-map.git"
+  },
+  "homepage": "https://github.com/xiguazhiPrince/dsh-session-map#readme",
+  "bugs": {
+    "url": "https://github.com/xiguazhiPrince/dsh-session-map/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

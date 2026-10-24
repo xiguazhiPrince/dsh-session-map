@@ -27,17 +27,25 @@ DSH 的会话会从某一轮 **fork** 出去，可左侧栏只是一张平铺列
 
 ## 安装
 
-GitHub 直装：
+npm（`@xiguazhiprince/dsh-session-map`，预构建、无安装期脚本）：
 
 ```sh
 # 装进 web profile —— 就是 `dsh web` 启动的那个
-dsh plugin --profile web add github:xiguazhiPrince/dsh-session-map
+dsh plugin --profile web add @xiguazhiprince/dsh-session-map
 
 # 换你自己的 profile 名即可，例如 tui
-dsh plugin --profile <你的 profile> add github:xiguazhiPrince/dsh-session-map
+dsh plugin --profile <你的 profile> add @xiguazhiprince/dsh-session-map
+```
+
+也可以直接从 GitHub 安装（装到的就是 main）：
+
+```sh
+dsh plugin --profile web add github:xiguazhiPrince/dsh-session-map
 ```
 
 profile 名要**已经存在**于 `$DSH_HOME/profiles` 下（`dsh --help` 里 `--profile` 那一段就是它）；想新建一个就先用模板派生：`dsh myweb --from-default-profile web` 会照 `web` 模板建出 `myweb` 并启动它。安装走的是 profile 自己的 pnpm，装完这个包会同时写进它的 `dependencies` 与 `dsh.profile.bundles`。
+
+**npm 名是 scoped 的 `@xiguazhiprince/dsh-session-map`**：未 scoped 的 `dsh-session-map` 在 npm 上已被另一个作者的同类插件占用，与本仓库无关。
 
 **预构建分发。** 仓库里直接提交了构建产物 `lib/`，并且没有 `prepare` 脚本，所以 pnpm 只下载 tarball 解压，**不执行任何安装期代码**——不需要 `allowBuilds` 放行，也没有构建等待。
 
@@ -58,9 +66,9 @@ dsh --profile web --dump-config    # profile 名换成你装的那个
 ```
 
 ```yaml
-# == dsh-session-map
+# == @xiguazhiprince/dsh-session-map
 - id: session-map
-  name: dsh-session-map
+  name: '@xiguazhiprince/dsh-session-map'
 ```
 
 然后重启该 profile 的进程并刷新页面。四处应该出现：
@@ -195,7 +203,7 @@ pnpm test         # 轮次树布局与画布渲染测试（vitest）
 浏览器半外面包了一层交接，由本仓库的 `tsdown.config.ts` 自己声明：
 
 ```js
-window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { … } });
+window.__ModuleLoader__.load({ id: '@xiguazhiprince/dsh-session-map', factory: (require) => { … } });
 ```
 
 产品自带的 `packages/client/tsdown.client.ts` 预设是**仓库内部**的（它会去读 `packages/<group>/<pkg>/package.json` 并 import 同仓的构建模块），独立仓库导不进来，所以这里自己写。React 与 `@deepseek-ai/cordis` 保持 `require` 外部化，由内核的 `require` 提供；本插件不 import 其它产品包，所以产物里只有自己的代码。
@@ -206,7 +214,7 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 
 - GitHub 直装全流程——下载 tarball → 解压 → 写进 profile 的 `dependencies` → 回写 `dsh.profile.bundles`；**4.6 秒，零安装期脚本**；
 - `--dump-config` 里出现 `# == dsh-session-map` 层；
-- 首页 HTML 的 boot manifest 列出了 `dsh-session-map/client.js`，合并后的插件包请求返回 200 且含 `__ModuleLoader__` 工厂交接；
+- 首页 HTML 的 boot manifest 列出了 `@xiguazhiprince/dsh-session-map/client.js`，合并后的插件包请求返回 200 且含 `__ModuleLoader__` 工厂交接；
 - 两个产物的文件名与 React 外部化（`lib/client.js` 里是 `require("react")`，没有内联）。
 
 **一个包同时是 bundle 和 client 插件是可行的**：产品随附的布局把两者拆成不同的包（bundle 的 patch 行去引用 `packages/client/*` 里的插件包），但自引用同样能被浏览器 roster 收下。
@@ -215,7 +223,7 @@ window.__ModuleLoader__.load({ id: 'dsh-session-map', factory: (require) => { �
 
 **0.2.0 轮次树改造**：`pnpm test`（18 个布局与渲染用例）、`pnpm typecheck`、`pnpm build` 均通过；`lib/` 已重建。README 里的两张截图都已换成 0.2.0 的轮次树界面。
 
-**Settings → 从 Git 克隆**：`settings.section` 已实时注册（`Slots.listSubTree` 里能看到 `dsh-session-map` 的 `git-workspace` 条目，order 60、active）；宿主路由用 curl 验证了 state、403 信任校验、参数校验、真实本地仓库 clone 与工作区注册；测试期间注册的临时工作区和临时目录都已清理。原生目录选择器和页面上的点击流程还需要在浏览器里人工确认一次。
+**Settings → 从 Git 克隆**：`settings.section` 已实时注册（`Slots.listSubTree` 里能看到 `@xiguazhiprince/dsh-session-map` 的 `git-workspace` 条目，order 60、active）；宿主路由用 curl 验证了 state、403 信任校验、参数校验、真实本地仓库 clone 与工作区注册；测试期间注册的临时工作区和临时目录都已清理。原生目录选择器和页面上的点击流程还需要在浏览器里人工确认一次。
 
 ## 宿主契约（升版必读）
 

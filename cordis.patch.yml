@@ -6,4 +6,4 @@
 # lib/client.js to the browser roster.
 - insert:
     - id: session-map
-      name: dsh-session-map
+      name: '@xiguazhiprince/dsh-session-map'
