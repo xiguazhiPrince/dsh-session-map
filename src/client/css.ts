@@ -76,6 +76,37 @@ export const CSS = `
 /* The launcher and the reason its last click failed, kept on one line. */
 .dsm-launchWrap { display: inline-flex; align-items: center; gap: 6px; }
 
+/* The composer's Git branch badge. It is a reading, not a control, so it has
+   no border or hover fill; it sits in the tool row at the host's text scale. */
+.dsm-git {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 220px;
+  height: 24px;
+  padding: 0 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+}
+.dsm-git--muted { opacity: 0.72; }
+.dsm-git--error .dsm-git__name { color: var(--dsw-alias-state-error-primary); }
+.dsm-git__glyph { flex: 0 0 auto; display: block; opacity: 0.8; }
+.dsm-git__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+.dsm-git--muted .dsm-git__name {
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 400;
+}
+
 /* height:100% resolves only where the seat has a definite height (the right
    column's pane); in the conversation the parent is auto-height, so this
    collapses to auto and the panel keeps its viewport-derived basis. */

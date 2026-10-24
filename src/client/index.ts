@@ -1,9 +1,10 @@
 /**
  * Browser half: the Session map plugin.
  *
- * Contributes three bodies and two right-sidebar tab types: a plain overview as
- * a Conversation tab and as a right-column tab, a turn-tree canvas as a
- * Conversation tab, a right-column tab, and a Session header launcher.
+ * Contributes the Session map UI and a composer Git branch badge: a plain
+ * overview as a Conversation tab and as a right-column tab, a turn-tree canvas
+ * as a Conversation tab, a right-column tab, a Session header launcher, and the
+ * branch reading in `conversation.input.left`.
  *
  * Services are read through `ctx.get` against local structural types rather
  * than the product's own browser packages: those are published at a prerelease
@@ -15,6 +16,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { ReactElement } from 'react'
+import { createGitBranchBadge, type GitBranchRuntime } from './branch'
 import { CSS } from './css'
 import { MAP_KIND, MAP_TYPE_ID, OVERVIEW_KIND, OVERVIEW_TYPE_ID } from './constants'
 import { createFlag } from './flags'
@@ -236,6 +238,21 @@ export function apply(ctx: Context): void {
     { name: 'conversation.session.header.utilities', id: 'session-map-launcher', order: 40 },
     MapLauncher,
   )), 'session-map: header launcher')
+
+  // The branch badge reads `.git/HEAD` through the Host's file Remote. That
+  // Remote belongs to another package, so it is an optional capability: a
+  // composition without it keeps every other seat, and this one simply never
+  // appears.
+  ctx.inject(['slots', 'remote', 'remote.workspaceFiles'], (scope) => {
+    const scopedSlots = lookup<SlotsService>(scope, 'slots')
+    const remote = lookup<GitBranchRuntime>(scope, 'remote')
+    if (scopedSlots === undefined || remote === undefined) return
+    const GitBranchBadge = createGitBranchBadge(remote)
+    scope.effect(() => scopedSlots.inject('conversation.input.left', () => scopedSlots.register(
+      { name: 'conversation.input.left', id: 'session-map-git-branch', order: 10 },
+      GitBranchBadge,
+    )), 'session-map: git branch badge')
+  })
 
   // The Conversation tab entries are opt-in; see DEFAULT_CONVERSATION_VIEWS.
   if (conversationViewsEnabled()) {
