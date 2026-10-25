@@ -3,7 +3,7 @@
  * checkouts, detached HEADs, folders without a repository, and the failure the
  * badge must not mistake for "no repository".
  *
- * @module dsh-session-map/client/branch.test
+ * @module dsh-session-map/session-map/branch.test
  */
 import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'

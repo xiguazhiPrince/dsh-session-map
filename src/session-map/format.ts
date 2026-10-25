@@ -5,7 +5,7 @@
  * projection wire data, so a missing or mistyped field renders as the dash
  * rather than breaking a card.
  *
- * @module dsh-session-map/client/format
+ * @module dsh-session-map/session-map/format
  */
 
 /**

@@ -6,7 +6,7 @@
  * SessionMapRuntime}; `ctx` never crosses this boundary, so a body can be
  * rendered by a test or by the slot renderer without a runtime.
  *
- * @module dsh-session-map/client/views
+ * @module dsh-session-map/session-map/views
  */
 import * as React from 'react'
 import {

@@ -123,7 +123,7 @@ dsh --profile web --dump-config    # profile 名换成你装的那个
 
 工具栏上的「当前会话树 / 全部会话」两段开关切换这个范围。范围只改画什么，不动几何：同一棵树在两种范围下的坐标完全一致。列表里还没有当前会话（快照尚未落地那一行）时，画布不缩成空图，而是照旧铺开全部，并在工具栏说明原因。
 
-默认值写在 `src/client/views.ts` 的 `DEFAULT_MAP_SCOPE`（`'current'`），由 `src/client/index.ts` 装进插件 run 的开关。和其它工具栏开关一样，它挂在插件 run 上，所以那是**每次页面加载**的默认值：刷新后回到「当前会话树」。
+默认值写在 `src/session-map/views.ts` 的 `DEFAULT_MAP_SCOPE`（`'current'`），由 `src/session-map/index.ts` 装进插件 run 的开关。和其它工具栏开关一样，它挂在插件 run 上，所以那是**每次页面加载**的默认值：刷新后回到「当前会话树」。
 
 ### 画布默认竖向生长
 
@@ -131,7 +131,7 @@ dsh --profile web --dump-config    # profile 名换成你装的那个
 
 两个方向共用同一套布局：深度轴与分栏轴互换，画什么、折叠与展开状态、以及同一个节点在两种方向下的相对关系都不变。
 
-默认值写在 `src/client/views.ts` 的 `DEFAULT_MAP_DIRECTION`（`'vertical'`），同样由 `src/client/index.ts` 装进插件 run，所以也是**每次页面加载**的默认值。
+默认值写在 `src/session-map/views.ts` 的 `DEFAULT_MAP_DIRECTION`（`'vertical'`），同样由 `src/session-map/index.ts` 装进插件 run，所以也是**每次页面加载**的默认值。
 
 ### 轮次、会话与空会话
 
@@ -163,7 +163,7 @@ localStorage.setItem('dsh.session-map.conversationViews', 'false')  // 显式关
 localStorage.removeItem('dsh.session-map.conversationViews')        // 回到出厂默认
 ```
 
-出厂默认写在 `src/client/index.ts` 的 `DEFAULT_CONVERSATION_VIEWS`。
+出厂默认写在 `src/session-map/index.ts` 的 `DEFAULT_CONVERSATION_VIEWS`。
 
 **为什么不用 profile 里的 `config`**：浏览器半由 web boot 用**裸 `{ name }`** 创建（`packages/client/web/src/boot-client.ts:50`），而 boot manifest 的插件行只带 `id` / `inject` / `immediately`——宿主行的 `config` 到不了客户端插件。给这个包写 `config` 不会有任何效果。
 
@@ -275,15 +275,15 @@ src/skill-catalog/client.ts     Settings 页（settings.section）与样式
 src/skill-catalog/catalog.test.ts 分层与过滤规则测试（vitest）
 src/skill-catalog/host.test.ts    项目根、分组与路由测试（vitest）
 src/skill-catalog/client.test.ts  页面服务端渲染冒烟测试（vitest）
-src/client/index.ts     apply：样式表、插件级开关、座位与标签页注册
-src/client/views.ts     概览页、头部按钮、轮次树画布工厂
-src/client/graph.ts     布局：范围过滤、生长方向、轮次联合树、steering 输入、会话头、长直链折叠、连边
-src/client/graph.test.ts 轮次树布局测试（vitest）
-src/client/views.test.ts 画布服务端渲染冒烟测试（vitest）
-src/client/css.ts       样式表字符串
-src/client/constants.ts 几何常量、折叠阈值与 tab type id
-src/client/flags.ts     跨挂载存活的插件级开关
-src/client/format.ts    数字与耗时格式化
+src/session-map/index.ts     apply：样式表、插件级开关、座位与标签页注册
+src/session-map/views.ts     概览页、头部按钮、轮次树画布工厂
+src/session-map/graph.ts     布局：范围过滤、生长方向、轮次联合树、steering 输入、会话头、长直链折叠、连边
+src/session-map/graph.test.ts 轮次树布局测试（vitest）
+src/session-map/views.test.ts 画布服务端渲染冒烟测试（vitest）
+src/session-map/css.ts       样式表字符串
+src/session-map/constants.ts 几何常量、折叠阈值与 tab type id
+src/session-map/flags.ts     跨挂载存活的插件级开关
+src/session-map/format.ts    数字与耗时格式化
 docs/example.png        界面截图（README 用）
 docs/example-map.png    图谱细节截图（README 用）
 ```

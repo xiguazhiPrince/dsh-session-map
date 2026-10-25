@@ -3,7 +3,7 @@
  * and render it with React's server renderer. This catches a broken element
  * tree or a bad graph/view contract that the pure layout tests cannot see.
  *
- * @module dsh-session-map/client/views.test
+ * @module dsh-session-map/session-map/views.test
  */
 import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'

@@ -8,7 +8,7 @@
  * package that contributes one. The `kind` values are the discriminators
  * `sidebarRight.openTab` names and are deliberately unchanged.
  *
- * @module dsh-session-map/client/constants
+ * @module dsh-session-map/session-map/constants
  */
 
 /** Kind (the `openTab` discriminator) of the plain Session overview page. */

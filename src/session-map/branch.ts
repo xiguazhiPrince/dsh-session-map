@@ -11,7 +11,7 @@
  * says so and follows `.git` itself, so initialising a repository later also
  * reaches the display.
  *
- * @module dsh-session-map/client/branch
+ * @module dsh-session-map/session-map/branch
  */
 import * as React from 'react'
 import { errorText } from './format'

@@ -9,7 +9,7 @@
  * dollar-brace sequence inside it, not even in a CSS comment: the first
  * backtick ends the string and the rest is parsed as JavaScript.
  *
- * @module dsh-session-map/client/css
+ * @module dsh-session-map/session-map/css
  */
 
 /** Every rule the overview and the canvas use, in one sheet. */

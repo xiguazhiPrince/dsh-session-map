@@ -37,7 +37,7 @@ export default (): UserConfig[] => [
   },
   {
     name: `${ID}/client`,
-    entry: { client: 'src/client/index.ts' },
+    entry: { client: 'src/session-map/index.ts' },
     outDir: 'lib',
     format: 'cjs',
     platform: 'browser',

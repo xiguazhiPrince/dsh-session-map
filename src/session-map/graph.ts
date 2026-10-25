@@ -13,7 +13,7 @@
  * membership, and the fold switches, so equal inputs always produce an equal
  * layout and the Views can rebuild it on every render.
  *
- * @module dsh-session-map/client/graph
+ * @module dsh-session-map/session-map/graph
  */
 import {
   CAPTION_H,

@@ -6,7 +6,7 @@
  * `React.useState` initializer. A flag lives on the plugin run instead, and its
  * subscription keeps two simultaneously mounted instances in step.
  *
- * @module dsh-session-map/client/flags
+ * @module dsh-session-map/session-map/flags
  */
 import * as React from 'react'
 

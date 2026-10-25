@@ -3,7 +3,7 @@
  * direction, scope, and the hidden-parent fallback. The builder is pure, so
  * these are ordinary value assertions rather than a rendered-DOM test.
  *
- * @module dsh-session-map/client/graph.test
+ * @module dsh-session-map/session-map/graph.test
  */
 import { describe, expect, it } from 'vitest'
 import {

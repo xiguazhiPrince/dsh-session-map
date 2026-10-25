@@ -16,7 +16,7 @@
  * makes the stylesheet travel as a string — there is no `styles` service
  * outside the dynamic runtime — so `apply` owns the `<style>` element itself.
  *
- * @module dsh-session-map/client
+ * @module dsh-session-map/session-map/index
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { ReactElement } from 'react'
