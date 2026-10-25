@@ -1,7 +1,7 @@
 {
   "name": "@xiguazhiprince/dsh-session-map",
   "version": "0.3.0",
-  "description": "Session map: a turn-tree canvas over every DSH session — users' turns are nodes, sessions are coloured lines and tags, and forks leave from the exact inherited turn — as a Conversation tab and two right-sidebar tabs. Also adds a Settings → Clone from Git page that clones a repository and registers the directory as a workspace",
+  "description": "Session map: a turn-tree canvas over every DSH session — users' turns are nodes, sessions are coloured lines and tags, and forks leave from the exact inherited turn — as a Conversation tab and two right-sidebar tabs. Also adds Settings → Clone from Git, which clones a repository and registers the directory as a workspace, and Settings → Skills, which lists user-level and project-level skills",
   "type": "module",
   "license": "MIT",
   "main": "lib/index.js",
@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
+    "@types/node": "^22.20.5",
     "@types/react": "~18.3.1",
     "@types/react-dom": "^18.3.7",
     "react": "^18.2.0",

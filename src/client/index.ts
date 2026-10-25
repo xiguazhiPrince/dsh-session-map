@@ -1,12 +1,14 @@
 /**
  * Browser half: the Session map plugin.
  *
- * Contributes the Session map UI plus two smaller seats: a composer Git branch
- * badge and the Settings → Clone from Git page. The map itself is a plain
+ * Contributes the Session map UI plus three smaller seats: a composer Git
+ * branch badge, the Settings → Clone from Git page, and the Settings → Skills
+ * page. The map itself is a plain
  * overview as a Conversation tab and as a right-column tab, a turn-tree canvas
  * as a Conversation tab, a right-column tab, and a Session header launcher; the
- * branch reading lives in `conversation.input.left`, and the clone form is a
- * `settings.section` page (see `../git-workspace/client`).
+ * branch reading lives in `conversation.input.left`, the clone form is a
+ * `settings.section` page (see `../git-workspace/client`), and the skills
+ * catalog is another `settings.section` page (see `../skill-catalog/client`).
  *
  * Services are read through `ctx.get` against local structural types rather
  * than the product's own browser packages: those are published at a prerelease
@@ -23,6 +25,7 @@ import { CSS } from './css'
 import { MAP_KIND, MAP_TYPE_ID, OVERVIEW_KIND, OVERVIEW_TYPE_ID } from './constants'
 import { createFlag } from './flags'
 import { createGitWorkspaceRuntime, createGitWorkspaceSettings } from '../git-workspace/client'
+import { createSkillCatalogRuntime, createSkillCatalogSettings } from '../skill-catalog/client'
 import {
   createMapLauncher,
   createMapView,
@@ -250,6 +253,16 @@ export function apply(ctx: Context): void {
     { name: 'settings.section', id: 'git-workspace', order: 60, label: '从 Git 克隆' },
     GitWorkspaceSettings,
   )), 'git-workspace: settings section')
+
+  // The skills manager is a management surface, not conversation chrome: it
+  // lists every discovered skill at both levels, so it belongs beside the other
+  // project-scoped Settings pages. Order 30 keeps it next to the agent-preset
+  // page, before the repository setup further down.
+  const SkillCatalogSettings = createSkillCatalogSettings(createSkillCatalogRuntime(ctx))
+  ctx.effect(() => slots.inject('settings.section', () => slots.register(
+    { name: 'settings.section', id: 'skills', order: 30, label: '技能' },
+    SkillCatalogSettings,
+  )), 'skill-catalog: settings section')
 
   // The branch badge reads `.git/HEAD` through the Host's file Remote. That
   // Remote belongs to another package, so it is an optional capability: a

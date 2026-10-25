@@ -22,6 +22,7 @@ DSH 的会话会从某一轮 **fork** 出去，可左侧栏只是一张平铺列
 | **一屏概览** | 另有一个「会话概览」标签页：轮次、步骤、模型耗时、工具耗时、输出 token、运行状态 |
 | **三个入口** | 对话标签页、会话头部开关、右侧栏常驻标签页——哪里顺手用哪里（对话标签页默认关闭，见[使用](#对话标签栏的两个标签页默认关闭)） |
 | **从 Git 克隆** | Settings 里的独立页面：填仓库地址、选存放目录（记住上次选择）、按需打开浅克隆，点「克隆」自动 clone 并添加工作区 |
+| **技能管理** | Settings 里的「技能」页：分「用户级」（`~/.dsh/skills`、`~/.agents/skills`）与「项目级」（每个工作区项目根目录下的 `.dsh/skills`、`.agents/skills`）两组列出全部已发现的技能，带来源、调用限制、`/名称` 与文件路径，可搜索、可刷新 |
 
 ![图谱细节：会话颜色、轮次节点、会话标签与当前会话高亮](docs/example-map.png)
 
@@ -71,7 +72,7 @@ dsh --profile web --dump-config    # profile 名换成你装的那个
   name: '@xiguazhiprince/dsh-session-map'
 ```
 
-然后重启该 profile 的进程并刷新页面。四处应该出现：
+然后重启该 profile 的进程并刷新页面。这些位置应该出现：
 
 | 位置 | 应该看到 |
 |---|---|
@@ -79,6 +80,8 @@ dsh --profile web --dump-config    # profile 名换成你装的那个
 | 会话头部工具区 | 「会话图谱」开关；右侧栏正显示图谱时再点一次会关闭它 |
 | 右侧栏标签 | `dsh-session-map.map`（标题「会话图谱」）和 `dsh-session-map.overview`（标题「会话概览」） |
 | 图谱页本身 | 轮次树画布；默认只画当前会话的那棵树、且自上而下，工具栏的「当前会话树 / 全部会话」与「竖向 / 横向」两组开关可切回全图与原方向，旁边显示会话数、轮次数、树数与当前缩放百分比 |
+| Settings → 技能 | 两组列表：用户级技能（来自 `~/.dsh/skills`、`~/.agents/skills`）与按项目根目录分组的项目级技能；含来源、调用限制、路径与搜索框 |
+| Settings → 从 Git 克隆 | 仓库地址、存放目录、「选择…」、浅克隆开关与「克隆」按钮 |
 
 两件容易被当成故障的事：
 
@@ -178,6 +181,21 @@ localStorage.removeItem('dsh.session-map.conversationViews')        // 回到出
 
 实现位置：`src/git-workspace/git.ts`（纯规则：地址校验、目录名推导、argv、失败分类）、`host.ts`（路由 + `git clone` + `workspaceRegistry.create`）、`client.ts`（Settings 页、本地记忆与宿主请求封装）。
 
+### 技能页
+
+入口在 **Settings → 技能**（`settings.section`，order 30，不占左侧边栏）。页面回答两个问题：用户级别有哪些技能、每个项目级别有哪些技能。
+
+- **用户级**：`~/.dsh/skills`（`user-dsh`）与 `~/.agents/skills`（`user-agents`）两个根目录里的技能，对所有项目生效。
+- **项目级**：按**项目根**分组——从每个已注册工作区的路径向上找到最近的 `.git` 目录（与技能提供方同一套规则），再读该根下的 `.dsh/skills`（`project-dsh`）与 `.agents/skills`（`project-agents`）。同一个项目根下的多个工作区合并成一组，monorepo 只列一次；还没有项目级技能的项目折叠成一行汇总。
+- **项目可折叠**：每个有技能的项目是一张可展开的卡片，标题行显示项目名、技能数与展开箭头，收起时显示前 3 个技能名作为预览；**只有一个项目时默认展开，多个项目默认收起**，可用「项目级」标题右侧的「全部展开 / 全部收起」一次操作。搜索时自动展开所有命中的项目——收起一个命中项会让人误以为没搜到。
+- **内置 / 其他**：`bundled`、自定义目录与运行时注册的技能；一个都没有时整节不显示。
+- 每行显示名字、描述、`何时用`、来源根、`仅手动调用` / `仅模型可用` 限制与 SKILL.md 路径；描述超过 80 字时默认折成两行，行内「展开 / 收起」文本按钮切换全文；顶部搜索框按名称 / 描述 / 路径过滤，「刷新」重新读取并显示更新时间。
+- **读取口径**：宿主半 `GET /plugin-skill-catalog/state` 通过默认 Agent Preset 的 revision lease 做一次 cold、scope-aware 读（与产品冷读 transcript 的读法一致），所以用户根目录里的技能不需要有会话也能列出来；`cwd` 只用来追加项目根。技能注册表没挂载时返回 `skills-unavailable`，页面显示错误而不是空列表。
+- 数据来自 `ctx.skills`，插件里不重复扫描目录；自定义 provider 注册的技能按它上报的 `source` 归类，未知来源会原样显示。
+- 这个路由只读，不像 Git 克隆那条路要改本机文件，因此没有 loopback 限制；但响应本身没有 CORS 头，跨站页面读不到内容。
+
+实现位置：`src/skill-catalog/catalog.ts`（类型、来源分层、搜索过滤、信封解码）、`host.ts`（项目根解析、按层读取、只读路由）、`client.ts`（Settings 页与样式）。
+
 ## 本地开发
 
 ```sh
@@ -225,6 +243,8 @@ window.__ModuleLoader__.load({ id: '@xiguazhiprince/dsh-session-map', factory: (
 
 **Settings → 从 Git 克隆**：`settings.section` 已实时注册（`Slots.listSubTree` 里能看到 `@xiguazhiprince/dsh-session-map` 的 `git-workspace` 条目，order 60、active）；宿主路由用 curl 验证了 state、403 信任校验、参数校验、真实本地仓库 clone 与工作区注册；测试期间注册的临时工作区和临时目录都已清理。原生目录选择器和页面上的点击流程还需要在浏览器里人工确认一次。
 
+**Settings → 技能**：`settings.section` 以 order 30、label「技能」注册；宿主 `GET /plugin-skill-catalog/state` 用 curl 验证过真实分层结果——本机用户级 3 个（全部来自 `~/.agents/skills`）、11 个已注册工作区中 2 个有项目级技能、其余折叠成一行；`skills-unavailable`、单项目失败隔离、路由 404/405 由单测覆盖，项目折叠（单个自动展开、多个默认收起、搜索强制展开命中项）由服务端渲染用例覆盖；`pnpm test`（93 用例）、`pnpm typecheck`、`pnpm build` 均通过。页面已在刷新后的 GUI 里实际渲染确认过用户级列表；折叠卡片与搜索的交互还需要在页面上人工点一次。
+
 ## 宿主契约（升版必读）
 
 浏览器半读的是**运行时快照**，产品不承诺它们稳定。已经踩到过两次，都表现为「样式坏了」但其实是契约漂移：
@@ -243,12 +263,18 @@ window.__ModuleLoader__.load({ id: '@xiguazhiprince/dsh-session-map', factory: (
 ## 源码结构
 
 ```
-src/index.ts            宿主半：安装 /plugin-git-workspace 路由（缺服务时保持空转）
+src/index.ts            宿主半：安装 /plugin-git-workspace 与 /plugin-skill-catalog 路由（缺服务时保持空转）
 src/git-workspace/git.ts    纯规则：地址校验、仓库目录名、argv、失败分类、状态信封类型
 src/git-workspace/host.ts   宿主路由：state / clone，调用 subprocess 与 workspaceRegistry
 src/git-workspace/client.ts Settings 页（settings.section）、本地记忆与宿主请求封装
 src/git-workspace/git.test.ts    规则测试（vitest）
 src/git-workspace/client.test.ts 页面服务端渲染冒烟测试（vitest）
+src/skill-catalog/catalog.ts    技能目录类型：来源分层、排序去重、搜索过滤、信封解码
+src/skill-catalog/host.ts       宿主只读路由：项目根解析、按层读取 ctx.skills
+src/skill-catalog/client.ts     Settings 页（settings.section）与样式
+src/skill-catalog/catalog.test.ts 分层与过滤规则测试（vitest）
+src/skill-catalog/host.test.ts    项目根、分组与路由测试（vitest）
+src/skill-catalog/client.test.ts  页面服务端渲染冒烟测试（vitest）
 src/client/index.ts     apply：样式表、插件级开关、座位与标签页注册
 src/client/views.ts     概览页、头部按钮、轮次树画布工厂
 src/client/graph.ts     布局：范围过滤、生长方向、轮次联合树、steering 输入、会话头、长直链折叠、连边
