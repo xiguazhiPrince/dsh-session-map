@@ -181,6 +181,20 @@ localStorage.removeItem('dsh.session-map.conversationViews')        // 回到出
 
 实现位置：`src/git-workspace/git.ts`（纯规则：地址校验、目录名推导、argv、失败分类）、`host.ts`（路由 + `git clone` + `workspaceRegistry.create`）、`client.ts`（Settings 页、本地记忆与宿主请求封装）。
 
+### Git 工具窗口
+
+侧边栏新增 Git 图标，点开是一个主面板工具窗口（`main` key = `git-workspace`，`sidebar.panellist` id 同名），面板内自带「提交 / 日志 / 控制台」三个标签页：
+
+- **日志**：左侧分支树（HEAD / 本地 / 远程，可搜索过滤）、中间提交列表（客户端按 `%P` 计算图线、refs 胶囊、作者与时间）、右侧提交详情（完整 message、作者/提交者、哈希、所在分支、文件列表、逐文件 diff）。
+- **提交**：按「暂存区 / 未暂存 / 未版本控制 / 冲突」分组；勾选即写 index（`git add` / `restore --staged`），丢弃未跟踪文件先 `clean -nd` 预览再 `clean -fd`，且必须经过服务端确认令牌；支持提交、修正上次提交、提交并推送。
+- **控制台**：显示 Host 实际执行的每条 argv（凭证已脱敏）、退出码与耗时。
+
+宿主路由与克隆页共用 `/plugin-git-workspace` 前缀；所有路径先按注册 Workspace 做 `realpath` 包含校验，写操作每仓库串行，破坏性操作由服务端二次确认。规格与安全测试矩阵见 [docs/git-workspace-spec.md](docs/git-workspace-spec.md) §6。
+
+**当前状态（0.4.0-dev）**：只读链路与提交链路已实现，`pnpm test` 覆盖 206 个用例（含 `GIT_WS_IT=1` 的真实 git 集成用例：未确认丢弃不改文件、clean 不删 ignored、锁不清除、提交信息不执行 shell 等）。尚未实现：分支检出/新建/删除/合并/变基、Fetch/Update、stash、长任务 SSE 进度。
+
+**本地验证**：`pnpm build` 后需要让 web profile 指向本仓库（`dsh plugin --profile web add link:<本仓库路径>`）并重启/刷新；npm 安装的副本不会热更新宿主路由。
+
 ### 技能页
 
 入口在 **Settings → 技能**（`settings.section`，order 30，不占左侧边栏）。页面回答两个问题：用户级别有哪些技能、每个项目级别有哪些技能。
