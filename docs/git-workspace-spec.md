@@ -1286,5 +1286,5 @@ it('git 写操作只经 subprocess seam，且必须过门禁', () => {
 | 安全用例 | S-01–S-16、S-19、S-22、S-24–S-33、S-37、S-38 已覆盖；S-20 以「clean 不跟随符号链接、外部文件不变」的集成用例覆盖；S-17/S-18/S-21/S-23/S-34–S-36 为单元或路由级覆盖 | `git-*.test.ts`、`host-git.test.ts`、`safety.integration.test.ts` |
 
 **尚未实现（后续可选，路线图见 [git-workspace-plan.md](git-workspace-plan.md) §10.1）**：冲突合并编辑器（O1）、stash 完整列表与逐条 drop（O2）、远程标签删除（O3）、子模块/worktree 管理（O4）、超大仓库虚拟滚动与轻量刷新（O5）、非当前分支 Update 的「仅快进引用」选项（O6）、kill 恢复集成用例（O7）。
-**验证**：约 236 个用例（`GIT_WS_IT=1` 时含 15 条真实 git 集成），`pnpm typecheck && pnpm test && pnpm build` 全绿；`lib/` 已重建。
+**验证**：约 236 个用例（`GIT_WS_IT=1` 时含 15 条真实 git 集成），`pnpm typecheck && pnpm test && pnpm build` 全绿；`lib/` 已重建。交接步骤、环境与逐项验收建议见 [git-workspace-plan.md](git-workspace-plan.md) §12。
 

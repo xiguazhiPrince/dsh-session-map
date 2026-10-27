@@ -140,3 +140,62 @@ dsh plugin --profile web add link:C:\Users\54647\Developer\myProjects\dsh-sessio
 ```
 
 详见 [README](../README.md) 的「Git 工具窗口」与「本地开发」。
+
+## 12. 交接说明（给下一个会话 / 工程师）
+
+### 12.1 先读什么
+
+1. `docs/git-workspace-spec.md`：§1 目标与原则、§3 IDEA 行为、§5 DSH 落地（API/数据模型/git 命令）、§6 安全测试设计；
+2. 本文档：§1 阶段表、§9 测试映射、§10 路线图与偏差；
+3. `README.md` 的「Git 工具窗口」「本地开发」「宿主契约」。
+
+代码入口：宿主 `src/git-workspace/host.ts` → `host-git.ts` → `host-actions.ts`；客户端 `src/git-workspace/window/index.ts` → `shell.ts`。纯规则在 `git-actions.ts` / `git-command.ts` / `git-parse.ts` / `git-repo.ts`。
+
+### 12.2 基线、环境与验证
+
+- 基线实现：提交 `06ec71b`（`master`），工作树应保持干净；`lib/` 已随代码重建并提交，不要只改 `src/`。
+- 依赖：`pnpm install`（lockfile 未提交，属预期）。
+- 本地 GUI：web profile 必须 link 到本仓库才能加载新宿主路由：
+
+  ```sh
+  pnpm build
+  dsh plugin --profile web add link:C:\Users\54647\Developer\myProjects\dsh-session-map
+  ```
+
+  宿主半通过编辑 profile 的 `cordis.patch.yml`（追加一行注释即可）触发 HMR；客户端半刷新浏览器后生效。**不要在 Agent 会话内部重启 `dsh web`**（当前 GUI 就是承载会话的进程），让用户手动重启/刷新。
+- 验证门槛：
+
+  ```sh
+  pnpm typecheck
+  pnpm test                 # 221 个本地用例，集成默认跳过
+  GIT_WS_IT=1 pnpm test     # 236 个用例，含 15 条真实 git 集成（约 20s）
+  pnpm build                # 必须，重建 lib/
+  ```
+
+### 12.3 继续 O1–O7 的约定
+
+- **测试先行**：写操作先加 L1（argv/策略）与 L2（路由门禁）测试；涉及真实副作用的再加 L4 临时仓库集成用例。
+- **安全不变量**（规格 §6）：路径白名单、服务端确认令牌、每仓库写串行、凭证脱敏、不引入 shell/`child_process`、不注册 Tool。L2/L3 动作用确认令牌；L1 不要滥用确认。
+- **改动同步**：完成后同时更新本文档 §10.1 的状态与 `docs/git-workspace-spec.md` §10.4；`pnpm build` 后把 `lib/` 一起提交。
+- **提交风格**：沿用现有英文祈使句标题（如 `Add ... to the Git tool window`），一个主题一个提交。
+
+最小验收建议：
+
+| 项 | 最小验收 |
+|---|---|
+| O1 冲突合并编辑器 | 冲突文件列表可进入双栏/三窗格；选择结果写回工作区；`continueOperation` 后快照回到 `none`；冲突期间提交被阻止 |
+| O2 stash 列表 | 快照返回 stash 列表；面板逐条 pop/drop；drop 走 L2 确认；刷新后列表正确 |
+| O3 远程标签删除 | `push --delete` 仅 L3 确认后执行；远端拒绝/无权限有稳定错误码；本地标签保留 |
+| O4 子模块/worktree | 多仓库选择与仓库根识别正确；路径白名单仍按 Workspace 收口；跨仓库写操作不越界 |
+| O5 虚拟滚动/轻量刷新 | 10k 提交滚动不卡；轮询拆 A/B 级后仍能发现外部改动；有性能基准记录 |
+| O6 仅快进 Update | 仅未检出且可快进时可用；不可快进时拒绝并提示；有集成用例 |
+| O7 kill 恢复 | 模拟长任务被杀后，快照标记 `interrupted`，下一次写要求先刷新/中止；有集成用例 |
+
+### 12.4 已知坑
+
+- 快照每次跑完整 `status`，大仓库慢；先测量再拆 A/B 级刷新。
+- 标签已进快照 `branches`（`type: 'tag'`）；stash 只有 `stashCount`，没有列表。
+- Windows 上 symlink 用例需要开发者模式；没有时用例会自动 `skip`，Linux CI 必须跑。
+- 对比文件内容时先归一化 CRLF；git 输出一律按 `-z`/`%x1f` 解析。
+- 集成测试每个用例建真实临时仓库，整套约 20s；不要放进默认 `pnpm test`。
+- `lib/client.js` 约 260KB；客户端入口只能是 `src/session-map/index.ts`。
