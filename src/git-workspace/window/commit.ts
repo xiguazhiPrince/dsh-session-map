@@ -93,6 +93,7 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<GitApiError | null>(null)
   const [discardRequest, setDiscardRequest] = React.useState<DiscardRequest | null>(null)
+  const [dropStashPending, setDropStashPending] = React.useState(false)
 
   const staged = snapshot.changes.filter(entry => entry.group === 'staged')
   const unstaged = snapshot.changes.filter(entry => entry.group === 'unstaged')
@@ -202,6 +203,23 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
     }
   }
 
+  /** Drop the latest stash after an explicit confirmation token. */
+  const confirmDropStash = async (): Promise<void> => {
+    setBusy(true)
+    setError(null)
+    try {
+      const action: GitAction = { kind: 'stashDrop', workspaceId }
+      const confirmation = await runtime.confirm(action)
+      await runtime.action(action, confirmation.token)
+      setDropStashPending(false)
+      onChanged()
+    } catch (failure) {
+      setError(asApiError(failure))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const sections: Array<{ title: string; rows: ChangedEntry[]; checked: boolean; discardable: boolean }> = [
     { title: `冲突 (${conflicts.length})`, rows: conflicts, checked: false, discardable: false },
     { title: `暂存区 (${staged.length})`, rows: staged, checked: true, discardable: false },
@@ -259,6 +277,27 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
           }),
           '修正上次提交',
         ),
+        React.createElement('button', {
+          className: 'dgw-btn',
+          type: 'button',
+          disabled: busy,
+          title: '把当前工作区更改放进 git stash（含未跟踪文件）',
+          onClick: () => { void run({ kind: 'stashPush', workspaceId, includeUntracked: true, message: 'WIP from Git tool window' }) },
+        }, '搁置'),
+        React.createElement('button', {
+          className: 'dgw-btn',
+          type: 'button',
+          disabled: busy || snapshot.stashCount === 0,
+          title: '弹出最近一次搁置',
+          onClick: () => { void run({ kind: 'stashPop', workspaceId }) },
+        }, '弹出搁置'),
+        React.createElement('button', {
+          className: 'dgw-btn',
+          type: 'button',
+          disabled: busy || snapshot.stashCount === 0,
+          title: '删除最近一次搁置（不会应用内容）',
+          onClick: () => setDropStashPending(true),
+        }, '丢弃搁置'),
         React.createElement('span', { className: 'dgw-spacer' }),
         React.createElement('span', { className: 'dgw-meta' }, `已暂存 ${staged.length}`),
         React.createElement('button', {
@@ -298,5 +337,25 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
           ),
         ),
       ),
+    dropStashPending
+      ? React.createElement(
+        'div',
+        { className: 'dgw-modalBackdrop' },
+        React.createElement(
+          'div',
+          { className: 'dgw-modal', role: 'alertdialog', 'aria-label': '确认丢弃搁置' },
+          React.createElement('div', { className: 'dgw-modalTitle' }, '确认丢弃搁置'),
+          React.createElement('div', { className: 'dgw-modalText' },
+            '将永久删除最近一次搁置（不会应用其中的内容），此操作不可撤销。',
+          ),
+          React.createElement(
+            'div',
+            { className: 'dgw-modalActions' },
+            React.createElement('button', { className: 'dgw-btn', type: 'button', onClick: () => setDropStashPending(false), disabled: busy }, '取消'),
+            React.createElement('button', { className: 'dgw-btn dgw-btn--danger', type: 'button', onClick: () => { void confirmDropStash() }, disabled: busy }, '删除搁置'),
+          ),
+        ),
+      )
+      : null,
   )
 }

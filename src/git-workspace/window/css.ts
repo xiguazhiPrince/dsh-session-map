@@ -164,6 +164,9 @@ export const CSS = `
   overflow: hidden;
 }
 .dgw-treeRow:hover { background: var(--dsw-alias-bg-layer-2); }
+.dgw-treeRow--folder { width: 100%; border: 0; background: transparent; text-align: left; font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); }
+.dgw-treeRow--folder > svg:first-child { transition: transform .12s ease; }
+.dgw-treeRow--folder[data-open='false'] > svg:first-child { transform: rotate(-90deg); }
 .dgw-treeRow--active { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
 .dgw-treeRow > svg { flex: 0 0 auto; color: var(--dsw-alias-label-secondary); }
 .dgw-treeRow--current > svg { color: var(--dsw-alias-brand-primary); }
@@ -186,6 +189,9 @@ export const CSS = `
 }
 .dgw-row:hover { background: var(--dsw-alias-bg-layer-1); }
 .dgw-row--active { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 16%, transparent); }
+.dgw-rowMenu { flex: 0 0 auto; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 14px; line-height: 1; cursor: pointer; opacity: 0; }
+.dgw-row:hover .dgw-rowMenu { opacity: 1; }
+.dgw-rowMenu:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
 .dgw-gutter { flex: 0 0 auto; height: 26px; }
 .dgw-subject { overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; }
 .dgw-pills { display: inline-flex; gap: 4px; flex: 0 1 auto; overflow: hidden; }

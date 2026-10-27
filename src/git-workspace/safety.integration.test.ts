@@ -7,7 +7,9 @@
  *
  * @module dsh-session-map/git-workspace/safety.integration.test
  */
-import { readFile, stat } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import { installGitWorkspaceHost } from './host'
@@ -281,6 +283,135 @@ describeIntegration('git window integration', () => {
       expect(await repo.git(['log', '-1', '--format=%s'])).toBe('remote commit')
     } finally {
       await other.dispose()
+    }
+  })
+
+  it('stashes and pops working tree changes through the routes', async () => {
+    const { repo, harness } = await fixture()
+    await repo.write('README.md', 'stashed change\n')
+    const pushed = await invokeRoute(harness.server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: { kind: 'stashPush', workspaceId: 'workspace-1', includeUntracked: true, message: 'wip' },
+    })
+    expect(pushed.status).toBe(200)
+    expect((await repo.read('README.md')).replace(/\r\n/g, '\n')).toBe('# fixture\n')
+    expect((await repo.git(['stash', 'list'])).includes('wip')).toBe(true)
+    const popped = await invokeRoute(harness.server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: { kind: 'stashPop', workspaceId: 'workspace-1' },
+    })
+    expect(popped.status).toBe(200)
+    expect((await repo.read('README.md')).replace(/\r\n/g, '\n')).toBe('stashed change\n')
+  })
+
+  it('creates a tag and deletes it only after confirmation', async () => {
+    const { repo, harness } = await fixture()
+    const head = await repo.headHash()
+    const created = await invokeRoute(harness.server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: { kind: 'tagCreate', workspaceId: 'workspace-1', name: 'v-integration', hash: head },
+    })
+    expect(created.status).toBe(200)
+    expect(await repo.git(['tag', '--list', 'v-integration'])).toBe('v-integration')
+
+    const action = { kind: 'tagDelete', workspaceId: 'workspace-1', name: 'v-integration' }
+    const denied = await invokeRoute(harness.server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: action,
+    })
+    expect(denied.status).toBe(409)
+    const confirm = await invokeRoute(harness.server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/confirm',
+      body: action,
+    })
+    const applied = await invokeRoute(harness.server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: { ...action, confirm: (confirm.json as { token: string }).token },
+    })
+    expect(applied.status).toBe(200)
+    expect(await repo.git(['tag', '--list', 'v-integration'])).toBe('')
+  })
+
+  it('rejects a non-fast-forward push and accepts a confirmed force-with-lease', async () => {
+    const { repo, harness } = await fixture()
+    await repo.createBareOrigin()
+    await repo.git(['push', '-q', '-u', 'origin', 'master'])
+    await repo.write('second.txt', 'second\n')
+    await repo.commit('second')
+    await repo.git(['push', '-q'])
+    // Rewrite the pushed commit: a normal push must now be rejected.
+    await repo.git(['commit', '-q', '--amend', '-m', 'second amended'])
+
+    const rejected = await invokeRoute(harness.server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: { kind: 'push', workspaceId: 'workspace-1' },
+    })
+    expect(rejected.status).toBe(200)
+    const rejectedJob = await waitForJob(harness.server, (rejected.json as { job: { id: string } }).job.id)
+    expect(rejectedJob.status).toBe('failed')
+
+    const force = { kind: 'push', workspaceId: 'workspace-1', forceWithLease: true }
+    const denied = await invokeRoute(harness.server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: force,
+    })
+    expect(denied.status).toBe(409)
+    expect((denied.json as { error: { code: string } }).error.code).toBe('confirmation-required')
+
+    const confirm = await invokeRoute(harness.server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/confirm',
+      body: force,
+    })
+    const forced = await invokeRoute(harness.server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: { ...force, confirm: (confirm.json as { token: string }).token },
+    })
+    const forcedJob = await waitForJob(harness.server, (forced.json as { job: { id: string } }).job.id)
+    expect(forcedJob.status).toBe('done')
+    expect(await repo.git(['rev-parse', 'origin/master'])).toBe(await repo.headHash())
+  })
+
+  it('never follows a symlink outside the repository while discarding', async (ctx) => {
+    const { repo, harness } = await fixture()
+    const outside = await mkdtemp(join(tmpdir(), 'dsh-gw-out-'))
+    const outsideFile = join(outside, 'keep.txt')
+    await writeFile(outsideFile, 'keep\n', 'utf8')
+    const link = repo.path('link-out.txt')
+    try {
+      await symlink(outsideFile, link, 'file')
+    } catch {
+      // Windows requires Developer Mode or an elevated shell for symlinks.
+      await rm(outside, { recursive: true, force: true })
+      ctx.skip()
+      return
+    }
+    try {
+      const action = { kind: 'discard', workspaceId: 'workspace-1', tracked: [], untracked: ['link-out.txt'] }
+      const confirm = await invokeRoute(harness.server, {
+        method: 'POST',
+        path: '/plugin-git-workspace/confirm',
+        body: action,
+      })
+      const applied = await invokeRoute(harness.server, {
+        method: 'POST',
+        path: '/plugin-git-workspace/action',
+        body: { ...action, confirm: (confirm.json as { token: string }).token },
+      })
+      expect(applied.status).toBe(200)
+      await expect(stat(link)).rejects.toBeTruthy()
+      expect((await readFile(outsideFile, 'utf8')).replace(/\r\n/g, '\n')).toBe('keep\n')
+    } finally {
+      await rm(outside, { recursive: true, force: true })
     }
   })
 })

@@ -109,6 +109,7 @@ const ERROR_COPY: Readonly<Record<string, string>> = {
   busy: '正在执行另一个 Git 操作，请稍候。',
   lock: '另一个 git 进程正在操作仓库（index.lock 存在）。',
   conflict: '操作产生冲突，请解决冲突后继续或中止。',
+  'stash-conflict': '搁置内容与当前文件冲突：请解决冲突并暂存文件；该搁置仍保留，可稍后用「丢弃搁置」删除。',
   'nothing-to-commit': '没有要提交的内容。',
   'confirmation-required': '这个操作需要确认后才能执行。',
   'confirmation-mismatch': '确认信息与当前操作不匹配，请重新确认。',

@@ -566,6 +566,51 @@ describe('POST /confirm and /action', () => {
     expect(job.status).toBe('cancelled')
   })
 
+  it('requires a confirmation for a reset and then runs the chosen mode', async () => {
+    const workspace = await makeWorkspace()
+    const fake = new FakeSubprocess().queueOutcome(
+      { stdout: probeOutput(workspace) },
+      { stdout: '' },
+    )
+    const { server, subprocess } = harness(fake, workspace)
+    const action = { kind: 'reset', workspaceId: 'workspace-1', hash: 'abc1234', mode: 'mixed' }
+    const denied = await invokeRoute(server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: action,
+    })
+    expect(denied.status).toBe(409)
+    expect((denied.json as { error: { code: string } }).error.code).toBe('confirmation-required')
+    const confirm = await invokeRoute(server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/confirm',
+      body: action,
+    })
+    const applied = await invokeRoute(server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: { ...action, confirm: (confirm.json as { token: string }).token },
+    })
+    expect(applied.status).toBe(200)
+    expect(subprocess.lastArgv()).toEqual(expect.arrayContaining(['reset', '--mixed', 'abc1234']))
+  })
+
+  it('cherry-picks one commit', async () => {
+    const workspace = await makeWorkspace()
+    const fake = new FakeSubprocess().queueOutcome(
+      { stdout: probeOutput(workspace) },
+      { stdout: '' },
+    )
+    const { server, subprocess } = harness(fake, workspace)
+    const response = await invokeRoute(server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: { kind: 'cherryPick', workspaceId: 'workspace-1', hash: 'abc1234' },
+    })
+    expect(response.status).toBe(200)
+    expect(subprocess.lastArgv()).toEqual(expect.arrayContaining(['cherry-pick', 'abc1234']))
+  })
+
   it('requires a confirmation for a lease-forced push and then uses no bare --force', async () => {
     const workspace = await makeWorkspace()
     const fake = new FakeSubprocess().queueOutcome(
@@ -603,6 +648,64 @@ describe('POST /confirm and /action', () => {
     const argv = subprocess.lastArgv() ?? []
     expect(argv).toContain('--force-with-lease')
     expect(argv).not.toContain('--force')
+  })
+
+  it('reports a stash pop conflict with its own code', async () => {
+    const workspace = await makeWorkspace()
+    const fake = new FakeSubprocess().queueOutcome(
+      { stdout: probeOutput(workspace) },
+      {
+        exitCode: 1,
+        stdout: 'Auto-merging src/util.js\nCONFLICT (content): Merge conflict in src/util.js\nThe stash entry is kept in case you need it again.\n',
+      },
+    )
+    const { server } = harness(fake, workspace)
+    const response = await invokeRoute(server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: { kind: 'stashPop', workspaceId: 'workspace-1' },
+    })
+    expect(response.status).toBe(409)
+    expect((response.json as { error: { code: string } }).error.code).toBe('stash-conflict')
+  })
+
+  it('exposes a cancellable fetch job and rejects a concurrent write', async () => {
+    const workspace = await makeWorkspace()
+    const fake = new FakeSubprocess().queueOutcome(
+      { stdout: probeOutput(workspace) },
+      { holdUntilAbort: true },
+    )
+    const { server } = harness(fake, workspace)
+    const started = await invokeRoute(server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: { kind: 'fetch', workspaceId: 'workspace-1', all: true },
+    })
+    expect(started.status).toBe(200)
+    const jobId = (started.json as { job: { id: string } }).job.id
+
+    const busy = await invokeRoute(server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: { kind: 'stage', workspaceId: 'workspace-1', paths: ['a.txt'] },
+    })
+    expect(busy.status).toBe(409)
+    expect((busy.json as { error: { code: string } }).error.code).toBe('busy')
+
+    const cancelled = await invokeRoute(server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/cancel',
+      body: { id: jobId },
+    })
+    expect(cancelled.status).toBe(200)
+
+    let status = 'running'
+    for (let attempt = 0; attempt < 100 && status === 'running'; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 10))
+      const view = await invokeRoute(server, { path: `/plugin-git-workspace/job?id=${jobId}` })
+      status = (view.json as { job: { status: string } }).job.status
+    }
+    expect(status).toBe('cancelled')
   })
 })
 

@@ -342,7 +342,7 @@ export function createGitWindowHandler(deps: GitWindowDeps): GitWindowRouteHandl
       changes: status.changes,
       counts,
       stashCount: status.head.stashCount,
-      branches: refs.refs.filter(ref => ref.type === 'local' || ref.type === 'remote'),
+      branches: refs.refs,
       remotes: parseRemoteVerbose(remotesRun.stdout),
     }
     const entry: CachedSnapshot = { snapshot, commands, at: Date.now() }

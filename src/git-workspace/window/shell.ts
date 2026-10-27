@@ -15,6 +15,7 @@ import { parseUnifiedDiff } from '../git-parse'
 import { computeGraph } from './lanes'
 import { BranchTree, DetailPane, LogList, formatWhen } from './log'
 import { BranchDialog, type BranchPrompt } from './branch'
+import { ForcePushDialog, ResetDialog, TagDeleteDialog, TagDialog, type ResetMode } from './history'
 import { CommitPane } from './commit'
 import { ConsolePane } from './console'
 import { CSS } from './css'
@@ -178,6 +179,20 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
     const [branchError, setBranchError] = React.useState<GitApiError | null>(null)
     const [job, setJob] = React.useState<GitJobView | null>(null)
     const [jobBusy, setJobBusy] = React.useState(false)
+    const [resetTarget, setResetTarget] = React.useState<string | null>(null)
+    const [resetMode, setResetMode] = React.useState<ResetMode>('mixed')
+    const [resetBusy, setResetBusy] = React.useState(false)
+    const [resetError, setResetError] = React.useState<GitApiError | null>(null)
+    const [tagTarget, setTagTarget] = React.useState<string | null>(null)
+    const [tagName, setTagName] = React.useState('')
+    const [tagBusy, setTagBusy] = React.useState(false)
+    const [tagError, setTagError] = React.useState<GitApiError | null>(null)
+    const [tagDeleteTarget, setTagDeleteTarget] = React.useState<string | null>(null)
+    const [tagDeleteBusy, setTagDeleteBusy] = React.useState(false)
+    const [tagDeleteError, setTagDeleteError] = React.useState<GitApiError | null>(null)
+    const [forcePushTarget, setForcePushTarget] = React.useState<string | null>(null)
+    const [forcePushBusy, setForcePushBusy] = React.useState(false)
+    const [forcePushError, setForcePushError] = React.useState<GitApiError | null>(null)
 
     const remembered = readStored(WORKSPACE_KEY)
     const candidate = items.find(item => item.workspaceId === choice)
@@ -326,12 +341,12 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
     }
 
     /** Start one long action and follow its job. */
-    const runJob = async (action: GitAction): Promise<void> => {
+    const runJob = async (action: GitAction, confirmToken?: string): Promise<void> => {
       if (workspaceId === null || jobBusy) return
       setJobBusy(true)
       setActionError(null)
       try {
-        const result = await runtime.action(action)
+        const result = await runtime.action(action, confirmToken)
         if (result.job === undefined) {
           setJobBusy(false)
           setRefreshKey(key => key + 1)
@@ -363,6 +378,117 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
         workspaceId,
         ...(needsUpstream && remote !== undefined ? { remote, branch, setUpstream: true } : {}),
       })
+    }
+
+    /** Run one write action that needs no dialog and refresh the views. */
+    const runSimple = async (action: GitAction): Promise<void> => {
+      if (workspaceId === null) return
+      setActionError(null)
+      try {
+        await runtime.action(action)
+        setSelectedHash(null)
+        setRefreshKey(key => key + 1)
+      } catch (error) {
+        setActionError(toApiError(error))
+      }
+    }
+
+    /** Abort the merge/rebase/cherry-pick/revert currently in progress. */
+    const abortOperation = (): void => {
+      if (workspaceId === null || snapshot === null) return
+      const operation = snapshot.head.operation
+      if (operation === 'none' || operation === 'bisect') return
+      const mapped = operation === 'rebase-apply' ? 'rebase' : operation
+      void runSimple({ kind: 'abortOperation', workspaceId, operation: mapped })
+    }
+
+    /** Continue the merge/rebase/cherry-pick/revert after conflicts were resolved. */
+    const continueOperation = (): void => {
+      if (workspaceId === null || snapshot === null) return
+      const operation = snapshot.head.operation
+      if (operation === 'none' || operation === 'bisect') return
+      const mapped = operation === 'rebase-apply' ? 'rebase' : operation
+      void runSimple({ kind: 'continueOperation', workspaceId, operation: mapped })
+    }
+
+    /** Confirm and run a reset to the selected commit. */
+    const confirmReset = async (): Promise<void> => {
+      if (workspaceId === null || resetTarget === null || resetBusy) return
+      setResetBusy(true)
+      setResetError(null)
+      try {
+        const action = { kind: 'reset', workspaceId, hash: resetTarget, mode: resetMode } as const
+        const confirmation = await runtime.confirm(action)
+        await runtime.action(action, confirmation.token)
+        setResetTarget(null)
+        setSelectedHash(null)
+        setRefreshKey(key => key + 1)
+      } catch (error) {
+        setResetError(toApiError(error))
+      } finally {
+        setResetBusy(false)
+      }
+    }
+
+    /** Create a lightweight tag on the selected commit. */
+    const confirmTag = async (): Promise<void> => {
+      if (workspaceId === null || tagTarget === null || tagBusy) return
+      const name = tagName.trim()
+      if (name === '') return
+      setTagBusy(true)
+      setTagError(null)
+      try {
+        await runtime.action({ kind: 'tagCreate', workspaceId, name, hash: tagTarget })
+        setTagTarget(null)
+        setTagName('')
+        setRefreshKey(key => key + 1)
+      } catch (error) {
+        setTagError(toApiError(error))
+      } finally {
+        setTagBusy(false)
+      }
+    }
+
+    /** Delete a tag after the server-issued confirmation. */
+    const confirmTagDelete = async (): Promise<void> => {
+      if (workspaceId === null || tagDeleteTarget === null || tagDeleteBusy) return
+      setTagDeleteBusy(true)
+      setTagDeleteError(null)
+      try {
+        const action = { kind: 'tagDelete', workspaceId, name: tagDeleteTarget } as const
+        const confirmation = await runtime.confirm(action)
+        await runtime.action(action, confirmation.token)
+        setTagDeleteTarget(null)
+        setRefreshKey(key => key + 1)
+      } catch (error) {
+        setTagDeleteError(toApiError(error))
+      } finally {
+        setTagDeleteBusy(false)
+      }
+    }
+
+    /** Confirm and run a forced push (--force-with-lease). */
+    const confirmForcePush = async (): Promise<void> => {
+      if (workspaceId === null || forcePushTarget === null || forcePushBusy) return
+      setForcePushBusy(true)
+      setForcePushError(null)
+      try {
+        const remote = snapshot?.remotes[0]?.name
+        const action = {
+          kind: 'push',
+          workspaceId,
+          branch: forcePushTarget,
+          forceWithLease: true,
+          ...(remote === undefined ? {} : { remote }),
+        } as const
+        const confirmation = await runtime.confirm(action)
+        setForcePushTarget(null)
+        await runJob(action, confirmation.token)
+      } catch (error) {
+        setForcePushError(toApiError(error))
+      } finally {
+        setForcePushBusy(false)
+      }
     }
 
     // Remember that the panel was open so the next page load can restore it;
@@ -688,6 +814,16 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
                   onCreateBranch: (start?: string) => openBranchDialog({ kind: 'create', ...(start === undefined ? {} : { start }) }, ''),
                   onRenameBranch: (name: string) => openBranchDialog({ kind: 'rename', branch: name }, name),
                   onDeleteBranch: (name: string) => openBranchDialog({ kind: 'delete', branch: name }, ''),
+                  onMergeBranch: (ref: string) => { if (workspaceId !== null) void runSimple({ kind: 'merge', workspaceId, ref }) },
+                  onRebaseBranch: (ref: string) => { if (workspaceId !== null) void runSimple({ kind: 'rebase', workspaceId, onto: ref }) },
+                  onDeleteTag: (name: string) => {
+                    setTagDeleteTarget(name)
+                    setTagDeleteError(null)
+                  },
+                  onForcePush: (name: string) => {
+                    setForcePushTarget(name)
+                    setForcePushError(null)
+                  },
                 }),
                 React.createElement(LogList, {
                   commits: log.commits,
@@ -701,6 +837,18 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
                   onQueryChange: setQueryInput,
                   onClearBranch: () => setBranchFilter(null),
                   onLoadMore: loadMore,
+                  onCherryPick: (oid: string) => { if (workspaceId !== null) void runSimple({ kind: 'cherryPick', workspaceId, hash: oid }) },
+                  onRevert: (oid: string) => { if (workspaceId !== null) void runSimple({ kind: 'revert', workspaceId, hash: oid }) },
+                  onReset: (oid: string) => {
+                    setResetTarget(oid)
+                    setResetMode('mixed')
+                    setResetError(null)
+                  },
+                  onTagCreate: (oid: string) => {
+                    setTagTarget(oid)
+                    setTagName('')
+                    setTagError(null)
+                  },
                 }),
                 React.createElement(DetailPane, {
                   detail,
@@ -719,7 +867,13 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
           { className: snapshot.stale ? 'dgw-statusBar dgw-statusBar--warn' : 'dgw-statusBar' },
           React.createElement('span', null, snapshot.repo.root),
           snapshot.head.operation !== 'none'
-            ? React.createElement('span', null, `正在${snapshot.head.operation}…`)
+            ? React.createElement(
+              React.Fragment,
+              null,
+              React.createElement('span', null, `正在${snapshot.head.operation}…`),
+              React.createElement('button', { className: 'dgw-retry', type: 'button', onClick: continueOperation }, '继续'),
+              React.createElement('button', { className: 'dgw-retry', type: 'button', onClick: abortOperation }, '中止操作'),
+            )
             : null,
           React.createElement('span', null, `分支 ${branches.filter(branch => branch.type === 'local').length} · 远程 ${branches.filter(branch => branch.type === 'remote').length}`),
           job === null
@@ -749,6 +903,46 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
           onForce: setBranchForce,
           onCancel: () => { if (!branchBusy) setBranchPrompt(null) },
           onConfirm: () => { void submitBranchDialog() },
+        }),
+      resetTarget === null
+        ? null
+        : React.createElement(ResetDialog, {
+          hash: resetTarget,
+          mode: resetMode,
+          busy: resetBusy,
+          error: resetError,
+          onMode: setResetMode,
+          onCancel: () => { if (!resetBusy) setResetTarget(null) },
+          onConfirm: () => { void confirmReset() },
+        }),
+      tagTarget === null
+        ? null
+        : React.createElement(TagDialog, {
+          hash: tagTarget,
+          value: tagName,
+          busy: tagBusy,
+          error: tagError,
+          onValue: setTagName,
+          onCancel: () => { if (!tagBusy) setTagTarget(null) },
+          onConfirm: () => { void confirmTag() },
+        }),
+      tagDeleteTarget === null
+        ? null
+        : React.createElement(TagDeleteDialog, {
+          name: tagDeleteTarget,
+          busy: tagDeleteBusy,
+          error: tagDeleteError,
+          onCancel: () => { if (!tagDeleteBusy) setTagDeleteTarget(null) },
+          onConfirm: () => { void confirmTagDelete() },
+        }),
+      forcePushTarget === null
+        ? null
+        : React.createElement(ForcePushDialog, {
+          branch: forcePushTarget,
+          busy: forcePushBusy,
+          error: forcePushError,
+          onCancel: () => { if (!forcePushBusy) setForcePushTarget(null) },
+          onConfirm: () => { void confirmForcePush() },
         }),
     )
   }

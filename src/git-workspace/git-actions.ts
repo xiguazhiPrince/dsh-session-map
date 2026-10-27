@@ -9,7 +9,7 @@
  * @module dsh-session-map/git-workspace/git-actions
  */
 import type { GitWindowErrorCode } from './git-types'
-import { isSafeRefName, isSafeRemoteName, normalizeRepoRelativePath } from './git-repo'
+import { isSafeHash, isSafeRefName, isSafeRemoteName, normalizeRepoRelativePath } from './git-repo'
 import { writeInvocation, type GitInvocation } from './git-command'
 
 /** Every write action the tool window can ask the Host to perform. */
@@ -25,6 +25,18 @@ export type ActionKind =
   | 'renameBranch'
   | 'fetch'
   | 'update'
+  | 'merge'
+  | 'rebase'
+  | 'reset'
+  | 'revert'
+  | 'cherryPick'
+  | 'abortOperation'
+  | 'stashPush'
+  | 'stashPop'
+  | 'stashDrop'
+  | 'tagCreate'
+  | 'tagDelete'
+  | 'continueOperation'
 
 /** Stage one set of paths. */
 export interface StageAction {
@@ -112,6 +124,94 @@ export interface UpdateAction {
   readonly mode: 'merge' | 'rebase'
 }
 
+/** Merge one ref into the current branch. */
+export interface MergeAction {
+  readonly kind: 'merge'
+  readonly workspaceId: string
+  readonly ref: string
+}
+
+/** Rebase the current branch onto one ref. */
+export interface RebaseAction {
+  readonly kind: 'rebase'
+  readonly workspaceId: string
+  readonly onto: string
+}
+
+/** Reset the current branch to one commit. */
+export interface ResetAction {
+  readonly kind: 'reset'
+  readonly workspaceId: string
+  readonly hash: string
+  readonly mode: 'soft' | 'mixed' | 'hard'
+}
+
+/** Revert one commit into a new commit. */
+export interface RevertAction {
+  readonly kind: 'revert'
+  readonly workspaceId: string
+  readonly hash: string
+}
+
+/** Cherry-pick one commit onto the current branch. */
+export interface CherryPickAction {
+  readonly kind: 'cherryPick'
+  readonly workspaceId: string
+  readonly hash: string
+}
+
+/** Abort the operation currently in progress. */
+export interface AbortOperationAction {
+  readonly kind: 'abortOperation'
+  readonly workspaceId: string
+  readonly operation: 'merge' | 'rebase' | 'cherry-pick' | 'revert'
+}
+
+/** Stash the working tree changes. */
+export interface StashPushAction {
+  readonly kind: 'stashPush'
+  readonly workspaceId: string
+  readonly message?: string | undefined
+  readonly includeUntracked: boolean
+}
+
+/** Pop one stash entry (defaults to the latest). */
+export interface StashPopAction {
+  readonly kind: 'stashPop'
+  readonly workspaceId: string
+  readonly ref?: string | undefined
+}
+
+/** Drop one stash entry without applying it. */
+export interface StashDropAction {
+  readonly kind: 'stashDrop'
+  readonly workspaceId: string
+  readonly ref?: string | undefined
+}
+
+/** Create a lightweight or annotated tag. */
+export interface TagCreateAction {
+  readonly kind: 'tagCreate'
+  readonly workspaceId: string
+  readonly name: string
+  readonly hash?: string | undefined
+  readonly message?: string | undefined
+}
+
+/** Delete one tag. */
+export interface TagDeleteAction {
+  readonly kind: 'tagDelete'
+  readonly workspaceId: string
+  readonly name: string
+}
+
+/** Continue the operation currently in progress after resolving conflicts. */
+export interface ContinueOperationAction {
+  readonly kind: 'continueOperation'
+  readonly workspaceId: string
+  readonly operation: 'merge' | 'rebase' | 'cherry-pick' | 'revert'
+}
+
 /** One parsed write action. */
 export type GitAction =
   | StageAction
@@ -125,6 +225,18 @@ export type GitAction =
   | RenameBranchAction
   | FetchAction
   | UpdateAction
+  | MergeAction
+  | RebaseAction
+  | ResetAction
+  | RevertAction
+  | CherryPickAction
+  | AbortOperationAction
+  | StashPushAction
+  | StashPopAction
+  | StashDropAction
+  | TagCreateAction
+  | TagDeleteAction
+  | ContinueOperationAction
 
 /** Validation result for one raw action body. */
 export type ActionParseResult =
@@ -152,6 +264,18 @@ export const ACTION_POLICY: Readonly<Record<ActionKind, ActionPolicy>> = {
   renameBranch: { level: 'l1', requiresConfirmation: false, summary: '重命名分支' },
   fetch: { level: 'l1', requiresConfirmation: false, summary: '获取远端更新' },
   update: { level: 'l1', requiresConfirmation: false, summary: '更新当前分支' },
+  merge: { level: 'l1', requiresConfirmation: false, summary: '合并分支' },
+  rebase: { level: 'l1', requiresConfirmation: false, summary: '变基当前分支' },
+  reset: { level: 'l2', requiresConfirmation: true, summary: '重置当前分支' },
+  revert: { level: 'l1', requiresConfirmation: false, summary: '撤销提交' },
+  cherryPick: { level: 'l1', requiresConfirmation: false, summary: '拣选提交' },
+  abortOperation: { level: 'l1', requiresConfirmation: false, summary: '中止当前操作' },
+  stashPush: { level: 'l1', requiresConfirmation: false, summary: '搁置更改' },
+  stashPop: { level: 'l1', requiresConfirmation: false, summary: '弹出搁置' },
+  stashDrop: { level: 'l2', requiresConfirmation: true, summary: '删除搁置' },
+  tagCreate: { level: 'l1', requiresConfirmation: false, summary: '创建标签' },
+  tagDelete: { level: 'l2', requiresConfirmation: true, summary: '删除标签' },
+  continueOperation: { level: 'l1', requiresConfirmation: false, summary: '继续当前操作' },
 }
 
 /**
@@ -330,6 +454,111 @@ export function parseActionRequest(input: unknown): ActionParseResult {
       }
       return { ok: true, action: { kind, workspaceId, mode } }
     }
+    case 'merge': {
+      const ref = record['ref']
+      if (typeof ref !== 'string' || (!isSafeRefName(ref) && !isSafeHash(ref))) {
+        return { ok: false, code: 'invalid-ref', message: 'the ref is not valid' }
+      }
+      return { ok: true, action: { kind, workspaceId, ref } }
+    }
+    case 'rebase': {
+      const onto = record['onto']
+      if (typeof onto !== 'string' || (!isSafeRefName(onto) && !isSafeHash(onto))) {
+        return { ok: false, code: 'invalid-ref', message: 'the ref is not valid' }
+      }
+      return { ok: true, action: { kind, workspaceId, onto } }
+    }
+    case 'reset': {
+      const hash = record['hash']
+      if (typeof hash !== 'string' || !isSafeHash(hash)) {
+        return { ok: false, code: 'invalid-ref', message: 'the commit hash is not valid' }
+      }
+      const mode = record['mode'] === undefined ? 'mixed' : record['mode']
+      if (mode !== 'soft' && mode !== 'mixed' && mode !== 'hard') {
+        return { ok: false, code: 'invalid-request', message: '"mode" must be "soft", "mixed" or "hard"' }
+      }
+      return { ok: true, action: { kind, workspaceId, hash, mode } }
+    }
+    case 'revert':
+    case 'cherryPick': {
+      const hash = record['hash']
+      if (typeof hash !== 'string' || !isSafeHash(hash)) {
+        return { ok: false, code: 'invalid-ref', message: 'the commit hash is not valid' }
+      }
+      return { ok: true, action: { kind, workspaceId, hash } }
+    }
+    case 'abortOperation': {
+      const operation = record['operation']
+      if (operation !== 'merge' && operation !== 'rebase' && operation !== 'cherry-pick' && operation !== 'revert') {
+        return { ok: false, code: 'invalid-request', message: 'the operation is not valid' }
+      }
+      return { ok: true, action: { kind, workspaceId, operation } }
+    }
+    case 'stashPush': {
+      const message = record['message']
+      if (message !== undefined && (typeof message !== 'string' || message.length > 200 || /[\u0000]/.test(message))) {
+        return { ok: false, code: 'invalid-request', message: 'the stash message is not valid' }
+      }
+      const includeUntracked = record['includeUntracked'] === undefined ? false : record['includeUntracked']
+      if (typeof includeUntracked !== 'boolean') {
+        return { ok: false, code: 'invalid-request', message: '"includeUntracked" must be a boolean' }
+      }
+      return {
+        ok: true,
+        action: {
+          kind,
+          workspaceId,
+          includeUntracked,
+          ...(message === undefined || message.trim() === '' ? {} : { message }),
+        },
+      }
+    }
+    case 'stashPop':
+    case 'stashDrop': {
+      const ref = record['ref']
+      if (ref !== undefined && (typeof ref !== 'string' || !/^stash@\{\d+\}$/.test(ref))) {
+        return { ok: false, code: 'invalid-ref', message: 'the stash reference is not valid' }
+      }
+      return { ok: true, action: { kind, workspaceId, ...(ref === undefined ? {} : { ref }) } }
+    }
+    case 'tagCreate': {
+      const name = record['name']
+      if (typeof name !== 'string' || !isSafeRefName(name)) {
+        return { ok: false, code: 'invalid-ref', message: 'the tag name is not valid' }
+      }
+      const hash = record['hash']
+      if (hash !== undefined && (typeof hash !== 'string' || !isSafeHash(hash))) {
+        return { ok: false, code: 'invalid-ref', message: 'the tag target is not valid' }
+      }
+      const message = record['message']
+      if (message !== undefined && (typeof message !== 'string' || message.length > 500 || /[\u0000]/.test(message))) {
+        return { ok: false, code: 'invalid-request', message: 'the tag message is not valid' }
+      }
+      return {
+        ok: true,
+        action: {
+          kind,
+          workspaceId,
+          name,
+          ...(hash === undefined ? {} : { hash }),
+          ...(message === undefined || message.trim() === '' ? {} : { message }),
+        },
+      }
+    }
+    case 'tagDelete': {
+      const name = record['name']
+      if (typeof name !== 'string' || !isSafeRefName(name)) {
+        return { ok: false, code: 'invalid-ref', message: 'the tag name is not valid' }
+      }
+      return { ok: true, action: { kind, workspaceId, name } }
+    }
+    case 'continueOperation': {
+      const operation = record['operation']
+      if (operation !== 'merge' && operation !== 'rebase' && operation !== 'cherry-pick' && operation !== 'revert') {
+        return { ok: false, code: 'invalid-request', message: 'the operation is not valid' }
+      }
+      return { ok: true, action: { kind, workspaceId, operation } }
+    }
     default:
       return { ok: false, code: 'unsupported-action', message: `unsupported action: ${String(kind)}` }
   }
@@ -361,6 +590,15 @@ export function confirmationTarget(action: GitAction, root: string): string | un
   }
   if (action.kind === 'push' && action.forceWithLease === true) {
     return `force-push:${root}:${action.remote ?? ''}:${action.branch ?? ''}`
+  }
+  if (action.kind === 'reset') {
+    return `reset:${root}:${action.mode}:${action.hash}`
+  }
+  if (action.kind === 'stashDrop') {
+    return `stash-drop:${root}:${action.ref ?? 'stash@{0}'}`
+  }
+  if (action.kind === 'tagDelete') {
+    return `tag-delete:${root}:${action.name}`
   }
   return `${action.kind}:${root}`
 }
@@ -457,5 +695,46 @@ export function buildActionInvocations(action: GitAction, context: ActionBuildCo
           { label: action.mode === 'rebase' ? 'rebase' : 'merge' },
         ),
       ]
+    case 'merge':
+      return [writeInvocation(gitPath, root, ['merge', '--no-edit', action.ref], { label: 'merge' })]
+    case 'rebase':
+      return [writeInvocation(gitPath, root, ['rebase', action.onto], { label: 'rebase' })]
+    case 'reset':
+      return [writeInvocation(gitPath, root, ['reset', `--${action.mode}`, action.hash], { label: `reset --${action.mode}` })]
+    case 'revert':
+      return [writeInvocation(gitPath, root, ['revert', '--no-edit', action.hash], { label: 'revert' })]
+    case 'cherryPick':
+      return [writeInvocation(gitPath, root, ['cherry-pick', action.hash], { label: 'cherry-pick' })]
+    case 'abortOperation':
+      return [writeInvocation(gitPath, root, [action.operation, '--abort'], { label: `${action.operation} --abort` })]
+    case 'continueOperation':
+      if (action.operation === 'merge') {
+        // Completing a merge is an ordinary commit with the prepared MERGE_MSG;
+        // `merge --continue` would open an editor on some git versions.
+        return [writeInvocation(gitPath, root, ['commit', '--no-edit'], { label: 'commit --no-edit' })]
+      }
+      return [writeInvocation(gitPath, root, [action.operation, '--continue'], { label: `${action.operation} --continue` })]
+    case 'stashPush':
+      return [writeInvocation(
+        gitPath,
+        root,
+        ['stash', 'push', ...(action.message === undefined ? [] : ['-m', action.message]), ...(action.includeUntracked ? ['-u'] : [])],
+        { label: 'stash push' },
+      )]
+    case 'stashPop':
+      return [writeInvocation(gitPath, root, ['stash', 'pop', ...(action.ref === undefined ? [] : [action.ref])], { label: 'stash pop' })]
+    case 'stashDrop':
+      return [writeInvocation(gitPath, root, ['stash', 'drop', ...(action.ref === undefined ? [] : [action.ref])], { label: 'stash drop' })]
+    case 'tagCreate':
+      return [writeInvocation(
+        gitPath,
+        root,
+        action.message === undefined
+          ? ['tag', action.name, ...(action.hash === undefined ? [] : [action.hash])]
+          : ['tag', '-a', action.name, '-m', action.message, ...(action.hash === undefined ? [] : [action.hash])],
+        { label: action.message === undefined ? 'tag' : 'tag -a' },
+      )]
+    case 'tagDelete':
+      return [writeInvocation(gitPath, root, ['tag', '-d', action.name], { label: 'tag -d' })]
   }
 }

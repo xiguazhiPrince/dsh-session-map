@@ -1273,3 +1273,18 @@ it('git 写操作只经 subprocess seam，且必须过门禁', () => {
 | 0.2 | 2026-10-27 | 按 git 2.45 实测与 IDEA 行为调研修订：暂存区即时勾选、merge 文件列表 `--first-parent`、`log -z`+`%x1f`、刷新分级、L0–L3 安全分级、实测性能与陷阱清单 |
 | 0.3 | 2026-10-27 | 新增 §6「git 操作安全性测试设计」：11 条安全不变量、38 条安全用例矩阵、假进程/临时仓库夹具、真实 git 集成用例、覆盖率与 CI 门禁 |
 
+### 10.4 实现状态（2026-10-27）
+
+| 层 | 已落地 | 位置 |
+|---|---|---|
+| 测试夹具 | 假进程（argv/env/取消/截断回放）、假 webServer/registry、临时真实仓库、真实 subprocess 适配器 | `testing/` |
+| 纯函数层 | 路径/引用校验、读写命令构造、status/log/refs/diff 解析、动作策略与确认目标、凭证脱敏 | `git-repo.ts`、`git-command.ts`、`git-parse.ts`、`git-actions.ts` |
+| 宿主读路由 | `/snapshot`、`/log`、`/commit`、`/diff`，Workspace→仓库根 `realpath` 校验、快照缓存、命令回执 | `host-git.ts` |
+| 宿主写路由 | `/confirm`（一次性令牌）、`/action`（写队列 + 作业）、`/job`、`/cancel`、`/events`（SSE 进度） | `host-actions.ts` |
+| 动作 | stage/unstage/discard/commit(amend)/push(force-with-lease)/checkout/createBranch/deleteBranch/renameBranch/fetch/update/merge/rebase/reset/revert/cherryPick/abortOperation/continueOperation/stashPush/stashPop/stashDrop/tagCreate/tagDelete | `git-actions.ts` |
+| 面板 | 提交/日志/控制台、工作区选择、分支目录折叠、标签分组、日志图线、提交详情/diff、作业进度、确认/重置/标签/强制推送弹层 | `window/` |
+| 安全用例 | S-01–S-16、S-19、S-22、S-24–S-33、S-37、S-38 已覆盖；S-20 以「clean 不跟随符号链接、外部文件不变」的集成用例覆盖；S-17/S-18/S-21/S-23/S-34–S-36 为单元或路由级覆盖 | `git-*.test.ts`、`host-git.test.ts`、`safety.integration.test.ts` |
+
+**尚未实现（后续可选）**：冲突三窗格合并编辑器、子模块/worktree 管理、远程标签删除、超大仓库虚拟滚动、非当前分支 Update 的「仅快进引用」选项。
+**验证**：约 236 个用例（`GIT_WS_IT=1` 时含 15 条真实 git 集成），`pnpm typecheck && pnpm test && pnpm build` 全绿；`lib/` 已重建。
+

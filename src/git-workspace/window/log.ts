@@ -10,7 +10,7 @@
  */
 import * as React from 'react'
 import type { BranchRef, CommitDetail, CommitRow, DiffView, FileChange, HeadState } from '../git-types'
-import { BranchIcon, ChevronIcon, CommitIcon, CopyIcon, FileIcon, RemoteIcon, SearchIcon, TagIcon } from './icons'
+import { BranchIcon, ChevronIcon, CommitIcon, CopyIcon, FileIcon, FolderIcon, RemoteIcon, SearchIcon, TagIcon } from './icons'
 
 /** Branch tree props. */
 export interface BranchTreeProps {
@@ -22,6 +22,10 @@ export interface BranchTreeProps {
   readonly onCreateBranch: (start?: string) => void
   readonly onRenameBranch: (name: string) => void
   readonly onDeleteBranch: (name: string) => void
+  readonly onMergeBranch: (ref: string) => void
+  readonly onRebaseBranch: (ref: string) => void
+  readonly onDeleteTag: (name: string) => void
+  readonly onForcePush: (name: string) => void
 }
 
 /** Format one ISO timestamp the way the tool window shows it. */
@@ -61,6 +65,7 @@ function refLabels(row: CommitRow): Array<{ readonly text: string; readonly tag:
 function branchRow(
   branch: BranchRef,
   active: boolean,
+  depth: number,
   onSelect: () => void,
   onCheckout: () => void,
   onMenu: (event: React.MouseEvent) => void,
@@ -70,6 +75,11 @@ function branchRow(
     : branch.track.gone
       ? 'gone'
       : [branch.track.ahead > 0 ? `↑${branch.track.ahead}` : '', branch.track.behind > 0 ? `↓${branch.track.behind}` : ''].filter(Boolean).join(' ')
+  const icon = branch.type === 'remote'
+    ? React.createElement(RemoteIcon, { size: 14 })
+    : branch.type === 'tag'
+      ? React.createElement(TagIcon, { size: 14 })
+      : React.createElement(BranchIcon, { size: 14 })
   return React.createElement(
     'div',
     {
@@ -79,15 +89,69 @@ function branchRow(
         branch.isHead ? 'dgw-treeRow--current' : '',
         active ? 'dgw-treeRow--active' : '',
       ].filter(Boolean).join(' '),
+      style: { paddingLeft: 14 + depth * 12 },
       onClick: onSelect,
       onDoubleClick: branch.type === 'local' ? onCheckout : undefined,
-      onContextMenu: branch.type === 'local' ? onMenu : undefined,
+      onContextMenu: branch.type === 'remote' ? undefined : onMenu,
       title: branch.name,
     },
-    branch.type === 'remote' ? React.createElement(RemoteIcon, { size: 14 }) : React.createElement(BranchIcon, { size: 14 }),
-    React.createElement('span', { className: 'dgw-treeName' }, branch.name),
+    icon,
+    React.createElement('span', { className: 'dgw-treeName' }, branch.name.split('/').at(-1) ?? branch.name),
     badge === null || badge === '' ? null : React.createElement('span', { className: 'dgw-treeBadge' }, badge),
   )
+}
+
+/** One folded branch-tree node. */
+interface BranchTreeNode {
+  readonly segment: string
+  readonly path: string
+  readonly children: BranchTreeNode[]
+  branch?: BranchRef
+}
+
+/**
+ * Fold slash-separated branch names into a tree.
+ * @param branches - branches of one namespace.
+ * @returns the sorted forest.
+ */
+export function buildBranchTree(branches: readonly BranchRef[]): readonly BranchTreeNode[] {
+  const roots: BranchTreeNode[] = []
+  for (const branch of branches) {
+    const parts = branch.name.split('/')
+    let level = roots
+    let path = ''
+    for (let index = 0; index < parts.length; index += 1) {
+      const segment = parts[index] as string
+      path = path === '' ? segment : `${path}/${segment}`
+      let node = level.find(candidate => candidate.segment === segment)
+      if (node === undefined) {
+        node = { segment, path, children: [] }
+        level.push(node)
+      }
+      if (index === parts.length - 1) node.branch = branch
+      level = node.children
+    }
+  }
+  const sort = (nodes: BranchTreeNode[]): void => {
+    nodes.sort((left, right) => left.segment.localeCompare(right.segment))
+    for (const node of nodes) sort(node.children)
+  }
+  sort(roots)
+  return roots
+}
+
+/** Count leaves under one folded node. */
+function leafCount(node: BranchTreeNode): number {
+  if (node.branch !== undefined && node.children.length === 0) return 1
+  return node.children.reduce((total, child) => total + leafCount(child), 0)
+}
+
+/** One open context menu. */
+interface BranchMenuState {
+  readonly x: number
+  readonly y: number
+  readonly branch?: BranchRef
+  readonly tag?: BranchRef
 }
 
 /** Render the branch panel. */
@@ -95,11 +159,14 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
   const [filter, setFilter] = React.useState('')
   const [localOpen, setLocalOpen] = React.useState(true)
   const [remoteOpen, setRemoteOpen] = React.useState(true)
-  const [menu, setMenu] = React.useState<{ readonly x: number; readonly y: number; readonly branch: BranchRef } | null>(null)
+  const [tagsOpen, setTagsOpen] = React.useState(true)
+  const [expanded, setExpanded] = React.useState<ReadonlySet<string>>(new Set())
+  const [menu, setMenu] = React.useState<BranchMenuState | null>(null)
   const needle = filter.trim().toLowerCase()
   const matches = (branch: BranchRef): boolean => needle === '' || branch.name.toLowerCase().includes(needle)
   const locals = props.branches.filter(branch => branch.type === 'local' && matches(branch))
   const remotes = props.branches.filter(branch => branch.type === 'remote' && matches(branch))
+  const tags = props.branches.filter(branch => branch.type === 'tag' && matches(branch))
   const current = props.head.branch
 
   React.useEffect(() => {
@@ -109,19 +176,28 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
       if (event.key === 'Escape') close()
     }
     window.addEventListener('click', close)
-    window.addEventListener('contextmenu', close)
     window.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', close, true)
     return () => {
       window.removeEventListener('click', close)
-      window.removeEventListener('contextmenu', close)
       window.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', close, true)
     }
   }, [menu])
 
-  const openMenu = (event: React.MouseEvent, branch: BranchRef): void => {
+  const openMenu = (event: React.MouseEvent, entry: { readonly branch?: BranchRef; readonly tag?: BranchRef }): void => {
     event.preventDefault()
     event.stopPropagation()
-    setMenu({ x: event.clientX, y: event.clientY, branch })
+    setMenu({ x: event.clientX, y: event.clientY, ...entry })
+  }
+
+  const toggleFolder = (path: string): void => {
+    setExpanded((previous) => {
+      const next = new Set(previous)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
   }
 
   const menuItem = (label: string, action: () => void): React.ReactElement => React.createElement(
@@ -138,6 +214,52 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
     },
     label,
   )
+
+  const renderNodes = (nodes: readonly BranchTreeNode[], depth: number): React.ReactNode[] => nodes.flatMap((node) => {
+    const rows: React.ReactNode[] = []
+    const paddingLeft = 14 + depth * 12
+    if (node.branch !== undefined && node.children.length === 0) {
+      const branch = node.branch
+      rows.push(branchRow(
+        branch,
+        props.selectedRef === branch.name,
+        depth,
+        () => props.onSelect(branch.name),
+        () => props.onCheckout(branch.name),
+        event => openMenu(event, { branch }),
+      ))
+      return rows
+    }
+    if (node.branch !== undefined) {
+      const branch = node.branch
+      rows.push(branchRow(
+        branch,
+        props.selectedRef === branch.name,
+        depth,
+        () => props.onSelect(branch.name),
+        () => props.onCheckout(branch.name),
+        event => openMenu(event, { branch }),
+      ))
+    }
+    const open = needle !== '' || expanded.has(node.path)
+    rows.push(React.createElement(
+      'button',
+      {
+        key: `folder:${node.path}`,
+        className: 'dgw-treeRow dgw-treeRow--folder',
+        style: { paddingLeft },
+        type: 'button',
+        'data-open': open,
+        onClick: () => toggleFolder(node.path),
+      },
+      React.createElement(ChevronIcon, { size: 12 }),
+      React.createElement(FolderIcon, { size: 14 }),
+      React.createElement('span', { className: 'dgw-treeName' }, node.segment),
+      React.createElement('span', { className: 'dgw-treeBadge' }, String(leafCount(node))),
+    ))
+    if (open) rows.push(...renderNodes(node.children, depth + 1))
+    return rows
+  })
 
   return React.createElement(
     'div',
@@ -197,15 +319,7 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
         React.createElement(ChevronIcon, { size: 12 }),
         `本地 (${locals.length})`,
       ),
-      localOpen
-        ? locals.map(branch => branchRow(
-          branch,
-          props.selectedRef === branch.name,
-          () => props.onSelect(branch.name),
-          () => props.onCheckout(branch.name),
-          event => openMenu(event, branch),
-        ))
-        : null,
+      localOpen ? renderNodes(buildBranchTree(locals), 0) : null,
       React.createElement(
         'button',
         {
@@ -217,25 +331,58 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
         React.createElement(ChevronIcon, { size: 12 }),
         `远程 (${remotes.length})`,
       ),
-      remoteOpen
-        ? remotes.map(branch => branchRow(
-          branch,
-          props.selectedRef === branch.name,
-          () => props.onSelect(branch.name),
+      remoteOpen ? renderNodes(buildBranchTree(remotes), 0) : null,
+      tags.length === 0
+        ? null
+        : React.createElement(
+          'button',
+          {
+            className: 'dgw-treeSectionHead',
+            'data-open': tagsOpen,
+            onClick: () => setTagsOpen(open => !open),
+            type: 'button',
+          },
+          React.createElement(ChevronIcon, { size: 12 }),
+          `标签 (${tags.length})`,
+        ),
+      tags.length === 0 || !tagsOpen
+        ? null
+        : tags.map(tag => branchRow(
+          tag,
+          props.selectedRef === tag.name,
+          0,
+          () => props.onSelect(tag.name),
           () => undefined,
-          () => undefined,
-        ))
-        : null,
+          event => openMenu(event, { tag }),
+        )),
     ),
     menu === null
       ? null
       : React.createElement(
         'div',
-        { className: 'dgw-menu', style: { left: menu.x, top: menu.y } },
-        menuItem('检出', () => props.onCheckout(menu.branch.name)),
-        menuItem('从此分支新建…', () => props.onCreateBranch(menu.branch.name)),
-        menuItem('重命名…', () => props.onRenameBranch(menu.branch.name)),
-        menuItem('删除…', () => props.onDeleteBranch(menu.branch.name)),
+        {
+          className: 'dgw-menu',
+          style: {
+            left: Math.max(8, Math.min(menu.x, (typeof window === 'undefined' ? menu.x : window.innerWidth - 200))),
+            top: Math.max(8, Math.min(menu.y, (typeof window === 'undefined' ? menu.y : window.innerHeight - 240))),
+          },
+        },
+        ...(menu.branch === undefined
+          ? [
+            menuItem('在日志中查看', () => props.onSelect(menu.tag?.name ?? null)),
+            menuItem('删除标签…', () => { if (menu.tag !== undefined) props.onDeleteTag(menu.tag.name) }),
+          ]
+          : [
+            menuItem('检出', () => { if (menu.branch !== undefined) props.onCheckout(menu.branch.name) }),
+            menuItem('从此分支新建…', () => { if (menu.branch !== undefined) props.onCreateBranch(menu.branch.name) }),
+            menuItem('合并到当前分支', () => { if (menu.branch !== undefined) props.onMergeBranch(menu.branch.name) }),
+            menuItem('将当前分支变基到此处', () => { if (menu.branch !== undefined) props.onRebaseBranch(menu.branch.name) }),
+            menuItem('重命名…', () => { if (menu.branch !== undefined) props.onRenameBranch(menu.branch.name) }),
+            menuItem('删除…', () => { if (menu.branch !== undefined) props.onDeleteBranch(menu.branch.name) }),
+            ...(menu.branch?.isHead === true
+              ? [menuItem('强制推送（--force-with-lease）…', () => { if (menu.branch !== undefined) props.onForcePush(menu.branch.name) })]
+              : []),
+          ]),
       ),
   )
 }
@@ -253,6 +400,10 @@ export interface LogListProps {
   readonly onQueryChange: (value: string) => void
   readonly onClearBranch: () => void
   readonly onLoadMore: () => void
+  readonly onCherryPick: (oid: string) => void
+  readonly onRevert: (oid: string) => void
+  readonly onReset: (oid: string) => void
+  readonly onTagCreate: (oid: string) => void
 }
 
 /** Lane palette; the gutter is an SVG so colour comes from here, not CSS. */
@@ -267,29 +418,29 @@ function Gutter(props: {
   readonly after: readonly string[]
   readonly width: number
 }): React.ReactElement {
-  const step = 10
+  const step = 12
   const height = 26
   const middle = height / 2
   const children: React.ReactElement[] = []
   props.after.forEach((_, index) => {
     children.push(React.createElement('line', {
       key: `a${index}`,
-      x1: 5 + index * step, y1: middle, x2: 5 + index * step, y2: height,
+      x1: 6 + index * step, y1: middle, x2: 6 + index * step, y2: height,
       stroke: LANE_PALETTE[index % LANE_PALETTE.length], strokeWidth: 1.5,
     }))
   })
   props.before.forEach((_, index) => {
     children.push(React.createElement('line', {
       key: `b${index}`,
-      x1: 5 + index * step, y1: 0, x2: 5 + index * step, y2: middle,
+      x1: 6 + index * step, y1: 0, x2: 6 + index * step, y2: middle,
       stroke: LANE_PALETTE[index % LANE_PALETTE.length], strokeWidth: 1.5,
     }))
   })
   children.push(React.createElement('circle', {
     key: 'dot',
-    cx: 5 + props.lane * step,
+    cx: 6 + props.lane * step,
     cy: middle,
-    r: 3,
+    r: 3.5,
     fill: LANE_PALETTE[props.lane % LANE_PALETTE.length],
   }))
   return React.createElement('svg', { className: 'dgw-gutter', width: props.width, height }, ...children)
@@ -298,7 +449,39 @@ function Gutter(props: {
 /** Render the commit list. */
 export function LogList(props: LogListProps): React.ReactElement {
   const laneCount = props.graph.reduce((max, row) => Math.max(max, row.lane + 1, row.before.length, row.after.length), 1)
-  const gutterWidth = laneCount * 10 + 6
+  const gutterWidth = laneCount * 12 + 8
+  const [menu, setMenu] = React.useState<{ readonly x: number; readonly y: number; readonly commit: CommitRow } | null>(null)
+
+  React.useEffect(() => {
+    if (menu === null) return undefined
+    const close = (): void => setMenu(null)
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') close()
+    }
+    window.addEventListener('click', close)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', close, true)
+    return () => {
+      window.removeEventListener('click', close)
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', close, true)
+    }
+  }, [menu])
+
+  const menuItem = (label: string, action: () => void, key?: string): React.ReactElement => React.createElement(
+    'button',
+    {
+      className: 'dgw-menuItem',
+      type: 'button',
+      key: key ?? label,
+      onClick: (event: React.MouseEvent) => {
+        event.stopPropagation()
+        setMenu(null)
+        action()
+      },
+    },
+    label,
+  )
   return React.createElement(
     'div',
     { className: 'dgw-list' },
@@ -348,6 +531,11 @@ export function LogList(props: LogListProps): React.ReactElement {
               key: commit.oid,
               className: `dgw-row${props.selectedOid === commit.oid ? ' dgw-row--active' : ''}`,
               onClick: () => props.onSelect(commit.oid),
+              onContextMenu: (event: React.MouseEvent) => {
+                event.preventDefault()
+                event.stopPropagation()
+                setMenu({ x: event.clientX, y: event.clientY, commit })
+              },
               title: `${commit.shortOid} ${commit.subject}`,
             },
             React.createElement(Gutter, {
@@ -368,12 +556,34 @@ export function LogList(props: LogListProps): React.ReactElement {
               ),
             React.createElement('span', { className: 'dgw-meta' }, commit.author.name),
             React.createElement('span', { className: 'dgw-meta' }, formatWhen(commit.author.date)),
+            React.createElement('button', {
+              className: 'dgw-rowMenu',
+              type: 'button',
+              title: '提交操作',
+              'aria-label': '提交操作',
+              onClick: (event: React.MouseEvent<HTMLButtonElement>) => {
+                event.stopPropagation()
+                const rect = event.currentTarget.getBoundingClientRect()
+                setMenu({ x: rect.left - 170, y: rect.bottom + 2, commit })
+              },
+            }, '⋯'),
           )
         }),
       props.hasMore
         ? React.createElement('button', { className: 'dgw-loadMore', onClick: props.onLoadMore, type: 'button' }, '加载更多')
         : null,
     ),
+    menu === null
+      ? null
+      : React.createElement(
+        'div',
+        { className: 'dgw-menu', style: { left: Math.max(8, Math.min(menu.x, (typeof window === 'undefined' ? menu.x : window.innerWidth - 200))), top: Math.max(8, Math.min(menu.y, (typeof window === 'undefined' ? menu.y : window.innerHeight - 220))) } },
+        menuItem('复制哈希', () => copy(menu.commit.oid)),
+        menuItem('创建标签…', () => props.onTagCreate(menu.commit.oid)),
+        menuItem('拣选提交', () => props.onCherryPick(menu.commit.oid)),
+        menuItem('撤销提交', () => props.onRevert(menu.commit.oid)),
+        menuItem('重置到此处…', () => props.onReset(menu.commit.oid)),
+      ),
   )
 }
 

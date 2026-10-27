@@ -206,6 +206,7 @@ export type GitWindowErrorCode =
   | 'busy'
   | 'lock'
   | 'conflict'
+  | 'stash-conflict'
   | 'nothing-to-commit'
   | 'confirmation-required'
   | 'confirmation-mismatch'

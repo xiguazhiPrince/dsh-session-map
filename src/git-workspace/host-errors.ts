@@ -37,6 +37,7 @@ export function statusFor(code: GitWindowErrorCode): number {
     case 'busy':
     case 'lock':
     case 'conflict':
+    case 'stash-conflict':
     case 'branch-not-merged':
     case 'branch-checked-out':
     case 'dirty-worktree':

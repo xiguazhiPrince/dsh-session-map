@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Write actions for the Git tool window: confirmation tokens, the per-repository
  * mutation lock, background jobs for network operations, action execution and
  * failure classification.
@@ -115,6 +115,24 @@ function actionFailure(action: GitAction, stdout: string, stderr: string, exitCo
   }
   if (action.kind === 'update' && /conflict|automatic merge failed|needs merge/.test(text)) {
     return new RouteFailure('conflict', 409, 'the update produced conflicts', stderr || stdout)
+  }
+  if ((action.kind === 'merge' || action.kind === 'rebase' || action.kind === 'cherryPick' || action.kind === 'revert')
+    && /conflict|automatic merge failed|needs merge|could not apply/.test(text)) {
+    return new RouteFailure('conflict', 409, 'the operation produced conflicts', stderr || stdout)
+  }
+  if (action.kind === 'continueOperation' && /no merge|no rebase|no cherry-pick|no revert|not in the middle|nothing to commit/.test(text)) {
+    return new RouteFailure('conflict', 409, 'no operation is in progress', stderr || stdout)
+  }
+  if (action.kind === 'stashPop' && /conflict|needs merge|automatic merge failed/.test(text)) {
+    return new RouteFailure(
+      'stash-conflict',
+      409,
+      'the stash could not be applied cleanly; resolve the conflicts, stage the files, then drop the stash',
+      stderr || stdout,
+    )
+  }
+  if (action.kind === 'tagCreate' && /already exists/.test(text)) {
+    return new RouteFailure('invalid-request', 409, 'the tag already exists', stderr || stdout)
   }
   if (action.kind === 'deleteBranch' && /not fully merged/.test(text)) {
     return new RouteFailure('branch-not-merged', 409, 'the branch has commits that are not merged', stderr || stdout)

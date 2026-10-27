@@ -147,12 +147,16 @@ describe('BranchTree', () => {
       onCreateBranch: () => undefined,
       onRenameBranch: () => undefined,
       onDeleteBranch: () => undefined,
+      onMergeBranch: () => undefined,
+      onRebaseBranch: () => undefined,
+      onDeleteTag: () => undefined,
+      onForcePush: () => undefined,
     }))
     expect(markup).toContain('HEAD(当前分支)')
     expect(markup).toContain('本地 (1)')
     expect(markup).toContain('远程 (1)')
     expect(markup).toContain('main')
-    expect(markup).toContain('origin/main')
+    expect(markup).toContain('origin')
   })
 })
 
@@ -171,6 +175,10 @@ describe('LogList', () => {
       onQueryChange: () => undefined,
       onClearBranch: () => undefined,
       onLoadMore: () => undefined,
+      onCherryPick: () => undefined,
+      onRevert: () => undefined,
+      onReset: () => undefined,
+      onTagCreate: () => undefined,
     }))
     expect(markup).toContain('Merge branch v2.1')
     expect(markup).toContain('origin &amp; main')
@@ -235,6 +243,7 @@ describe('CommitPane', () => {
     expect(markup).toContain('未版本控制 (1)')
     expect(markup).toContain('src/app.ts')
     expect(markup).toContain('修正上次提交')
+    expect(markup).toContain('丢弃搁置')
     expect(markup).toContain('提交并推送')
     expect(markup).toContain('提交信息')
     expect(markup).toContain('已暂存 1')
