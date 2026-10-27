@@ -1,0 +1,127 @@
+# DSH Git 工具窗口实施计划（测试夹具先行）
+
+> 状态：**已完成**（2026-10-27）｜ 对应规格：[git-workspace-spec.md](git-workspace-spec.md)
+> 实现提交：`1c6f3d9`（只读/提交/分支）、`541a6ea`（fetch/update/push 作业）、`ffc5b44`（历史写操作/ stash / tag / 打磨）
+> 最终验证：236 个用例（含 15 条真实 git 集成）、`pnpm typecheck`、`pnpm build` 全绿。
+
+## 1. 目标与交付边界
+
+在 `src/git-workspace` 内实现 IDEA 风格的 Git 工具窗口：DSH 宿主通过 `subprocess` 执行真实 git，客户端是 `main` 面板 + `sidebar.panellist` 图标。按阶段推进，每阶段独立通过 `pnpm typecheck && pnpm test && pnpm build`。
+
+| 阶段 | 交付 | 状态 |
+|---|---|---|
+| P0 夹具 | 假进程、假宿主、临时仓库、真实 subprocess 适配器 | ✅ |
+| P1 纯函数层 | 路径/引用校验、argv 构造、解析器、动作策略、脱敏 | ✅ |
+| P2 只读闭环 | 宿主只读 API + 只读面板（日志/详情/分支树/控制台） | ✅ |
+| P3 提交链路 | 暂存/丢弃/提交/修正/提交并推送 + 确认令牌 + 写队列 | ✅ |
+| P4 分支/同步/历史 | 分支动作、fetch/update/push 作业、merge/rebase/reset/revert/stash/tag、SSE 进度 | ✅ |
+
+**不做**：变更列表、Shelf 补丁、blame、PR 集成、冲突三窗格合并编辑器、多仓库/子模块递归、对 Agent 暴露 Git 工具。
+
+## 2. 已核实的现状与约束
+
+- 原有 `src/git-workspace/{git,host,client}.ts` 只服务 Settings → 从 Git 克隆；`git.ts` 的 clone 规则保持不变，克隆逻辑拆到 `host-clone.ts`。
+- 浏览器半唯一入口是 `src/session-map/index.ts`（tsdown/package.json 钉死）；宿主半入口是 `src/index.ts`。
+- `main` 只接受 `key`（无 order/label/ownerProps），由 `sidebar.panellist` 的 `id` 投递；图标组件收到 `{ size, active }`；`ctx.layout.selectPanel()` 可程序化切换。
+- 面板选中态不持久化：刷新后回到会话页，插件用 `localStorage` + 注册时 `selectPanel` 恢复。
+- 运行中 web profile 需要 link 到本仓库（`dsh plugin --profile web add link:<repo>`）才能看到宿主路由变化；npm 安装副本不会热更新。
+- `subprocess` 的 env 会合并到脱敏后的父环境（保留 `PATH/HOME/SSH_AUTH_SOCK`）。
+- `webServer.register` 的 handler 拥有完整响应生命周期，可直接做 SSE。
+- git 写操作**不受** workspace-write 沙箱与 approval 约束：路径白名单 + 服务端确认 + 不注册 Tool 是唯一边界。
+
+## 3. P0 测试夹具（`src/git-workspace/testing/`）
+
+| 文件 | 内容 |
+|---|---|
+| `fake-subprocess.ts` | 记录每次 spawn 的 argv/cwd/env/stdio/graceMs/signal；按脚本回放退出码、stdout/stderr、延迟、超时、取消、截断；提供 `lastArgv()` 等断言辅助 |
+| `fake-host.ts` | `FakeWebServer` + `FakeWorkspaceRegistry` + 进程内 `invokeRoute`；保留真实 `isTrustedRequest` 路径 |
+| `temp-repo.ts` | 真实临时仓库：init/commit/branch/merge conflict/bare remote/index.lock |
+| `real-subprocess.ts` | 集成测试用的本地 subprocess 适配器（生产只经 seam） |
+| `output-fixtures.ts` | status v2 / log -z / show / numstat / refs 等字节级 fixture |
+| `harness.test.ts` | 夹具自测：录制 spawn、abort 回放、route 调用、临时仓库提交与冲突 |
+
+## 4. P1 纯函数层
+
+| 文件 | 责任 |
+|---|---|
+| `git-types.ts` | 快照/提交/文件/diff/作业/信封/错误码等共享类型 |
+| `git-repo.ts` | 路径归一化与包含判断、ref/hash/remote 名预检 |
+| `git-command.ts` | 只读/写公共前缀与 env、每个动作的 argv builder、凭证脱敏 |
+| `git-parse.ts` | status v2 -z、log -z + `%x1f`、name-status/numstat -z、unified diff、refs、repo probe；截断检测 |
+| `git-actions.ts` | 动作白名单、L1/L2/L3 策略、确认目标、写命令构造、请求解析 |
+
+## 5. P2 宿主只读 API
+
+`host.ts` 只做信任校验与分发；`host-http.ts` 承载 req/res、JSON 读取与 loopback 校验；`host-errors.ts` 承载状态码与 stderr 分类；`host-process.ts` 是唯一的 git 执行者。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/plugin-git-workspace/snapshot` | head、四类更改、分支/标签/远端、stashCount、进行中操作；1s 内缓存 |
+| GET | `/plugin-git-workspace/log` | 单页 ≤100，ref/文本/作者/日期/路径过滤，hasMore |
+| GET | `/plugin-git-workspace/commit` | `show -s` + `show --first-parent --name-status/--numstat` + `for-each-ref --contains` |
+| GET | `/plugin-git-workspace/diff` | 原始 patch + binary/truncated，客户端解析 hunk |
+
+所有路径先按注册 Workspace 做 `realpath` 包含校验；每个响应带 `commands` 回执。
+
+## 6. P2 只读面板
+
+`window/` 下按职责拆分：`index.ts`（注册 + 恢复）、`shell.ts`（标签页/工作区选择/轮询/选择）、`log.ts`（分支树/列表/详情/diff）、`console.ts`、`runtime.ts`（fetch/轮询/作业）、`lanes.ts`（图线布局）、`css.ts`、`icons.ts`、`branch.ts`/`history.ts`/`commit.ts`（弹层与提交页）。
+
+- 注册：`sidebar.panellist{ id:'git-workspace', order:30, label:'Git' }` + `main{ key:'git-workspace' }`。
+- 工作区：`useWorkspaces().items`，默认顺序 = localStorage → 当前会话所属 workspace → 第一项。
+- 轮询：可见 3s、隐藏 10s、不可见即停；请求都带 AbortController。
+- 空态/错误态/加载态、主题 token、内联 SVG，无产品组件 import。
+
+## 7. P3 提交链路与安全门禁
+
+- 动作：stage / unstage / discard（`clean -nd` 预览 → `-fd`，永不带 `-x`）/ commit（amend）/ push。
+- `/confirm` 签发一次性令牌（60s，绑定 repo + 动作 + 目标）；`/action` 服务端校验，绕过 UI 也无效。
+- 每仓库写串行；`index.lock` 返回 `lock` 且不删除锁；错误码映射中文文案。
+- 控制台显示实际 argv（凭证脱敏）、退出码、耗时。
+
+## 8. P4 分支 / 同步 / 历史写操作
+
+- **分支**：checkout、createBranch、deleteBranch（L2 确认，默认 `-d`，强制 `-D`）、renameBranch；分支树右键菜单、双击检出、目录折叠。
+- **同步**：fetch、update（fetch + merge）、push（可强制 `--force-with-lease`，L3 确认）；长任务返回 job，`/job` 查询、`/cancel` 取消、`/events` SSE 进度。
+- **历史**：merge、rebase、reset（Soft/Mixed/Hard，L2）、revert、cherryPick、abortOperation、continueOperation；日志右键菜单。
+- **stash / tag**：stashPush（含未跟踪）、stashPop、stashDrop（L2）、tagCreate、tagDelete（L2）。
+
+## 9. 测试映射与验证
+
+| 层 | 范围 | 用例数 |
+|---|---|---|
+| L1 纯函数 | 路径/引用/argv/解析/动作策略/脱敏 | `git-*.test.ts` |
+| L2 路由 | 信任、白名单、确认门禁、队列、错误码 | `host-git.test.ts` |
+| L3 脚本化进程 | 取消、超时、截断、busy | 同上 |
+| L4 真实 git | 丢弃/提交/锁/空仓库、分支、stash、tag、fetch/update、force-with-lease、symlink | `safety.integration.test.ts` |
+| L5 架构守卫 | 禁止 shell/child_process、写路由必须过门禁 | `safety.architecture.test.ts` |
+| SSR | 面板/分支树/日志/详情/提交页 | `window.test.ts` |
+
+验证命令：
+
+```sh
+pnpm typecheck
+pnpm test                                   # 221 个本地用例（集成默认跳过）
+GIT_WS_IT=1 pnpm test                       # 236 用例（含 15 条真实 git）
+pnpm build                                  # 重建 lib/
+```
+
+## 10. 实际偏差与剩余可选项
+
+- **快照刷新**：v1 每次轮询跑完整 status（未拆 A/B 级 `-uno`）；大仓库可后续优化。
+- **stash 列表**：目前只提供 push/pop 最近一条与 stashCount，完整列表/逐条 drop UI 未做（后端 `stashDrop` 已实现）。
+- **标签删除**：仅本地 `tag -d`，未提供远程标签删除。
+- **冲突解决**：提供继续/中止，未做双栏/三窗格合并编辑器。
+- **性能**：提交列表按页加载，未做虚拟滚动；超大仓库需后续优化。
+- **kill 恢复**：取消作业与 busy 已测，进程被 kill 后的状态恢复只有设计说明，未加集成用例。
+- **其它**：子模块/worktree 管理、远程标签删除、非当前分支 Update 的「仅快进」选项。
+
+## 11. 本地运行
+
+```sh
+pnpm build
+dsh plugin --profile web add link:C:\Users\54647\Developer\myProjects\dsh-session-map
+# 刷新页面；宿主半由 HMR 重载，客户端半刷新后生效
+```
+
+详见 [README](../README.md) 的「Git 工具窗口」与「本地开发」。
