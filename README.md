@@ -192,7 +192,7 @@ localStorage.removeItem('dsh.session-map.conversationViews')        // 回到出
 
 宿主路由与克隆页共用 `/plugin-git-workspace` 前缀；所有路径先按注册 Workspace 做 `realpath` 包含校验，写操作每仓库串行，破坏性操作由服务端二次确认。规格与安全测试矩阵见 [docs/git-workspace-spec.md](docs/git-workspace-spec.md) §6，实施阶段与完成状态见 [docs/git-workspace-plan.md](docs/git-workspace-plan.md)。
 
-**当前状态（0.4.0-dev）**：只读、提交、分支、同步与历史写操作已实现，`pnpm test` 覆盖 236 个用例（含 `GIT_WS_IT=1` 的 15 条真实 git 集成用例：未确认丢弃不改文件、clean 不删 ignored、锁不清除、提交信息不执行 shell、stash/tag、非快进推送被拒且确认后才能 force-with-lease、clean 不跟随符号链接等）。剩余可选项：冲突双栏合并、子模块/worktree 管理、远程标签删除、更大仓库的虚拟滚动。
+**当前状态（0.4.0-dev）**：只读、提交、分支、同步与历史写操作已实现，`pnpm test` 覆盖 236 个用例（含 `GIT_WS_IT=1` 的 15 条真实 git 集成用例：未确认丢弃不改文件、clean 不删 ignored、锁不清除、提交信息不执行 shell、stash/tag、非快进推送被拒且确认后才能 force-with-lease、clean 不跟随符号链接等）。剩余可选项（O1–O7）的现状与说明见 [docs/git-workspace-plan.md](docs/git-workspace-plan.md) §10.1：冲突合并编辑器、stash 完整列表、远程标签删除、子模块/worktree、大仓库虚拟滚动、非当前分支仅快进更新、kill 恢复用例。
 
 **本地验证**：`pnpm build` 后需要让 web profile 指向本仓库（`dsh plugin --profile web add link:<本仓库路径>`）并重启/刷新；npm 安装的副本不会热更新宿主路由。
 
