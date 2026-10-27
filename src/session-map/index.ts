@@ -25,6 +25,7 @@ import { CSS } from './css'
 import { MAP_KIND, MAP_TYPE_ID, OVERVIEW_KIND, OVERVIEW_TYPE_ID } from './constants'
 import { createFlag } from './flags'
 import { createGitWorkspaceRuntime, createGitWorkspaceSettings } from '../git-workspace/client'
+import { installGitWindowPanel } from '../git-workspace/window'
 import { createSkillCatalogRuntime, createSkillCatalogSettings } from '../skill-catalog/client'
 import {
   createMapLauncher,
@@ -182,6 +183,10 @@ function conversationViewsEnabled(): boolean {
 export function apply(ctx: Context): void {
   const slots = lookup<SlotsService>(ctx, 'slots')
   if (slots === undefined) return
+
+  // The Git tool window is a global main-panel entry, not conversation chrome:
+  // it owns its own workspace picker and sidebar icon.
+  installGitWindowPanel(ctx)
 
   // The product has no `styles` service outside the dynamic runtime, so the
   // sheet is a string this effect owns: one element, removed with the fiber.
