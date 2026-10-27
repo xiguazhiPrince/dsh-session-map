@@ -8,7 +8,7 @@
 import * as React from 'react'
 import type { ChangedEntry, RepoSnapshot } from '../git-types'
 import type { GitAction } from '../git-actions'
-import { GitApiError, describeGitError, type GitWindowApi } from './runtime'
+import { GitApiError, describeGitError, waitForJob, type GitWindowApi } from './runtime'
 import { FileIcon } from './icons'
 
 /** Props for the commit tab. */
@@ -177,6 +177,19 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
           ...(needsUpstream && remote !== undefined
             ? { remote, branch, setUpstream: true }
             : {}),
+        }).then(async (result) => {
+          if (result.job === undefined) return
+          const settled = await waitForJob(runtime, result.job.id)
+          if (settled.status === 'failed') {
+            throw new GitApiError(
+              settled.error?.code ?? 'internal',
+              settled.error?.message ?? 'the push failed',
+              settled.error?.detail,
+            )
+          }
+          if (settled.status === 'cancelled') {
+            throw new GitApiError('cancelled', '推送已取消')
+          }
         })
       }
       setMessage('')

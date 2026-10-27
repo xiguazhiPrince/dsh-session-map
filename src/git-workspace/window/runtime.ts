@@ -10,6 +10,8 @@ import type {
   CommitDetail,
   DiffPayload,
   GitEnvelope,
+  GitJobStarted,
+  GitJobView,
   LogPayload,
   RepoSnapshot,
 } from '../git-types'
@@ -81,8 +83,19 @@ export interface GitWindowApi {
   diff(request: DiffRequest, signal?: AbortSignal): Promise<DiffResult>
   /** Ask the Host for a single-use confirmation token. */
   confirm(action: GitAction, signal?: AbortSignal): Promise<{ readonly token: string; readonly expiresAt: number }>
-  /** Execute one write action, optionally carrying its confirmation token. */
-  action(action: GitAction, confirmToken?: string, signal?: AbortSignal): Promise<{ readonly commands: readonly CommandReceipt[]; readonly summary: string }>
+  /** Execute one write action; network actions answer with a background job. */
+  action(action: GitAction, confirmToken?: string, signal?: AbortSignal): Promise<ActionResult>
+  /** Read one background job. */
+  job(id: string, signal?: AbortSignal): Promise<GitJobView>
+  /** Ask the Host to terminate one background job. */
+  cancelJob(id: string, signal?: AbortSignal): Promise<GitJobView>
+}
+
+/** Successful action answer: either receipts or a job handle. */
+export interface ActionResult {
+  readonly commands?: readonly CommandReceipt[]
+  readonly summary?: string
+  readonly job?: GitJobStarted
 }
 
 /** Chinese copy for the stable Host error codes. */
@@ -124,6 +137,41 @@ const ERROR_COPY: Readonly<Record<string, string>> = {
  */
 export function describeGitError(code: string, fallback: string): string {
   return ERROR_COPY[code] ?? fallback
+}
+
+/** Wait one beat between job polls. */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * Follow a background job until it settles.
+ * @param api - the Git window runtime.
+ * @param id - job id.
+ * @param onUpdate - called on every observed state.
+ * @param signal - optional cancellation of the wait itself.
+ * @returns the settled job view.
+ */
+export async function waitForJob(
+  api: GitWindowApi,
+  id: string,
+  onUpdate?: (view: GitJobView) => void,
+  signal?: AbortSignal,
+): Promise<GitJobView> {
+  let transportFailures = 0
+  for (;;) {
+    if (signal?.aborted === true) throw new GitApiError('cancelled', 'the job wait was cancelled')
+    try {
+      const view = await api.job(id, signal)
+      onUpdate?.(view)
+      if (view.status !== 'running') return view
+      transportFailures = 0
+    } catch (error) {
+      transportFailures += 1
+      if (transportFailures > 10) throw error
+    }
+    await sleep(600)
+  }
 }
 
 /** Whether a thrown value is an abort from a replaced request. */
@@ -243,9 +291,20 @@ export function createGitWindowRuntime(): GitWindowApi {
     async confirm(action: GitAction, signal?: AbortSignal): Promise<{ readonly token: string; readonly expiresAt: number }> {
       return await postJson<{ readonly token: string; readonly expiresAt: number }>(`${ROUTE}/confirm`, action, signal)
     },
-    async action(action: GitAction, confirmToken?: string, signal?: AbortSignal): Promise<{ readonly commands: readonly CommandReceipt[]; readonly summary: string }> {
+    async action(action: GitAction, confirmToken?: string, signal?: AbortSignal): Promise<ActionResult> {
       const body = confirmToken === undefined ? action : { ...action, confirm: confirmToken }
-      return await postJson<{ readonly commands: readonly CommandReceipt[]; readonly summary: string }>(`${ROUTE}/action`, body, signal)
+      return await postJson<ActionResult>(`${ROUTE}/action`, body, signal)
+    },
+    async job(id: string, signal?: AbortSignal): Promise<GitJobView> {
+      const payload = await getJson<{ readonly job: GitJobView }>(
+        `${ROUTE}/job${queryString({ id })}`,
+        signal,
+      )
+      return payload.job
+    },
+    async cancelJob(id: string, signal?: AbortSignal): Promise<GitJobView> {
+      const payload = await postJson<{ readonly job: GitJobView }>(`${ROUTE}/cancel`, { id }, signal)
+      return payload.job
     },
   }
 }

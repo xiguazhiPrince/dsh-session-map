@@ -124,7 +124,11 @@ export class GitRunner {
    * @returns the finished stdout/stderr, exit facts and receipt.
    * @throws GitRunError for spawn failure, timeout or cancellation.
    */
-  async run(invocation: GitInvocation, external?: AbortSignal): Promise<GitRunResult> {
+  async run(
+    invocation: GitInvocation,
+    external?: AbortSignal,
+    onProgress?: (line: string) => void,
+  ): Promise<GitRunResult> {
     const controller = new AbortController()
     let timedOut = false
     let cancelled = false
@@ -161,10 +165,41 @@ export class GitRunner {
       throw new GitRunError('internal', 'git could not be started', error instanceof Error ? error.message : String(error))
     }
 
+    // Progress is read incrementally from the collected streams. Fetch/push write
+    // their progress to stderr, so both streams feed the same line sink; the
+    // final batch read below still returns the complete output.
+    let stdoutOffset = 0
+    let stderrOffset = 0
+    let pending = ''
+    const drainProgress = (): void => {
+      if (onProgress === undefined) return
+      const stdoutRead = handle.collected.stdout?.readFrom(stdoutOffset)
+      if (stdoutRead !== undefined) {
+        stdoutOffset = stdoutRead.nextOffset ?? stdoutOffset + stdoutRead.text.length
+        pending += stdoutRead.text
+      }
+      const stderrRead = handle.collected.stderr?.readFrom(stderrOffset)
+      if (stderrRead !== undefined) {
+        stderrOffset = stderrRead.nextOffset ?? stderrOffset + stderrRead.text.length
+        pending += stderrRead.text
+      }
+      const lines = pending.split(/\r?\n/)
+      pending = lines.pop() ?? ''
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (trimmed !== '') onProgress(trimmed)
+      }
+    }
+    const progressTimer = onProgress === undefined
+      ? undefined
+      : setInterval(drainProgress, 250)
+    progressTimer?.unref?.()
+
     let outcome: SubprocessOutcome
     try {
       outcome = await handle.done
     } catch (error) {
+      if (progressTimer !== undefined) clearInterval(progressTimer)
       clearTimeout(timer)
       external?.removeEventListener('abort', onAbort)
       const message = error instanceof Error ? error.message : String(error)
@@ -175,6 +210,8 @@ export class GitRunner {
       clearTimeout(timer)
       external?.removeEventListener('abort', onAbort)
     }
+    if (progressTimer !== undefined) clearInterval(progressTimer)
+    drainProgress()
 
     const stdoutRead = handle.collected.stdout?.readFrom(0)
     const stderrRead = handle.collected.stderr?.readFrom(0)

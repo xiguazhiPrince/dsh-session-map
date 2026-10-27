@@ -11,6 +11,7 @@ import {
   buildActionInvocations,
   confirmationTarget,
   parseActionRequest,
+  policyFor,
   type GitAction,
 } from './git-actions'
 
@@ -125,6 +126,15 @@ describe('ACTION_POLICY', () => {
     expect(confirmationTarget(forced, ROOT)).not.toBe(confirmationTarget(safe, ROOT))
     expect(confirmationTarget(parse({ kind: 'checkout', workspaceId: 'w', ref: 'main' }), ROOT)).toBeUndefined()
   })
+
+  it('treats a lease-forced push as L3 and binds its target', () => {
+    const normal = parse({ kind: 'push', workspaceId: 'w' })
+    const forced = parse({ kind: 'push', workspaceId: 'w', remote: 'origin', branch: 'main', forceWithLease: true })
+    expect(policyFor(normal)).toMatchObject({ level: 'l1', requiresConfirmation: false })
+    expect(policyFor(forced)).toMatchObject({ level: 'l3', requiresConfirmation: true })
+    expect(confirmationTarget(normal, ROOT)).toBeUndefined()
+    expect(confirmationTarget(forced, ROOT)).toContain('force-push')
+  })
 })
 
 describe('buildActionInvocations', () => {
@@ -198,5 +208,23 @@ describe('buildActionInvocations', () => {
     const [oneRemote] = invocations(parse({ kind: 'fetch', workspaceId: 'w', all: false, remote: 'origin' }))
     expect(oneRemote).toEqual(expect.arrayContaining(['fetch', '--prune', 'origin']))
     expect(oneRemote).not.toContain('--all')
+  })
+
+  it('builds update as fetch plus merge or rebase', () => {
+    const merge = invocations(parse({ kind: 'update', workspaceId: 'w', mode: 'merge' }))
+    expect(merge).toHaveLength(2)
+    expect(merge[0]).toEqual(expect.arrayContaining(['fetch', '--prune']))
+    expect(merge[1]).toEqual(expect.arrayContaining(['merge', '--no-edit', '@{upstream}']))
+    const rebase = invocations(parse({ kind: 'update', workspaceId: 'w', mode: 'rebase' }))
+    expect(rebase[1]).toEqual(expect.arrayContaining(['rebase', '@{upstream}']))
+  })
+
+  it('adds --force-with-lease only for the forced push variant', () => {
+    const [normal] = invocations(parse({ kind: 'push', workspaceId: 'w' }))
+    expect(normal).not.toContain('--force-with-lease')
+    const [forced] = invocations(parse({ kind: 'push', workspaceId: 'w', forceWithLease: true, remote: 'origin', branch: 'main' }))
+    expect(forced).toContain('--force-with-lease')
+    expect(forced).not.toContain('--force')
+    expect(forced).toEqual(expect.arrayContaining(['origin', 'main']))
   })
 })

@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import { installGitWorkspaceHost } from './host'
-import { createHostHarness, invokeRoute } from './testing/fake-host'
+import { createHostHarness, invokeRoute, type FakeWebServer } from './testing/fake-host'
 import { FakeSubprocess } from './testing/fake-subprocess'
 import {
   FOR_EACH_REF,
@@ -79,6 +79,18 @@ function metaOutput(): string {
     'Merge branch v2.1',
     'Merge branch v2.1\n\nCo-authored-by: X <x@example.com>',
   ].join('\x1f') + '\0'
+}
+
+/** Poll one job until it settles, or fail the test after a short timeout. */
+async function waitForJob(server: FakeWebServer, id: string): Promise<{ status: string }> {
+  const started = Date.now()
+  for (;;) {
+    const response = await invokeRoute(server, { path: `/plugin-git-workspace/job?id=${id}` })
+    const job = (response.json as { job: { status: string } }).job
+    if (job.status !== 'running') return job
+    if (Date.now() - started > 3_000) throw new Error('the background job did not settle')
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
 }
 
 describe('GET /snapshot', () => {
@@ -510,6 +522,87 @@ describe('POST /confirm and /action', () => {
     })
     expect(response.status).toBe(200)
     expect(subprocess.lastArgv()).toEqual(expect.arrayContaining(['switch', '-c', 'feature/new', 'main']))
+  })
+
+  it('runs fetch as a background job and exposes it through GET /job', async () => {
+    const workspace = await makeWorkspace()
+    const fake = new FakeSubprocess().queueOutcome(
+      { stdout: probeOutput(workspace) },
+      { stdout: 'From example.com\n * [new branch] main -> origin/main\n' },
+    )
+    const { server, subprocess } = harness(fake, workspace)
+    const started = await invokeRoute(server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: { kind: 'fetch', workspaceId: 'workspace-1', all: true },
+    })
+    expect(started.status).toBe(200)
+    const id = (started.json as { job: { id: string } }).job.id
+    const job = await waitForJob(server, id)
+    expect(job.status).toBe('done')
+    expect(subprocess.lastArgv()).toEqual(expect.arrayContaining(['fetch', '--prune', '--all']))
+  })
+
+  it('cancels a running job through POST /cancel', async () => {
+    const workspace = await makeWorkspace()
+    const fake = new FakeSubprocess().queueOutcome(
+      { stdout: probeOutput(workspace) },
+      { holdUntilAbort: true, stdout: '' },
+    )
+    const { server } = harness(fake, workspace)
+    const started = await invokeRoute(server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: { kind: 'fetch', workspaceId: 'workspace-1', all: true },
+    })
+    const id = (started.json as { job: { id: string } }).job.id
+    const cancelled = await invokeRoute(server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/cancel',
+      body: { id },
+    })
+    expect(cancelled.status).toBe(200)
+    const job = await waitForJob(server, id)
+    expect(job.status).toBe('cancelled')
+  })
+
+  it('requires a confirmation for a lease-forced push and then uses no bare --force', async () => {
+    const workspace = await makeWorkspace()
+    const fake = new FakeSubprocess().queueOutcome(
+      { stdout: probeOutput(workspace) },
+      { stdout: '' },
+    )
+    const { server, subprocess } = harness(fake, workspace)
+    const action = {
+      kind: 'push',
+      workspaceId: 'workspace-1',
+      remote: 'origin',
+      branch: 'main',
+      forceWithLease: true,
+    }
+    const denied = await invokeRoute(server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: action,
+    })
+    expect(denied.status).toBe(409)
+    expect((denied.json as { error: { code: string } }).error.code).toBe('confirmation-required')
+
+    const confirm = await invokeRoute(server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/confirm',
+      body: action,
+    })
+    const started = await invokeRoute(server, {
+      method: 'POST',
+      path: '/plugin-git-workspace/action',
+      body: { ...action, confirm: (confirm.json as { token: string }).token },
+    })
+    const job = await waitForJob(server, (started.json as { job: { id: string } }).job.id)
+    expect(job.status).toBe('done')
+    const argv = subprocess.lastArgv() ?? []
+    expect(argv).toContain('--force-with-lease')
+    expect(argv).not.toContain('--force')
   })
 })
 

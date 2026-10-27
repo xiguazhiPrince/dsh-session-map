@@ -500,9 +500,7 @@ export function createGitWindowHandler(deps: GitWindowDeps): GitWindowRouteHandl
     const controller = new AbortController()
     response.on('close', () => controller.abort())
     try {
-      if (path === '/confirm' || path === '/action') {
-        return await actions(request, response, url, method)
-      }
+      if (await actions(request, response, url, method)) return true
       if (path === '/snapshot') {
         if (method !== 'GET') throw new RouteFailure('invalid-request', 405, 'use GET')
         const payload = await snapshotPayload(url, controller)

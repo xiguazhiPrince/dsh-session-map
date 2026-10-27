@@ -9,7 +9,8 @@
  * @module dsh-session-map/git-workspace/window/shell
  */
 import * as React from 'react'
-import type { CommandReceipt, CommitDetail, DiffView, HeadState, RepoSnapshot, BranchRef } from '../git-types'
+import type { CommandReceipt, CommitDetail, DiffView, GitJobView, HeadState, RepoSnapshot, BranchRef } from '../git-types'
+import type { GitAction } from '../git-actions'
 import { parseUnifiedDiff } from '../git-parse'
 import { computeGraph } from './lanes'
 import { BranchTree, DetailPane, LogList, formatWhen } from './log'
@@ -17,7 +18,7 @@ import { BranchDialog, type BranchPrompt } from './branch'
 import { CommitPane } from './commit'
 import { ConsolePane } from './console'
 import { CSS } from './css'
-import { GitPanelIcon, RefreshIcon } from './icons'
+import { GitPanelIcon, FetchIcon, PushIcon, RefreshIcon } from './icons'
 import {
   GitApiError,
   describeGitError,
@@ -175,6 +176,8 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
     const [branchForce, setBranchForce] = React.useState(false)
     const [branchBusy, setBranchBusy] = React.useState(false)
     const [branchError, setBranchError] = React.useState<GitApiError | null>(null)
+    const [job, setJob] = React.useState<GitJobView | null>(null)
+    const [jobBusy, setJobBusy] = React.useState(false)
 
     const remembered = readStored(WORKSPACE_KEY)
     const candidate = items.find(item => item.workspaceId === choice)
@@ -263,6 +266,103 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
       } finally {
         setBranchBusy(false)
       }
+    }
+
+    /** Chinese label for one job kind. */
+    const jobLabel = (kind: string): string => {
+      switch (kind) {
+        case 'fetch': return '获取'
+        case 'update': return '更新'
+        case 'push': return '推送'
+        default: return kind
+      }
+    }
+
+    /** Follow one job through SSE, falling back to polling when the stream fails. */
+    const watchJob = (id: string): void => {
+      let stopped = false
+      let source: EventSource | undefined
+      const finish = (view: GitJobView): void => {
+        if (stopped) return
+        setJob(view)
+        if (view.status === 'running') return
+        stopped = true
+        source?.close()
+        setJobBusy(false)
+        if (view.status === 'failed' && view.error !== undefined) {
+          setActionError(new GitApiError(view.error.code, view.error.message, view.error.detail))
+        }
+        setRefreshKey(key => key + 1)
+      }
+      const poll = async (): Promise<void> => {
+        if (stopped) return
+        try {
+          const view = await runtime.job(id)
+          finish(view)
+          if (!stopped) setTimeout(() => { void poll() }, 700)
+        } catch (error) {
+          if (stopped) return
+          setActionError(toApiError(error))
+          setJobBusy(false)
+        }
+      }
+      if (typeof EventSource === 'undefined') {
+        void poll()
+        return
+      }
+      source = new EventSource(`/plugin-git-workspace/events?job=${encodeURIComponent(id)}`)
+      source.onmessage = (event: MessageEvent) => {
+        try {
+          finish(JSON.parse(String(event.data)) as GitJobView)
+        } catch {
+          // Ignore a malformed frame; polling is the fallback.
+        }
+      }
+      source.onerror = () => {
+        source?.close()
+        source = undefined
+        void poll()
+      }
+    }
+
+    /** Start one long action and follow its job. */
+    const runJob = async (action: GitAction): Promise<void> => {
+      if (workspaceId === null || jobBusy) return
+      setJobBusy(true)
+      setActionError(null)
+      try {
+        const result = await runtime.action(action)
+        if (result.job === undefined) {
+          setJobBusy(false)
+          setRefreshKey(key => key + 1)
+          return
+        }
+        watchJob(result.job.id)
+      } catch (error) {
+        setActionError(toApiError(error))
+        setJobBusy(false)
+      }
+    }
+
+    /** Push the current branch, defining its upstream on first use. */
+    const pushCurrent = (): void => {
+      if (workspaceId === null || snapshot === null) return
+      const branch = snapshot.head.branch
+      if (branch === null) {
+        setActionError(new GitApiError('detached-head', 'HEAD is detached'))
+        return
+      }
+      const remote = snapshot.remotes[0]?.name
+      const needsUpstream = snapshot.head.upstream === null
+      if (needsUpstream && remote === undefined) {
+        setActionError(new GitApiError('no-upstream', 'no remote is configured'))
+        return
+      }
+      void runJob({
+        kind: 'push',
+        workspaceId,
+        ...(needsUpstream && remote !== undefined ? { remote, branch, setUpstream: true } : {}),
+      })
     }
 
     // Remember that the panel was open so the next page load can restore it;
@@ -503,6 +603,30 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
           onClick: retry,
           disabled: workspaceId === null || snapshotLoading,
         }, React.createElement(RefreshIcon, { size: 14 })),
+        React.createElement('button', {
+          className: 'dgw-iconBtn',
+          type: 'button',
+          title: '获取（fetch）',
+          'aria-label': '获取',
+          disabled: workspaceId === null || jobBusy,
+          onClick: () => { if (workspaceId !== null) void runJob({ kind: 'fetch', workspaceId, all: true }) },
+        }, React.createElement(FetchIcon, { size: 14 })),
+        React.createElement('button', {
+          className: 'dgw-iconBtn',
+          type: 'button',
+          title: '更新当前分支（fetch + merge）',
+          'aria-label': '更新',
+          disabled: workspaceId === null || jobBusy || snapshot === null,
+          onClick: () => { if (workspaceId !== null) void runJob({ kind: 'update', workspaceId, mode: 'merge' }) },
+        }, React.createElement(RefreshIcon, { size: 14 })),
+        React.createElement('button', {
+          className: 'dgw-iconBtn',
+          type: 'button',
+          title: '推送（push）',
+          'aria-label': '推送',
+          disabled: workspaceId === null || jobBusy || snapshot === null,
+          onClick: pushCurrent,
+        }, React.createElement(PushIcon, { size: 14 })),
       ),
       React.createElement(
         'div',
@@ -598,6 +722,19 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
             ? React.createElement('span', null, `正在${snapshot.head.operation}…`)
             : null,
           React.createElement('span', null, `分支 ${branches.filter(branch => branch.type === 'local').length} · 远程 ${branches.filter(branch => branch.type === 'remote').length}`),
+          job === null
+            ? null
+            : React.createElement('span', { className: 'dgw-job' },
+              `${jobLabel(job.kind)}${job.status === 'running' ? '：进行中' : job.status === 'done' ? '：完成' : job.status === 'cancelled' ? '：已取消' : '：失败'}`,
+              job.status === 'running' && job.lines.length > 0 ? `  ${job.lines[job.lines.length - 1] ?? ''}` : '',
+            ),
+          job !== null && job.status === 'running'
+            ? React.createElement('button', {
+              className: 'dgw-retry',
+              type: 'button',
+              onClick: () => { void runtime.cancelJob(job.id).catch((error: unknown) => setActionError(toApiError(error))) },
+            }, '取消')
+            : null,
           React.createElement('span', null, snapshot.truncated ? '结果已截断' : `更新于 ${formatWhen(new Date(snapshot.takenAt).toISOString())}`),
         ),
       branchPrompt === null

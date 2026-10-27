@@ -172,6 +172,28 @@ export interface CommandReceipt {
   readonly truncated?: boolean
 }
 
+/** One long-running git operation the Host runs in the background. */
+export type GitJobStatus = 'running' | 'done' | 'failed' | 'cancelled'
+
+/** Public state of one background job. */
+export interface GitJobView {
+  readonly id: string
+  readonly kind: string
+  readonly workspaceId: string
+  readonly status: GitJobStatus
+  readonly lines: readonly string[]
+  readonly summary?: string
+  readonly error?: GitWindowError
+  readonly startedAt: number
+  readonly finishedAt?: number
+}
+
+/** One job-creation result. */
+export interface GitJobStarted {
+  readonly id: string
+  readonly status: 'running'
+}
+
 /** Stable Host error codes for the Git window. */
 export type GitWindowErrorCode =
   | 'invalid-request'

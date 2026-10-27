@@ -1,6 +1,7 @@
-/**
+﻿/**
  * Write actions for the Git tool window: confirmation tokens, the per-repository
- * mutation lock, action execution and failure classification.
+ * mutation lock, background jobs for network operations, action execution and
+ * failure classification.
  *
  * The pure argv/validation rules live in `git-actions.ts`; this module owns the
  * Host state that must not be recreated per request.
@@ -8,13 +9,19 @@
  * @module dsh-session-map/git-workspace/host-actions
  */
 import { randomUUID } from 'node:crypto'
-import type { CommandReceipt, ResolvedRepo } from './git-types'
+import type {
+  CommandReceipt,
+  GitJobStatus,
+  GitJobView,
+  GitWindowError,
+  ResolvedRepo,
+} from './git-types'
 import { writeInvocation } from './git-command'
 import {
-  ACTION_POLICY,
   buildActionInvocations,
   confirmationTarget,
   parseActionRequest,
+  policyFor,
   type GitAction,
 } from './git-actions'
 import { RouteFailure, classifyFailure, sendRouteFailure, statusFor } from './host-errors'
@@ -25,6 +32,15 @@ import { GIT_WORKSPACE_ROUTE } from './route'
 /** How long a confirmation token stays valid. */
 const CONFIRM_TTL_MS = 60_000
 
+/** How long a finished job stays readable in memory. */
+const JOB_TTL_MS = 5 * 60_000
+
+/** How many progress lines one job keeps. */
+const JOB_LINE_LIMIT = 400
+
+/** Actions that may take long enough to deserve a background job. */
+const LONG_ACTIONS: ReadonlySet<GitAction['kind']> = new Set(['fetch', 'update', 'push'])
+
 /** One issued confirmation. */
 interface Confirmation {
   readonly token: string
@@ -32,6 +48,21 @@ interface Confirmation {
   readonly kind: GitAction['kind']
   readonly target: string
   readonly expiresAt: number
+}
+
+/** One running or finished job, including its private cancellation state. */
+interface JobRecord {
+  readonly id: string
+  readonly kind: string
+  readonly workspaceId: string
+  readonly startedAt: number
+  readonly controller: AbortController
+  readonly lines: string[]
+  readonly listeners: Set<(view: GitJobView) => void>
+  status: GitJobStatus
+  summary: string | undefined
+  error: GitWindowError | undefined
+  finishedAt: number | undefined
 }
 
 /** Operations the router needs from the read-route module. */
@@ -56,6 +87,15 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value as Record<string, unknown>
 }
 
+/** Read one required string field. */
+function stringField(record: Record<string, unknown>, name: string): string {
+  const value = record[name]
+  if (typeof value !== 'string' || value === '') {
+    throw new RouteFailure('invalid-request', 400, `"${name}" is required`)
+  }
+  return value
+}
+
 /** Classify a failed action run. */
 function actionFailure(action: GitAction, stdout: string, stderr: string, exitCode: number | null): RouteFailure {
   const text = `${stdout}\n${stderr}`.toLowerCase()
@@ -73,6 +113,9 @@ function actionFailure(action: GitAction, stdout: string, stderr: string, exitCo
   if (action.kind === 'push' && /rejected|non-fast-forward|failed to push|fetch first|protected branch/.test(text)) {
     return new RouteFailure('push-rejected', 409, 'the push was rejected by the remote', stderr || stdout)
   }
+  if (action.kind === 'update' && /conflict|automatic merge failed|needs merge/.test(text)) {
+    return new RouteFailure('conflict', 409, 'the update produced conflicts', stderr || stdout)
+  }
   if (action.kind === 'deleteBranch' && /not fully merged/.test(text)) {
     return new RouteFailure('branch-not-merged', 409, 'the branch has commits that are not merged', stderr || stdout)
   }
@@ -89,14 +132,30 @@ function confirmationOf(body: unknown): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined
 }
 
+/** Public projection of one job. */
+function jobView(record: JobRecord): GitJobView {
+  return {
+    id: record.id,
+    kind: record.kind,
+    workspaceId: record.workspaceId,
+    status: record.status,
+    lines: [...record.lines],
+    ...(record.summary === undefined ? {} : { summary: record.summary }),
+    ...(record.error === undefined ? {} : { error: record.error }),
+    startedAt: record.startedAt,
+    ...(record.finishedAt === undefined ? {} : { finishedAt: record.finishedAt }),
+  }
+}
+
 /**
- * Create the `/confirm` and `/action` routes.
+ * Create the write-route family: confirmation, action and job routes.
  * @param service - runner, repository resolver and snapshot invalidation.
- * @returns a handler that claims only those two paths.
+ * @returns a handler that claims `/confirm`, `/action`, `/job`, `/cancel` and `/events`.
  */
 export function createActionRouter(service: ActionService): ActionRouteHandler {
   const confirmations = new Map<string, Confirmation>()
   const running = new Set<string>()
+  const jobs = new Map<string, JobRecord>()
 
   /** Drop expired tokens; called on every issue/consume. */
   const prune = (now: number): void => {
@@ -142,7 +201,12 @@ export function createActionRouter(service: ActionService): ActionRouteHandler {
   }
 
   /** Execute one action under the repository lock. */
-  const execute = async (action: GitAction, repo: ResolvedRepo): Promise<{ readonly commands: CommandReceipt[]; readonly summary: string }> => {
+  const execute = async (
+    action: GitAction,
+    repo: ResolvedRepo,
+    signal?: AbortSignal,
+    onProgress?: (line: string) => void,
+  ): Promise<{ readonly commands: CommandReceipt[]; readonly summary: string }> => {
     if (running.has(repo.root)) {
       throw new RouteFailure('busy', 409, 'another write operation is running on this repository')
     }
@@ -152,53 +216,186 @@ export function createActionRouter(service: ActionService): ActionRouteHandler {
       const invocations = buildActionInvocations(action, { gitPath, root: repo.root })
       const commands: CommandReceipt[] = []
       for (const invocation of invocations) {
-        const result = await service.runner.run(invocation)
+        const result = await service.runner.run(invocation, signal, onProgress)
         commands.push(result.receipt)
         if (result.exitCode !== 0) {
           // Unborn HEAD cannot restore from a commit; remove the index entry instead.
           if (action.kind === 'unstage' && /could not resolve HEAD/.test(result.stderr)) {
             const fallback = writeInvocation(gitPath, repo.root, ['rm', '--cached', '--', ...action.paths], { label: 'rm --cached' })
-            const retry = await service.runner.run(fallback)
+            const retry = await service.runner.run(fallback, signal)
             commands.push(retry.receipt)
             if (retry.exitCode === 0) continue
           }
           throw actionFailure(action, result.stdout, result.stderr, result.exitCode)
         }
-        if (result.stdout.trim() === '' && result.stderr.trim() === '' && invocation.label === 'clean-preview') {
-          continue
-        }
       }
       service.invalidate(repo.root)
-      return { commands, summary: ACTION_POLICY[action.kind].summary }
+      return { commands, summary: policyFor(action).summary }
     } finally {
       running.delete(repo.root)
     }
   }
 
+  /** Create and start one background job. */
+  const startJob = (action: GitAction, repo: ResolvedRepo): JobRecord => {
+    if (running.has(repo.root)) {
+      throw new RouteFailure('busy', 409, 'another write operation is running on this repository')
+    }
+    const record: JobRecord = {
+      id: randomUUID(),
+      kind: action.kind,
+      workspaceId: action.workspaceId,
+      startedAt: Date.now(),
+      controller: new AbortController(),
+      lines: [],
+      listeners: new Set(),
+      status: 'running',
+      summary: undefined,
+      error: undefined,
+      finishedAt: undefined,
+    }
+    jobs.set(record.id, record)
+    void (async () => {
+      try {
+        const result = await execute(action, repo, record.controller.signal, (line) => {
+          if (record.lines.length < JOB_LINE_LIMIT) record.lines.push(line)
+          const view = jobView(record)
+          for (const listener of record.listeners) listener(view)
+        })
+        record.summary = result.summary
+        record.status = 'done'
+      } catch (error) {
+        if (error instanceof GitRunError && error.code === 'cancelled') {
+          record.status = 'cancelled'
+        } else if (error instanceof RouteFailure) {
+          record.status = 'failed'
+          record.error = {
+            code: error.code,
+            message: error.message,
+            ...(error.detail === undefined ? {} : { detail: error.detail }),
+          }
+        } else {
+          record.status = 'failed'
+          record.error = {
+            code: error instanceof GitRunError ? error.code : 'internal',
+            message: error instanceof Error ? error.message : String(error),
+          }
+        }
+      } finally {
+        record.finishedAt = Date.now()
+        service.invalidate(repo.root)
+        const view = jobView(record)
+        for (const listener of record.listeners) listener(view)
+        const timer = setTimeout(() => jobs.delete(record.id), JOB_TTL_MS)
+        timer.unref?.()
+      }
+    })()
+    return record
+  }
+
+  /** Stream one job as server-sent events. */
+  const streamJob = (record: JobRecord, response: RouteResponse): void => {
+    try {
+      response.writeHead(200, {
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-cache, no-store',
+        connection: 'keep-alive',
+      })
+    } catch {
+      return
+    }
+    const send = (view: GitJobView): void => {
+      try {
+        response.write?.(`data: ${JSON.stringify(view)}\n\n`)
+      } catch {
+        // The page closed the stream; the job keeps running until cancelled.
+      }
+    }
+    let closed = false
+    const close = (): void => {
+      if (closed) return
+      closed = true
+      clearInterval(heartbeat)
+      record.listeners.delete(listener)
+      try {
+        response.end()
+      } catch {
+        // Already closed.
+      }
+    }
+    const listener = (view: GitJobView): void => {
+      send(view)
+      if (view.status !== 'running') close()
+    }
+    record.listeners.add(listener)
+    const heartbeat = setInterval(() => {
+      try {
+        response.write?.(': ping\n\n')
+      } catch {
+        close()
+      }
+    }, 15_000)
+    heartbeat.unref?.()
+    response.on('close', close)
+    send(jobView(record))
+    if (record.status !== 'running') close()
+  }
+
   return async (request, response, url, method): Promise<boolean> => {
-    if (url.pathname !== `${GIT_WORKSPACE_ROUTE}/confirm` && url.pathname !== `${GIT_WORKSPACE_ROUTE}/action`) {
+    const path = url.pathname.slice(GIT_WORKSPACE_ROUTE.length)
+    if (path !== '/confirm' && path !== '/action' && path !== '/job' && path !== '/cancel' && path !== '/events') {
       return false
     }
     try {
-      if (method !== 'POST') throw new RouteFailure('invalid-request', 405, 'use POST')
+      const expectedMethod = path === '/job' || path === '/events' ? 'GET' : 'POST'
+      if (method !== expectedMethod) throw new RouteFailure('invalid-request', 405, `use ${expectedMethod}`)
+
+      if (path === '/events') {
+        const record = jobs.get(requiredId(url, 'job'))
+        if (record === undefined) throw new RouteFailure('invalid-request', 404, 'the job does not exist')
+        streamJob(record, response)
+        return true
+      }
+
+      if (path === '/job') {
+        const record = jobs.get(requiredId(url, 'id'))
+        if (record === undefined) throw new RouteFailure('invalid-request', 404, 'the job does not exist')
+        sendJson(response, 200, { ok: true, job: jobView(record) })
+        return true
+      }
+
       const contentType = (request.headers['content-type'] ?? '').toString().toLowerCase()
       if (!contentType.includes('application/json')) {
         throw new RouteFailure('invalid-request', 415, 'use application/json')
       }
       const body = await readJsonBody(request)
       if (!body.ok) throw new RouteFailure('invalid-request', body.status, body.message)
+
+      if (path === '/cancel') {
+        const record = jobs.get(requiredIdFrom(objectOf(body.value)))
+        if (record === undefined) throw new RouteFailure('invalid-request', 404, 'the job does not exist')
+        if (record.status === 'running') record.controller.abort()
+        sendJson(response, 200, { ok: true, job: jobView(record) })
+        return true
+      }
+
       const parsed = parseActionRequest(body.value)
       if (!parsed.ok) throw new RouteFailure(parsed.code, statusFor(parsed.code), parsed.message)
       const action = parsed.action
       const repo = await service.resolveRepo(action.workspaceId)
 
-      if (url.pathname.endsWith('/confirm')) {
+      if (path === '/confirm') {
         const entry = issue(action, repo)
         sendJson(response, 200, { ok: true, token: entry.token, expiresAt: entry.expiresAt })
         return true
       }
 
       consume(confirmationOf(body.value), action, repo)
+      if (LONG_ACTIONS.has(action.kind)) {
+        const record = startJob(action, repo)
+        sendJson(response, 200, { ok: true, job: { id: record.id, status: 'running' } })
+        return true
+      }
       const result = await execute(action, repo)
       sendJson(response, 200, { ok: true, ...result })
       return true
@@ -225,4 +422,23 @@ export function createActionRouter(service: ActionService): ActionRouteHandler {
       return true
     }
   }
+}
+
+/** Read one required query id. */
+function requiredId(url: URL, name: string): string {
+  const value = url.searchParams.get(name)
+  if (value === null || value === '') throw new RouteFailure('invalid-request', 400, `"${name}" is required`)
+  return value
+}
+
+/** Read the job id out of a cancel body. */
+function objectOf(value: unknown): Record<string, unknown> {
+  const parsed = asRecord(value)
+  if (parsed === undefined) throw new RouteFailure('invalid-request', 400, 'the request body must be an object')
+  return parsed
+}
+
+/** Read the job id out of a cancel body. */
+function requiredIdFrom(body: Record<string, unknown>): string {
+  return stringField(body, 'id')
 }

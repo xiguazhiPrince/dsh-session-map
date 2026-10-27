@@ -24,6 +24,7 @@ export type ActionKind =
   | 'deleteBranch'
   | 'renameBranch'
   | 'fetch'
+  | 'update'
 
 /** Stage one set of paths. */
 export interface StageAction {
@@ -55,13 +56,14 @@ export interface CommitAction {
   readonly amend: boolean
 }
 
-/** Push the current branch. */
+/** Push the current branch; a lease-forced push is the L3 variant. */
 export interface PushAction {
   readonly kind: 'push'
   readonly workspaceId: string
   readonly remote?: string | undefined
   readonly branch?: string | undefined
   readonly setUpstream?: boolean | undefined
+  readonly forceWithLease?: boolean | undefined
 }
 
 /** Check out one local branch. */
@@ -103,6 +105,13 @@ export interface FetchAction {
   readonly remote?: string | undefined
 }
 
+/** Fetch the upstream and merge or rebase it into the current branch. */
+export interface UpdateAction {
+  readonly kind: 'update'
+  readonly workspaceId: string
+  readonly mode: 'merge' | 'rebase'
+}
+
 /** One parsed write action. */
 export type GitAction =
   | StageAction
@@ -115,6 +124,7 @@ export type GitAction =
   | DeleteBranchAction
   | RenameBranchAction
   | FetchAction
+  | UpdateAction
 
 /** Validation result for one raw action body. */
 export type ActionParseResult =
@@ -123,8 +133,8 @@ export type ActionParseResult =
 
 /** Policy facts for one action kind. */
 export interface ActionPolicy {
-  /** `l1` writes are recoverable and run without a confirmation; `l2` needs one. */
-  readonly level: 'l1' | 'l2'
+  /** `l1` writes are recoverable and run without a confirmation; `l2`/`l3` need one. */
+  readonly level: 'l1' | 'l2' | 'l3'
   readonly requiresConfirmation: boolean
   readonly summary: string
 }
@@ -141,6 +151,20 @@ export const ACTION_POLICY: Readonly<Record<ActionKind, ActionPolicy>> = {
   deleteBranch: { level: 'l2', requiresConfirmation: true, summary: '删除分支' },
   renameBranch: { level: 'l1', requiresConfirmation: false, summary: '重命名分支' },
   fetch: { level: 'l1', requiresConfirmation: false, summary: '获取远端更新' },
+  update: { level: 'l1', requiresConfirmation: false, summary: '更新当前分支' },
+}
+
+/**
+ * Policy for one concrete action; the lease-forced push is the L3 variant of the
+ * otherwise L1 push, so policy cannot be keyed by kind alone.
+ * @param action - parsed action.
+ * @returns the effective policy.
+ */
+export function policyFor(action: GitAction): ActionPolicy {
+  if (action.kind === 'push' && action.forceWithLease === true) {
+    return { level: 'l3', requiresConfirmation: true, summary: '强制推送（--force-with-lease）' }
+  }
+  return ACTION_POLICY[action.kind]
 }
 
 /** Longest commit message accepted. */
@@ -227,7 +251,9 @@ export function parseActionRequest(input: unknown): ActionParseResult {
       const remote = record['remote']
       const branch = record['branch']
       const setUpstream = record['setUpstream'] === undefined ? false : record['setUpstream']
+      const forceWithLease = record['forceWithLease'] === undefined ? false : record['forceWithLease']
       if (typeof setUpstream !== 'boolean') return { ok: false, code: 'invalid-request', message: '"setUpstream" must be a boolean' }
+      if (typeof forceWithLease !== 'boolean') return { ok: false, code: 'invalid-request', message: '"forceWithLease" must be a boolean' }
       if (remote !== undefined && !isSafeRemoteName(remote)) {
         return { ok: false, code: 'invalid-request', message: 'the remote name is not valid' }
       }
@@ -245,6 +271,7 @@ export function parseActionRequest(input: unknown): ActionParseResult {
           ...(remote === undefined ? {} : { remote }),
           ...(branch === undefined ? {} : { branch }),
           ...(setUpstream ? { setUpstream: true } : {}),
+          ...(forceWithLease ? { forceWithLease: true } : {}),
         },
       }
     }
@@ -296,6 +323,13 @@ export function parseActionRequest(input: unknown): ActionParseResult {
       }
       return { ok: true, action: { kind, workspaceId, all, ...(remote === undefined ? {} : { remote }) } }
     }
+    case 'update': {
+      const mode = record['mode']
+      if (mode !== 'merge' && mode !== 'rebase') {
+        return { ok: false, code: 'invalid-request', message: '"mode" must be "merge" or "rebase"' }
+      }
+      return { ok: true, action: { kind, workspaceId, mode } }
+    }
     default:
       return { ok: false, code: 'unsupported-action', message: `unsupported action: ${String(kind)}` }
   }
@@ -318,12 +352,15 @@ function pathFingerprint(paths: readonly string[]): string {
  * @returns a token target, or undefined for actions that need no confirmation.
  */
 export function confirmationTarget(action: GitAction, root: string): string | undefined {
-  if (!ACTION_POLICY[action.kind].requiresConfirmation) return undefined
+  if (!policyFor(action).requiresConfirmation) return undefined
   if (action.kind === 'discard') {
     return `discard:${root}:${pathFingerprint([...action.tracked, ...action.untracked])}`
   }
   if (action.kind === 'deleteBranch') {
     return `delete-branch:${root}:${action.name}:${action.force ? 'force' : 'safe'}`
+  }
+  if (action.kind === 'push' && action.forceWithLease === true) {
+    return `force-push:${root}:${action.remote ?? ''}:${action.branch ?? ''}`
   }
   return `${action.kind}:${root}`
 }
@@ -378,12 +415,13 @@ export function buildActionInvocations(action: GitAction, context: ActionBuildCo
       )]
     case 'push': {
       const args: string[] = ['push', '--porcelain', '--progress']
+      if (action.forceWithLease === true) args.push('--force-with-lease')
       if (action.setUpstream === true && action.remote !== undefined && action.branch !== undefined) {
         args.push('-u', action.remote, action.branch)
       } else if (action.remote !== undefined && action.branch !== undefined) {
         args.push(action.remote, action.branch)
       }
-      return [writeInvocation(gitPath, root, args, { label: 'push' })]
+      return [writeInvocation(gitPath, root, args, { label: action.forceWithLease === true ? 'push --force-with-lease' : 'push' })]
     }
     case 'checkout':
       return [writeInvocation(gitPath, root, ['switch', '--', action.ref], { label: 'switch' })]
@@ -409,5 +447,15 @@ export function buildActionInvocations(action: GitAction, context: ActionBuildCo
       else if (action.remote !== undefined) args.push(action.remote)
       return [writeInvocation(gitPath, root, args, { label: 'fetch' })]
     }
+    case 'update':
+      return [
+        writeInvocation(gitPath, root, ['fetch', '--prune'], { label: 'fetch' }),
+        writeInvocation(
+          gitPath,
+          root,
+          action.mode === 'rebase' ? ['rebase', '@{upstream}'] : ['merge', '--no-edit', '@{upstream}'],
+          { label: action.mode === 'rebase' ? 'rebase' : 'merge' },
+        ),
+      ]
   }
 }

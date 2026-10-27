@@ -27,6 +27,8 @@ export interface RouteRequest {
 export interface RouteResponse {
   writeHead(status: number, headers?: Readonly<Record<string, string | number>>): unknown
   end(body?: string): unknown
+  /** Present for streaming responses (SSE job progress). */
+  write?(chunk: string): unknown
   on(event: 'close', listener: () => void): unknown
 }
 

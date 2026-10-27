@@ -89,6 +89,23 @@ const runtime: GitWindowApi = {
   diff: async () => ({ patch: '', binary: false, truncated: false, commands: [] }),
   confirm: async () => ({ token: 'token', expiresAt: Date.now() + 60_000 }),
   action: async () => ({ commands: [], summary: 'ok' }),
+  job: async (id: string) => ({
+    id,
+    kind: 'fetch',
+    workspaceId: 'workspace-1',
+    status: 'done' as const,
+    lines: [],
+    startedAt: Date.now(),
+    finishedAt: Date.now(),
+  }),
+  cancelJob: async (id: string) => ({
+    id,
+    kind: 'fetch',
+    workspaceId: 'workspace-1',
+    status: 'cancelled' as const,
+    lines: [],
+    startedAt: Date.now(),
+  }),
 }
 
 /** Fake framework hooks. */

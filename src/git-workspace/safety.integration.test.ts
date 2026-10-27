@@ -45,6 +45,18 @@ afterEach(async () => {
 
 const describeIntegration = enabled ? describe : describe.skip
 
+/** Poll one job until it settles. */
+async function waitForJob(server: HostHarness['server'], id: string): Promise<{ status: string }> {
+  const started = Date.now()
+  for (;;) {
+    const response = await invokeRoute(server, { path: `/plugin-git-workspace/job?id=${id}` })
+    const job = (response.json as { job: { status: string } }).job
+    if (job.status !== 'running') return job
+    if (Date.now() - started > 5_000) throw new Error('the background job did not settle')
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+}
+
 describeIntegration('git window integration', () => {
   it('reads a real snapshot', async () => {
     const { harness } = await fixture()
@@ -216,5 +228,59 @@ describeIntegration('git window integration', () => {
     })
     expect(forcedApplied.status).toBe(200)
     await expect(repo.git(['rev-parse', '--verify', 'topic'])).rejects.toBeTruthy()
+  })
+
+  it('fetches remote updates through a background job', async () => {
+    const { repo, harness } = await fixture()
+    const bare = await repo.createBareOrigin()
+    await repo.git(['push', '-q', '-u', 'origin', 'master'])
+    const other = await createTempRepo()
+    try {
+      await other.git(['remote', 'add', 'origin', bare])
+      await other.git(['fetch', '-q', 'origin'])
+      await other.git(['switch', '-q', '-c', 'pushed', '--track', 'origin/master'])
+      await other.write('remote.txt', 'remote\n')
+      const remoteHash = await other.commit('remote commit')
+      await other.git(['push', '-q', 'origin', 'HEAD:master'])
+
+      const started = await invokeRoute(harness.server, {
+        method: 'POST',
+        path: '/plugin-git-workspace/action',
+        body: { kind: 'fetch', workspaceId: 'workspace-1', all: true },
+      })
+      expect(started.status).toBe(200)
+      const job = await waitForJob(harness.server, (started.json as { job: { id: string } }).job.id)
+      expect(job.status).toBe('done')
+      expect(await repo.git(['rev-parse', 'origin/master'])).toBe(remoteHash)
+    } finally {
+      await other.dispose()
+    }
+  })
+
+  it('updates the current branch through fetch plus merge', async () => {
+    const { repo, harness } = await fixture()
+    const bare = await repo.createBareOrigin()
+    await repo.git(['push', '-q', '-u', 'origin', 'master'])
+    const other = await createTempRepo()
+    try {
+      await other.git(['remote', 'add', 'origin', bare])
+      await other.git(['fetch', '-q', 'origin'])
+      await other.git(['switch', '-q', '-c', 'pushed', '--track', 'origin/master'])
+      await other.write('remote.txt', 'remote\n')
+      await other.commit('remote commit')
+      await other.git(['push', '-q', 'origin', 'HEAD:master'])
+
+      const started = await invokeRoute(harness.server, {
+        method: 'POST',
+        path: '/plugin-git-workspace/action',
+        body: { kind: 'update', workspaceId: 'workspace-1', mode: 'merge' },
+      })
+      expect(started.status).toBe(200)
+      const job = await waitForJob(harness.server, (started.json as { job: { id: string } }).job.id)
+      expect(job.status).toBe('done')
+      expect(await repo.git(['log', '-1', '--format=%s'])).toBe('remote commit')
+    } finally {
+      await other.dispose()
+    }
   })
 })

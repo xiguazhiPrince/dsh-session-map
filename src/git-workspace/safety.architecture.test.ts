@@ -48,10 +48,12 @@ describe('git workspace architecture', () => {
     const sources = await productionSources()
     const hostGit = sources.get('host-git.ts') ?? ''
     expect(hostGit).toContain('createActionRouter')
-    expect(hostGit).toMatch(/path === '\/confirm' \|\| path === '\/action'/)
+    expect(hostGit).toContain('await actions(')
     const actions = sources.get('host-actions.ts') ?? ''
+    for (const route of ['/confirm', '/action', '/job', '/cancel', '/events']) {
+      expect(actions).toContain(`'${route}'`)
+    }
     expect(actions).toContain('consume(')
-    expect(actions).toContain('confirmation-required')
     expect(actions).toContain('running.has(repo.root)')
   })
 
