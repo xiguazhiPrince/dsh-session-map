@@ -104,3 +104,28 @@ export function SearchIcon(props: IconProps): React.ReactElement {
 export function CopyIcon(props: IconProps): React.ReactElement {
   return icon('M6 6h7v7H6V6ZM3 10V3h7', props)
 }
+
+/** Fullscreen (corner brackets); the right-column page's presentation switch. */
+export function FullscreenIcon(props: IconProps): React.ReactElement {
+  return icon('M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3', props)
+}
+
+/** Close. */
+export function CloseIcon(props: IconProps): React.ReactElement {
+  return icon('M4 4l8 8M12 4l-8 8', props)
+}
+
+/** Panel toggle (rectangle with a divider); used for the commit panel. */
+export function PanelLeftIcon(props: IconProps): React.ReactElement {
+  return icon('M2 3h12v10H2zM6 3v10', props)
+}
+
+/** Side-by-side diff presentation. */
+export function SideBySideIcon(props: IconProps): React.ReactElement {
+  return icon('M2 3h5v10H2zM9 3h5v10H9z', props)
+}
+
+/** Unified diff presentation. */
+export function UnifiedIcon(props: IconProps): React.ReactElement {
+  return icon('M2 3h12M2 6h12M2 9h12M2 12h8', props)
+}

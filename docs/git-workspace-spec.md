@@ -385,6 +385,8 @@ IDEA 新 UI（2023.1+）把 Git 相关能力拆成**两个**工具窗口，截�
 
 **结论：主面板（`main` 插槽，key = `git-workspace`）+ 侧边栏工具窗口图标（`sidebar.panellist`，id = `git-workspace`）。**
 
+> **0.4.0 追加载体：原生右侧栏一页式页面。** 除主面板外，同一套 `/plugin-git-workspace` 宿主路由还注册了原生右侧栏标签类型 `dsh-session-map.git`（kind `git-window`）：会话级、自动跟随当前会话的工作区，一页内「提交面板 + 差异查看器」在上、「分支树 + 提交列表 + 提交详情」在下；入口为会话头 utilities 的「Git」按钮（order 41）与右栏 `+` 指南卡片。实现见 `src/git-workspace/window/rightbar/`，与主面板共用 `runtime.ts` / `log.ts` / `commit.ts` / `diff-view.ts` / `feedback.ts`；主面板保留不变。
+
 依据（来自运行时插槽目录）：
 
 - `main` 是 keyed 插槽：「Central panel selected by sidebar entry id」，key 开放，当前只占用 `conversation`；
@@ -917,6 +919,9 @@ src/git-workspace/
   panel.test.ts      SSR 冒烟（新）
   git.test.ts        解析/argv 单测（扩展）
   host.test.ts       路由/校验单测（扩展）
+  window/rightbar/   右侧栏一页式页面（0.4.0 新）：install（tab type/body/会话头入口）、page、model、layout、prefs、ids、css
+  window/diff-view.ts 统一/并排差异渲染与配对纯函数（两个载体共用）
+  window/feedback.ts  错误条与非仓库空态（两个载体共用）
 ```
 
 - **注册**：`src/session-map/index.ts` 的 `apply` 里调用 `installGitWorkspacePanel(ctx)`（新增一行 import + 一行调用）；现有 `installGitWorkspaceHost` 继续由 `src/index.ts` 安装，路由族不变。
@@ -1284,7 +1289,8 @@ it('git 写操作只经 subprocess seam，且必须过门禁', () => {
 | 动作 | stage/unstage/discard/commit(amend)/push(force-with-lease)/checkout/createBranch/deleteBranch/renameBranch/fetch/update/merge/rebase/reset/revert/cherryPick/abortOperation/continueOperation/stashPush/stashPop/stashDrop/tagCreate/tagDelete | `git-actions.ts` |
 | 面板 | 提交/日志/控制台、工作区选择、分支目录折叠、标签分组、日志图线、提交详情/diff、作业进度、确认/重置/标签/强制推送弹层 | `window/` |
 | 安全用例 | S-01–S-16、S-19、S-22、S-24–S-33、S-37、S-38 已覆盖；S-20 以「clean 不跟随符号链接、外部文件不变」的集成用例覆盖；S-17/S-18/S-21/S-23/S-34–S-36 为单元或路由级覆盖 | `git-*.test.ts`、`host-git.test.ts`、`safety.integration.test.ts` |
+| 右侧栏一页式页面 | 原生右栏 tab type `dsh-session-map.git`、提交面板 + 差异 + 日志一页、每会话 UI 偏好、会话头入口、断点；与主面板共用读/写/渲染模块 | `window/rightbar/`、`window/diff-view.ts`、`window/feedback.ts` |
 
 **尚未实现（后续可选，路线图见 [git-workspace-plan.md](git-workspace-plan.md) §10.1）**：冲突合并编辑器（O1）、stash 完整列表与逐条 drop（O2）、远程标签删除（O3）、子模块/worktree 管理（O4）、超大仓库虚拟滚动与轻量刷新（O5）、非当前分支 Update 的「仅快进引用」选项（O6）、kill 恢复集成用例（O7）。
-**验证**：约 236 个用例（`GIT_WS_IT=1` 时含 15 条真实 git 集成），`pnpm typecheck && pnpm test && pnpm build` 全绿；`lib/` 已重建。交接步骤、环境与逐项验收建议见 [git-workspace-plan.md](git-workspace-plan.md) §12。
+**验证**：约 253 个用例（`GIT_WS_IT=1` 时含 15 条真实 git 集成），`pnpm typecheck && pnpm test && pnpm build` 全绿；`lib/` 已重建。交接步骤、环境与逐项验收建议见 [git-workspace-plan.md](git-workspace-plan.md) §12。
 

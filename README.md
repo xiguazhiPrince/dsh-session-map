@@ -79,6 +79,7 @@ dsh --profile web --dump-config    # profile 名换成你装的那个
 | 会话标签栏 | 「概览」与「会话图谱」两个标签页 |
 | 会话头部工具区 | 「会话图谱」开关；右侧栏正显示图谱时再点一次会关闭它 |
 | 右侧栏标签 | `dsh-session-map.map`（标题「会话图谱」）和 `dsh-session-map.overview`（标题「会话概览」） |
+| 会话头 / 右侧栏 `+` | 「Git」按钮（order 41）与指南卡片「Git」；打开后是右侧栏一页式 Git 页面（提交面板 + 差异 / 分支树 + 提交列表 + 提交详情） |
 | 图谱页本身 | 轮次树画布；默认只画当前会话的那棵树、且自上而下，工具栏的「当前会话树 / 全部会话」与「竖向 / 横向」两组开关可切回全图与原方向，旁边显示会话数、轮次数、树数与当前缩放百分比 |
 | Settings → 技能 | 两组列表：用户级技能（来自 `~/.dsh/skills`、`~/.agents/skills`）与按项目根目录分组的项目级技能；含来源、调用限制、路径与搜索框 |
 | Settings → 从 Git 克隆 | 仓库地址、存放目录、「选择…」、浅克隆开关与「克隆」按钮 |
@@ -192,7 +193,15 @@ localStorage.removeItem('dsh.session-map.conversationViews')        // 回到出
 
 宿主路由与克隆页共用 `/plugin-git-workspace` 前缀；所有路径先按注册 Workspace 做 `realpath` 包含校验，写操作每仓库串行，破坏性操作由服务端二次确认。规格与安全测试矩阵见 [docs/git-workspace-spec.md](docs/git-workspace-spec.md) §6，实施阶段与完成状态见 [docs/git-workspace-plan.md](docs/git-workspace-plan.md)。
 
-**当前状态（0.4.0-dev）**：只读、提交、分支、同步与历史写操作已实现，`pnpm test` 覆盖 236 个用例（含 `GIT_WS_IT=1` 的 15 条真实 git 集成用例：未确认丢弃不改文件、clean 不删 ignored、锁不清除、提交信息不执行 shell、stash/tag、非快进推送被拒且确认后才能 force-with-lease、clean 不跟随符号链接等）。剩余可选项（O1–O7）的现状与说明见 [docs/git-workspace-plan.md](docs/git-workspace-plan.md) §10.1：冲突合并编辑器、stash 完整列表、远程标签删除、子模块/worktree、大仓库虚拟滚动、非当前分支仅快进更新、kill 恢复用例。
+**右侧栏一页式 Git 页面（0.4.0 新增）**：同一套 `/plugin-git-workspace` 路由之上还有一个**会话级**载体——原生右侧栏的 `Git` 标签类型（type id `dsh-session-map.git`，kind `git-window`）。入口是会话头 utilities 里的「Git」按钮（order 41，再点一次关闭）或右侧栏 `+` 指南里的「Git」卡片；页面**自动跟随当前会话所属工作区**，不需要再选项目。一页内布局是「提交面板 + 差异查看器」在上、「分支树 / 提交列表 / 提交详情」在下：
+
+- **提交面板**：暂存/未暂存/未版本控制/冲突分组 + 目录折叠 + 可收起分组；勾选即写 index，点文件名在右上方预览该文件的差异（来源区分工作区/暂存区），丢弃走服务端确认令牌，提交/修正/提交并推送/搁置与主面板同源。
+- **差异查看器**：统一 / 并排两种视图（窄宽自动统一），untracked、二进制、截断各有明确空态；点提交详情里的文件则显示该提交内的差异。
+- **日志**：分支树、提交搜索/分页/图线、提交详情与文件列表；检出、新建、删除、重命名、合并、变基、强推、标签、重置、撤销、拣选全部走与主面板相同的动作。
+- **响应式**：<760 默认收起提交面板（工具栏可再展开）、<520 隐藏分支树、<800 详情改抽屉、<700 差异统一；两条分隔条可拖。UI 偏好（提交面板开关/宽度、日志区高度、差异视图）按会话存 `dsh.git-window.rightbar.<sessionId>`。
+- 主面板的 Git 工具窗口不受影响，两个载体可以同时开着。
+
+**当前状态（0.4.0-dev）**：只读、提交、分支、同步与历史写操作已实现，另有会话级右侧栏一页式 Git 页面；`pnpm test` 覆盖 238 个本地用例（`GIT_WS_IT=1` 时 253 个，含 15 条真实 git 集成用例：未确认丢弃不改文件、clean 不删 ignored、锁不清除、提交信息不执行 shell、stash/tag、非快进推送被拒且确认后才能 force-with-lease、clean 不跟随符号链接等）。右侧栏页面新增 17 个用例（差异配对与并排渲染、布局宽窄与空态、注册竞态、提交面板目录分组与行/复选框分工）。剩余可选项（O1–O7）的现状与说明见 [docs/git-workspace-plan.md](docs/git-workspace-plan.md) §10.1：冲突合并编辑器、stash 完整列表、远程标签删除、子模块/worktree、大仓库虚拟滚动、非当前分支仅快进更新、kill 恢复用例。
 
 **本地验证**：`pnpm build` 后需要让 web profile 指向本仓库（`dsh plugin --profile web add link:<本仓库路径>`）并重启/刷新；npm 安装的副本不会热更新宿主路由。
 
@@ -299,6 +308,14 @@ src/session-map/css.ts       样式表字符串
 src/session-map/constants.ts 几何常量、折叠阈值与 tab type id
 src/session-map/flags.ts     跨挂载存活的插件级开关
 src/session-map/format.ts    数字与耗时格式化
+src/session-map/sidebar-right.ts 右侧栏 tab type 注册的共享结构类型与 claim 规则
+src/git-workspace/window/rightbar/install.ts 右侧栏 Git 页注册：tab type、body、会话头按钮
+src/git-workspace/window/rightbar/page.ts    右侧栏 Git 页：会话工作区解析、尺寸测量、偏好
+src/git-workspace/window/rightbar/model.ts   右侧栏 Git 页状态机：快照/日志/详情/差异/写动作/作业
+src/git-workspace/window/rightbar/layout.ts  右侧栏 Git 页布局与断点（提交面板+差异 / 日志三栏）
+src/git-workspace/window/rightbar/{ids,prefs,css}.ts 标识、每会话 UI 偏好、页面样式
+src/git-workspace/window/diff-view.ts        统一/并排差异渲染与配对纯函数（两个载体共用）
+src/git-workspace/window/feedback.ts         错误条与非仓库空态（两个载体共用）
 docs/example.png        界面截图（README 用）
 docs/example-map.png    图谱细节截图（README 用）
 ```

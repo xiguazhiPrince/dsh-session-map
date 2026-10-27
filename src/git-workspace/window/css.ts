@@ -240,8 +240,20 @@ export const CSS = `
 .dgw-changeHead { display: flex; align-items: center; gap: 6px; padding: 3px 10px; color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 600; }
 .dgw-changeRow { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px 0 14px; cursor: pointer; }
 .dgw-changeRow:hover { background: var(--dsw-alias-bg-layer-2); }
+/* The right-column page previews on row click: the matching row stays marked. */
+.dgw-changeRow--active { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
+.dgw-changeRow--nested { padding-left: 26px; }
+.dgw-changeHead--button { width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .dgw-checkbox { flex: 0 0 14px; width: 14px; height: 14px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 3px; background: var(--dsw-alias-bg-layer-1); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; line-height: 1; color: var(--dsw-alias-bg-base); }
+.dgw-checkbox--button { padding: 0; font: inherit; cursor: pointer; }
 .dgw-checkbox[data-checked='true'] { background: var(--dsw-alias-brand-primary); border-color: var(--dsw-alias-brand-primary); }
+/* Directory rows of the grouped change tree (right-column page). */
+.dgw-changeDir { display: flex; align-items: center; gap: 5px; width: 100%; height: 24px; padding: 0 10px 0 14px; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font-size: 12px; text-align: left; cursor: pointer; white-space: nowrap; }
+.dgw-changeDir:hover { background: var(--dsw-alias-bg-layer-2); }
+.dgw-changeDirName { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.dgw-changeDirCount { margin-left: auto; color: var(--dsw-alias-label-secondary); font-size: 10px; }
+.dgw-changeChevron { display: inline-flex; transition: transform .12s ease; }
+.dgw-changeChevron[data-open='false'] { transform: rotate(-90deg); }
 .dgw-changePath { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 11px; }
 .dgw-changeStatus { flex: 0 0 auto; font-size: 10px; font-weight: 700; }
 .dgw-discard { flex: 0 0 auto; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 10px; cursor: pointer; opacity: 0; }
@@ -267,4 +279,13 @@ export const CSS = `
 .dgw-menuItem:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-brand-primary); }
 .dgw-fieldLabel { font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .dgw-input { height: 26px; padding: 0 6px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 4px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-size: 12px; }
+/* Side-by-side diff (right-column page). One row is two aligned halves; a
+   missing line on either side keeps the row height with a muted filler. */
+.dgw-diffSide { display: flex; flex-direction: column; }
+.dgw-diffSideRow { display: flex; align-items: stretch; }
+.dgw-diffSideCell { display: flex; flex: 1 1 50%; min-width: 0; white-space: pre; padding-right: 8px; }
+.dgw-diffSideCell--add { background: var(--dgw-addBg); }
+.dgw-diffSideCell--del { background: var(--dgw-delBg); }
+.dgw-diffSideCell--empty { background: var(--dsw-alias-bg-layer-1); opacity: .35; }
+.dgw-diffSideRow > .dgw-diffSideCell:first-child { border-right: 1px solid var(--dsw-alias-border-l1); }
 `

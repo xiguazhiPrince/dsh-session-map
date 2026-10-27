@@ -22,12 +22,12 @@ import { CSS } from './css'
 import { GitPanelIcon, FetchIcon, PushIcon, RefreshIcon } from './icons'
 import {
   GitApiError,
-  describeGitError,
   isAbortError,
   type DiffResult,
   type GitWindowApi,
   type LogRequest,
 } from './runtime'
+import { ErrorBanner, NoRepo } from './feedback'
 
 /** Browser-local key remembering the panel is open across reloads. */
 export const PANEL_OPEN_KEY = 'dsh.git-window.panelOpen'
@@ -102,35 +102,6 @@ const MAX_CONSOLE_ROWS = 300
 const POLL_VISIBLE_MS = 3_000
 /** Poll interval after the panel has been hidden for a while. */
 const POLL_HIDDEN_MS = 10_000
-
-/** Render one inline error banner. */
-function ErrorBanner(props: { readonly error: GitApiError | null; readonly onRetry: () => void }): React.ReactElement | null {
-  if (props.error === null) return null
-  return React.createElement(
-    'div',
-    { className: 'dgw-error', role: 'alert' },
-    React.createElement('div', { className: 'dgw-errorText' },
-      describeGitError(props.error.code, props.error.message),
-      props.error.detail === undefined
-        ? null
-        : React.createElement('pre', { className: 'dgw-errorDetail' }, props.error.detail),
-    ),
-    React.createElement('button', { className: 'dgw-retry', type: 'button', onClick: props.onRetry }, '重试'),
-  )
-}
-
-/** Render the empty state for a workspace that has no git repository. */
-function NoRepo(props: { readonly onRetry: () => void }): React.ReactElement {
-  return React.createElement(
-    'div',
-    { className: 'dgw-empty' },
-    React.createElement('div', { className: 'dgw-emptyBox' },
-      React.createElement('div', null, '当前工作区不是 git 仓库'),
-      React.createElement('div', null, '请在工作中选择另一个目录，或先在此目录初始化 git。'),
-      React.createElement('button', { className: 'dgw-retry', type: 'button', onClick: props.onRetry }, '重新检测'),
-    ),
-  )
-}
 
 /** One log page held by the shell. */
 interface LogState {

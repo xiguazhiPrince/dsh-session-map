@@ -11,6 +11,7 @@
 import * as React from 'react'
 import type { BranchRef, CommitDetail, CommitRow, DiffView, FileChange, HeadState } from '../git-types'
 import { BranchIcon, ChevronIcon, CommitIcon, CopyIcon, FileIcon, FolderIcon, RemoteIcon, SearchIcon, TagIcon } from './icons'
+import { DiffView as DiffViewPane } from './diff-view'
 
 /** Branch tree props. */
 export interface BranchTreeProps {
@@ -615,58 +616,69 @@ function copy(text: string): void {
   void navigator.clipboard.writeText(text).catch(() => undefined)
 }
 
-/** Render one diff. */
-function DiffPane(props: { readonly diff: DiffView | null; readonly file: string | null; readonly loading: boolean }): React.ReactElement {
-  if (props.file === null) {
-    return React.createElement('div', { className: 'dgw-empty' }, React.createElement('div', { className: 'dgw-emptyBox' }, '选择一个文件查看差异'))
-  }
-  if (props.loading) return React.createElement('div', { className: 'dgw-loading' }, '正在读取差异…')
-  if (props.diff === null) {
-    return React.createElement('div', { className: 'dgw-empty' }, React.createElement('div', { className: 'dgw-emptyBox' }, '没有可显示的差异'))
-  }
-  if (props.diff.binary) {
-    return React.createElement('div', { className: 'dgw-empty' }, React.createElement('div', { className: 'dgw-emptyBox' }, '二进制文件，无法预览差异'))
-  }
-  if (props.diff.truncated) {
-    return React.createElement(
-      'div',
-      { className: 'dgw-diff' },
-      React.createElement('div', { className: 'dgw-hunkHead' }, '差异过大，已截断'),
-      ...props.diff.hunks.flatMap((hunk, hunkIndex) => [
-        React.createElement('div', { className: 'dgw-hunkHead', key: `h${hunkIndex}` },
-          `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`),
-        ...hunk.lines.map((line, lineIndex) => React.createElement(
-          'div',
-          {
-            className: line.kind === '+' ? 'dgw-diffLine dgw-diffLine--add' : line.kind === '-' ? 'dgw-diffLine dgw-diffLine--del' : 'dgw-diffLine',
-            key: `${hunkIndex}-${lineIndex}`,
-          },
-          React.createElement('span', { className: 'dgw-diffLineNo' }, line.oldLine === null ? '' : String(line.oldLine)),
-          React.createElement('span', { className: 'dgw-diffLineNo' }, line.newLine === null ? '' : String(line.newLine)),
-          React.createElement('span', { className: 'dgw-diffSign' }, line.kind === ' ' ? ' ' : line.kind),
-          React.createElement('span', null, line.text),
-        )),
-      ]),
-    )
-  }
+/** Commit meta props. */
+export interface CommitMetaProps {
+  readonly detail: CommitDetail
+}
+
+/** Render one commit's message, ref pills and authorship metadata. */
+export function CommitMeta(props: CommitMetaProps): React.ReactElement {
+  const detail = props.detail
   return React.createElement(
-    'div',
-    { className: 'dgw-diff' },
-    ...props.diff.hunks.flatMap((hunk, hunkIndex) => [
-      React.createElement('div', { className: 'dgw-hunkHead', key: `h${hunkIndex}` },
-        `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`),
-      ...hunk.lines.map((line, lineIndex) => React.createElement(
-        'div',
-        {
-          className: line.kind === '+' ? 'dgw-diffLine dgw-diffLine--add' : line.kind === '-' ? 'dgw-diffLine dgw-diffLine--del' : 'dgw-diffLine',
-          key: `${hunkIndex}-${lineIndex}`,
-        },
-        React.createElement('span', { className: 'dgw-diffLineNo' }, line.oldLine === null ? '' : String(line.oldLine)),
-        React.createElement('span', { className: 'dgw-diffLineNo' }, line.newLine === null ? '' : String(line.newLine)),
-        React.createElement('span', { className: 'dgw-diffSign' }, line.kind === ' ' ? ' ' : line.kind),
-        React.createElement('span', null, line.text),
+    React.Fragment,
+    null,
+    React.createElement('div', { className: 'dgw-msg' }, detail.message),
+    React.createElement('div', { className: 'dgw-detailRefs' },
+      ...refLabels(detail).map(label => React.createElement(
+        'span',
+        { key: label.text, className: label.tag ? 'dgw-pill dgw-pill--tag' : 'dgw-pill' },
+        label.text,
       )),
-    ]),
+    ),
+    React.createElement('div', { className: 'dgw-detailMeta' },
+      React.createElement('div', null, `作者 ${detail.author.name} <${detail.author.email}>，${formatWhen(detail.author.date)}`),
+      detail.committer.date !== detail.author.date
+        ? React.createElement('div', null, `提交于 ${formatWhen(detail.committer.date)}`)
+        : null,
+      detail.containedInBranches.length === 0
+        ? null
+        : React.createElement('div', null, `在 ${detail.containedInBranches.length} 个分支中: ${detail.containedInBranches.join(', ')}`),
+    ),
+  )
+}
+
+/** Commit file-list props. */
+export interface CommitFilesProps {
+  readonly files: readonly FileChange[]
+  readonly selectedFile: string | null
+  readonly onSelectFile: (path: string) => void
+}
+
+/** Render one commit's changed-file list; the diff itself stays outside. */
+export function CommitFiles(props: CommitFilesProps): React.ReactElement {
+  return React.createElement(
+    React.Fragment,
+    null,
+    React.createElement('div', { className: 'dgw-sectionTitle' }, '更改的文件'),
+    ...props.files.map(file => React.createElement(
+      'div',
+      {
+        key: `${file.oldPath ?? ''}:${file.path}`,
+        className: `dgw-fileRow${props.selectedFile === file.path ? ' dgw-fileRow--active' : ''}`,
+        onClick: () => props.onSelectFile(file.path),
+        title: file.path,
+      },
+      React.createElement(FileIcon, { size: 14 }),
+      React.createElement('span', { className: 'dgw-filePath' }, file.path),
+      React.createElement('span', { className: 'dgw-fileStat', style: { color: statusColour(file.status) } }, file.status),
+      file.binary
+        ? React.createElement('span', { className: 'dgw-fileStat' }, '二进制')
+        : React.createElement('span', { className: 'dgw-fileStat' },
+          React.createElement('span', { className: 'dgw-fileStat--add' }, `+${String(file.additions ?? 0)}`),
+          ' ',
+          React.createElement('span', { className: 'dgw-fileStat--del' }, `-${String(file.deletions ?? 0)}`),
+        ),
+    )),
   )
 }
 
@@ -701,47 +713,19 @@ export function DetailPane(props: DetailPaneProps): React.ReactElement {
     React.createElement(
       'div',
       { className: 'dgw-detailScroll' },
-      React.createElement('div', { className: 'dgw-msg' }, detail.message),
-      React.createElement('div', { className: 'dgw-detailRefs' },
-        ...refLabels(detail).map(label => React.createElement(
-          'span',
-          { key: label.text, className: label.tag ? 'dgw-pill dgw-pill--tag' : 'dgw-pill' },
-          label.text,
-        )),
-      ),
-      React.createElement('div', { className: 'dgw-detailMeta' },
-        React.createElement('div', null, `作者 ${detail.author.name} <${detail.author.email}>，${formatWhen(detail.author.date)}`),
-        detail.committer.date !== detail.author.date
-          ? React.createElement('div', null, `提交于 ${formatWhen(detail.committer.date)}`)
-          : null,
-        detail.containedInBranches.length === 0
-          ? null
-          : React.createElement('div', null, `在 ${detail.containedInBranches.length} 个分支中: ${detail.containedInBranches.join(', ')}`),
-      ),
-      React.createElement('div', { className: 'dgw-sectionTitle' }, '更改的文件'),
-      ...detail.files.map(file => React.createElement(
-        'div',
-        {
-          key: `${file.oldPath ?? ''}:${file.path}`,
-          className: `dgw-fileRow${props.selectedFile === file.path ? ' dgw-fileRow--active' : ''}`,
-          onClick: () => props.onSelectFile(file.path),
-          title: file.path,
-        },
-        React.createElement(FileIcon, { size: 14 }),
-        React.createElement('span', {
-          className: 'dgw-filePath',
-        }, file.path),
-        React.createElement('span', { className: 'dgw-fileStat', style: { color: statusColour(file.status) } }, file.status),
-        file.binary
-          ? React.createElement('span', { className: 'dgw-fileStat' }, '二进制')
-          : React.createElement('span', { className: 'dgw-fileStat' },
-            React.createElement('span', { className: 'dgw-fileStat--add' }, `+${String(file.additions ?? 0)}`),
-            ' ',
-            React.createElement('span', { className: 'dgw-fileStat--del' }, `-${String(file.deletions ?? 0)}`),
-          ),
-      )),
+      React.createElement(CommitMeta, { detail }),
+      React.createElement(CommitFiles, {
+        files: detail.files,
+        selectedFile: props.selectedFile,
+        onSelectFile: props.onSelectFile,
+      }),
     ),
-    React.createElement(DiffPane, { diff: props.diff, file: props.selectedFile, loading: props.diffLoading }),
+    React.createElement(DiffViewPane, {
+      diff: props.diff,
+      file: props.selectedFile,
+      loading: props.diffLoading,
+      mode: 'unified',
+    }),
   )
 }
 

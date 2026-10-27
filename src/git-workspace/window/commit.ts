@@ -9,7 +9,7 @@ import * as React from 'react'
 import type { ChangedEntry, RepoSnapshot } from '../git-types'
 import type { GitAction } from '../git-actions'
 import { GitApiError, describeGitError, waitForJob, type GitWindowApi } from './runtime'
-import { FileIcon } from './icons'
+import { ChevronIcon, FileIcon, FolderIcon } from './icons'
 
 /** Props for the commit tab. */
 export interface CommitPaneProps {
@@ -18,6 +18,20 @@ export interface CommitPaneProps {
   readonly snapshot: RepoSnapshot
   /** Called after a successful write so the shell refreshes the snapshot. */
   readonly onChanged: () => void
+  /**
+   * Group each section's rows under their directory (right-column page).
+   * Defaults to the flat list the main panel has always shown.
+   */
+  readonly groupByDirectory?: boolean
+  /** Let a section header collapse its rows (right-column page). */
+  readonly collapsibleSections?: boolean
+  /** `${group}:${path}` of the row to highlight as the previewed change. */
+  readonly selectedKey?: string | null
+  /**
+   * When provided, clicking a row previews it instead of toggling staging: the
+   * checkbox keeps the staging round-trip and becomes the only toggle.
+   */
+  readonly onSelect?: (entry: ChangedEntry) => void
 }
 
 /** Pending destructive confirmation. */
@@ -45,6 +59,16 @@ function statusColour(entry: ChangedEntry): string {
   }
 }
 
+/** How one row is presented and what a row click does. */
+interface ChangeRowOptions {
+  /** Highlight this row as the previewed change. */
+  readonly selected: boolean
+  /** Row click previews the entry; the checkbox owns the staging toggle. */
+  readonly onSelect?: (() => void) | undefined
+  /** Nested under a directory row. */
+  readonly nested?: boolean
+}
+
 /** Render one change row. */
 function changeRow(
   entry: ChangedEntry,
@@ -52,20 +76,37 @@ function changeRow(
   disabled: boolean,
   onToggle: () => void,
   onDiscard: (() => void) | undefined,
+  options: ChangeRowOptions,
 ): React.ReactElement {
+  const activate = options.onSelect ?? onToggle
+  const classes = [
+    'dgw-changeRow',
+    options.selected ? 'dgw-changeRow--active' : '',
+    options.nested === true ? 'dgw-changeRow--nested' : '',
+  ].filter(part => part !== '').join(' ')
+  const checkbox = options.onSelect === undefined
+    ? React.createElement('span', { className: 'dgw-checkbox', 'data-checked': checked, 'aria-hidden': true }, checked ? '✓' : '')
+    : React.createElement('button', {
+      className: 'dgw-checkbox dgw-checkbox--button',
+      type: 'button',
+      'data-checked': checked,
+      'aria-pressed': checked,
+      title: checked ? '取消暂存' : '暂存',
+      'aria-label': checked ? '取消暂存' : '暂存',
+      onClick: (event: React.MouseEvent) => {
+        event.stopPropagation()
+        onToggle()
+      },
+    }, checked ? '✓' : '')
   return React.createElement(
     'div',
     {
       key: `${entry.group}:${entry.path}`,
-      className: 'dgw-changeRow',
-      onClick: disabled ? undefined : onToggle,
+      className: classes,
+      onClick: disabled ? undefined : activate,
       title: entry.oldPath === undefined ? entry.path : `${entry.oldPath} → ${entry.path}`,
     },
-    React.createElement('span', {
-      className: 'dgw-checkbox',
-      'data-checked': checked,
-      'aria-hidden': true,
-    }, checked ? '✓' : ''),
+    checkbox,
     React.createElement(FileIcon, { size: 13 }),
     React.createElement('span', { className: 'dgw-changePath' },
       entry.oldPath === undefined ? entry.path : `${entry.oldPath} → ${entry.path}`,
@@ -94,6 +135,8 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
   const [error, setError] = React.useState<GitApiError | null>(null)
   const [discardRequest, setDiscardRequest] = React.useState<DiscardRequest | null>(null)
   const [dropStashPending, setDropStashPending] = React.useState(false)
+  const [collapsedDirs, setCollapsedDirs] = React.useState<Record<string, boolean>>({})
+  const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>({})
 
   const staged = snapshot.changes.filter(entry => entry.group === 'staged')
   const unstaged = snapshot.changes.filter(entry => entry.group === 'unstaged')
@@ -227,6 +270,96 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
     { title: `未版本控制 (${untracked.length})`, rows: untracked, checked: false, discardable: true },
   ]
 
+  /** One section's rows bucketed by directory; root files come first. */
+  const rowsByDirectory = (rows: readonly ChangedEntry[]): Array<{ dir: string; rows: ChangedEntry[] }> => {
+    const buckets = new Map<string, ChangedEntry[]>()
+    for (const entry of rows) {
+      const slash = entry.path.lastIndexOf('/')
+      const dir = slash < 0 ? '' : entry.path.slice(0, slash)
+      const bucket = buckets.get(dir)
+      if (bucket === undefined) buckets.set(dir, [entry])
+      else bucket.push(entry)
+    }
+    return [...buckets.entries()]
+      .map(([dir, bucket]) => ({ dir, rows: bucket }))
+      .sort((left, right) => left.dir === '' ? -1 : right.dir === '' ? 1 : left.dir.localeCompare(right.dir))
+  }
+
+  /** Render one section's rows, flat or grouped under collapsible directories. */
+  const renderRows = (rows: readonly ChangedEntry[], checked: boolean, discardable: boolean): React.ReactNode[] => {
+    const nodes: React.ReactNode[] = []
+    const emit = (entry: ChangedEntry, nested: boolean): void => {
+      nodes.push(changeRow(
+        entry,
+        checked,
+        busy || entry.group === 'conflict',
+        () => { void toggle(entry) },
+        discardable ? () => requestDiscard(entry) : undefined,
+        {
+          selected: props.selectedKey === `${entry.group}:${entry.path}`,
+          ...(props.onSelect === undefined ? {} : { onSelect: () => { props.onSelect?.(entry) } }),
+          nested,
+        },
+      ))
+    }
+    if (props.groupByDirectory !== true) {
+      for (const entry of rows) emit(entry, false)
+      return nodes
+    }
+    for (const group of rowsByDirectory(rows)) {
+      if (group.dir === '') {
+        for (const entry of group.rows) emit(entry, false)
+        continue
+      }
+      const open = collapsedDirs[group.dir] !== true
+      nodes.push(React.createElement(
+        'button',
+        {
+          key: `dir:${group.dir}`,
+          className: 'dgw-changeDir',
+          type: 'button',
+          title: group.dir,
+          onClick: () => setCollapsedDirs(state => ({ ...state, [group.dir]: open })),
+        },
+        React.createElement('span', { className: 'dgw-changeChevron', 'data-open': open ? 'true' : 'false' },
+          React.createElement(ChevronIcon, { size: 11 }),
+        ),
+        React.createElement(FolderIcon, { size: 13 }),
+        React.createElement('span', { className: 'dgw-changeDirName' }, group.dir.split('/').pop() ?? group.dir),
+        React.createElement('span', { className: 'dgw-changeDirCount' }, `${group.rows.length} 个文件`),
+      ))
+      if (open) {
+        for (const entry of group.rows) emit(entry, true)
+      }
+    }
+    return nodes
+  }
+
+  /** Render one section header (collapsible when asked) plus its rows. */
+  const renderSection = (section: { title: string; rows: ChangedEntry[]; checked: boolean; discardable: boolean }): React.ReactElement => {
+    const collapsible = props.collapsibleSections === true
+    const open = !collapsible || collapsedSections[section.title] !== true
+    return React.createElement(
+      'div',
+      { className: 'dgw-changeSection', key: section.title },
+      collapsible
+        ? React.createElement(
+          'button',
+          {
+            className: 'dgw-changeHead dgw-changeHead--button',
+            type: 'button',
+            onClick: () => setCollapsedSections(state => ({ ...state, [section.title]: open })),
+          },
+          React.createElement('span', { className: 'dgw-changeChevron', 'data-open': open ? 'true' : 'false' },
+            React.createElement(ChevronIcon, { size: 11 }),
+          ),
+          section.title,
+        )
+        : React.createElement('div', { className: 'dgw-changeHead' }, section.title),
+      open ? renderRows(section.rows, section.checked, section.discardable) : null,
+    )
+  }
+
   return React.createElement(
     'div',
     { className: 'dgw-commit' },
@@ -237,18 +370,7 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
         ? React.createElement('div', { className: 'dgw-empty' },
           React.createElement('div', { className: 'dgw-emptyBox' }, '没有要提交的内容，工作树是干净的'),
         )
-        : sections.filter(section => section.rows.length > 0).map(section => React.createElement(
-          'div',
-          { className: 'dgw-changeSection', key: section.title },
-          React.createElement('div', { className: 'dgw-changeHead' }, section.title),
-          ...section.rows.map(entry => changeRow(
-            entry,
-            section.checked,
-            busy || entry.group === 'conflict',
-            () => { void toggle(entry) },
-            section.discardable ? () => requestDiscard(entry) : undefined,
-          )),
-        )),
+        : sections.filter(section => section.rows.length > 0).map(section => renderSection(section)),
     ),
     React.createElement(
       'div',

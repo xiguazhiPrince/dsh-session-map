@@ -2,7 +2,7 @@
 
 > 状态：**已完成**（2026-10-27）｜ 对应规格：[git-workspace-spec.md](git-workspace-spec.md)
 > 实现提交：`1c6f3d9`（只读/提交/分支）、`541a6ea`（fetch/update/push 作业）、`ffc5b44`（历史写操作/ stash / tag / 打磨）
-> 最终验证：236 个用例（含 15 条真实 git 集成）、`pnpm typecheck`、`pnpm build` 全绿。
+> 最终验证：253 个用例（238 个本地 + 15 条真实 git 集成）、`pnpm typecheck`、`pnpm build` 全绿。
 
 ## 1. 目标与交付边界
 
@@ -101,14 +101,16 @@
 
 ```sh
 pnpm typecheck
-pnpm test                                   # 221 个本地用例（集成默认跳过）
-GIT_WS_IT=1 pnpm test                       # 236 用例（含 15 条真实 git）
+pnpm test                                   # 238 个本地用例（集成默认跳过）
+GIT_WS_IT=1 pnpm test                       # 253 用例（含 15 条真实 git）
 pnpm build                                  # 重建 lib/
 ```
 
 ## 10. 实际偏差与剩余可选项
 
 ### 10.1 未完成可选项（路线图）
+
+**已完成（0.4.0）**：**R1 右侧栏一页式 Git 页面** —— 原生右栏 tab type `dsh-session-map.git`（kind `git-window`）+ 会话头「Git」按钮（order 41）+ 右栏 `+` 指南卡片；会话级、自动跟随会话工作区；一页内「提交面板 + 差异查看器」在上、「分支树 + 提交列表 + 提交详情」在下；差异支持统一/并排，断点 760/700/520/800；每会话 UI 偏好 `dsh.git-window.rightbar.<sessionId>`。实现：`src/git-workspace/window/rightbar/`、`window/diff-view.ts`、`window/feedback.ts`、`src/session-map/sidebar-right.ts`。主面板 Git 工具窗口保留不变。
 
 | # | 可选项 | 当前现状 | 说明 |
 |---|---|---|---|
@@ -130,6 +132,7 @@ pnpm build                                  # 重建 lib/
 - **性能**：提交列表按页加载，未做虚拟滚动；超大仓库需后续优化。
 - **kill 恢复**：取消作业与 busy 已测，进程被 kill 后的状态恢复只有设计说明，未加集成用例。
 - **其它**：子模块/worktree 管理、远程标签删除、非当前分支 Update 的「仅快进」选项。
+- **右侧栏页面与主面板的读写处理器同形状但独立实现**：本阶段共享的是展示组件（`diff-view` / `feedback` / `log` / `commit`）与注册助手（`session-map/sidebar-right.ts`），状态机与动作接线各写一份；后续可收敛为一个共享 controller，避免两套逻辑漂移。
 
 ## 11. 本地运行
 
@@ -167,12 +170,14 @@ dsh plugin --profile web add link:C:\Users\54647\Developer\myProjects\dsh-sessio
 
   ```sh
   pnpm typecheck
-  pnpm test                 # 221 个本地用例，集成默认跳过
-  GIT_WS_IT=1 pnpm test     # 236 个用例，含 15 条真实 git 集成（约 20s）
+  pnpm test                 # 238 个本地用例，集成默认跳过
+  GIT_WS_IT=1 pnpm test     # 253 个用例，含 15 条真实 git 集成（约 20s）
   pnpm build                # 必须，重建 lib/
   ```
 
 ### 12.3 继续 O1–O7 的约定
+
+- **两个载体**：主面板（`main` key `git-workspace`）与右侧栏页（tab type `dsh-session-map.git`）共用 `window/runtime.ts` 和宿主路由；改读接口或动作时两处都要验证，右侧栏页的状态机在 `window/rightbar/model.ts`，布局在 `window/rightbar/layout.ts`。
 
 - **测试先行**：写操作先加 L1（argv/策略）与 L2（路由门禁）测试；涉及真实副作用的再加 L4 临时仓库集成用例。
 - **安全不变量**（规格 §6）：路径白名单、服务端确认令牌、每仓库写串行、凭证脱敏、不引入 shell/`child_process`、不注册 Tool。L2/L3 动作用确认令牌；L1 不要滥用确认。

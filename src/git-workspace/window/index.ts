@@ -91,3 +91,7 @@ export function installGitWindowPanel(ctx: Context): void {
     return () => clearTimeout(timer)
   }, 'git-window: restore panel')
 }
+
+// The Session-scoped page lives in its own module: it registers a native
+// right-column tab type, which the main panel above does not use.
+export { installGitRightbarPage } from './rightbar/install'
