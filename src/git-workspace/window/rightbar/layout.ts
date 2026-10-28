@@ -146,12 +146,13 @@ function DetailsColumn(props: { readonly model: GitRightbarModel }): React.React
       React.createElement('span', { className: 'dgw-meta' }, `${detail.files.length} 个文件`),
     ),
     React.createElement('div', { className: 'dgw-rb__detailsScroll' },
-      React.createElement(CommitMeta, { detail }),
       React.createElement(CommitFiles, {
         files: detail.files,
         selectedFile: selectedCommitFile,
         onSelectFile: model.actions.selectCommitFile,
       }),
+      React.createElement('div', { className: 'dgw-sectionTitle' }, '提交信息'),
+      React.createElement(CommitMeta, { detail }),
     ),
     selectedCommitFile === null || model.diffLoading
       ? React.createElement('div', { className: 'dgw-rb__detailsDiff' },
