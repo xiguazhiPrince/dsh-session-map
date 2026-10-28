@@ -225,7 +225,7 @@ describe('LogList', () => {
 })
 
 describe('DetailPane', () => {
-  it('renders message, meta, files and the empty diff hint', () => {
+  it('lets the message area fill the pane until a file is selected', () => {
     const markup = renderToStaticMarkup(React.createElement(DetailPane, {
       detail: DETAIL,
       loading: false,
@@ -238,7 +238,20 @@ describe('DetailPane', () => {
     expect(markup).toContain('在 2 个分支中')
     expect(markup).toContain('src/app.ts')
     expect(markup).toContain('二进制')
-    expect(markup).toContain('选择一个文件查看差异')
+    expect(markup).not.toContain('dgw-detailScroll--pinned')
+    expect(markup).not.toContain('选择一个文件查看差异')
+  })
+
+  it('splits the pane with the diff once a file is selected', () => {
+    const markup = renderToStaticMarkup(React.createElement(DetailPane, {
+      detail: DETAIL,
+      loading: false,
+      selectedFile: 'src/a.ts',
+      diff: null,
+      diffLoading: false,
+      onSelectFile: () => undefined,
+    }))
+    expect(markup).toContain('dgw-detailScroll--pinned')
   })
 })
 
