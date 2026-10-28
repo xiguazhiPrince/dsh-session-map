@@ -151,7 +151,10 @@ export function DiffView(props: DiffViewProps): React.ReactElement {
   if (props.mode === 'side') {
     return React.createElement(
       'div',
-      { className: 'dgw-diff dgw-diffSide' },
+      {
+        className: 'dgw-diff dgw-diffSide',
+        title: '并排视图：左右两栏可各自横向滚动（触控板左右滑动，或按住 Shift 滚动滚轮）',
+      },
       ...pairDiffRows(props.diff.hunks).map((row, index) => {
         if (row.kind === 'hunk') {
           return React.createElement('div', { className: 'dgw-hunkHead', key: `h${index}` }, row.text)

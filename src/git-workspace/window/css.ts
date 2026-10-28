@@ -283,8 +283,21 @@ export const CSS = `
    missing line on either side keeps the row height with a muted filler. */
 .dgw-diffSide { display: flex; flex-direction: column; }
 .dgw-diffSideRow { display: flex; align-items: stretch; }
-.dgw-diffSideCell { display: flex; flex: 1 1 50%; min-width: 0; white-space: pre; padding-right: 8px; overflow: hidden; }
-.dgw-diffSideCell > span:last-child { overflow: hidden; }
+/* Each side scrolls horizontally on its own. The scrollbar chrome stays hidden
+   so one long line does not make that row taller than its pair; trackpad /
+   Shift+wheel still scrolls the hovered side independently. */
+.dgw-diffSideCell {
+  display: flex;
+  flex: 1 1 50%;
+  min-width: 0;
+  white-space: pre;
+  padding-right: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.dgw-diffSideCell::-webkit-scrollbar { height: 0; }
+.dgw-diffSideCell > span:last-child { flex: 0 0 auto; }
 .dgw-diffSideCell--add { background: var(--dgw-addBg); }
 .dgw-diffSideCell--del { background: var(--dgw-delBg); }
 .dgw-diffSideCell--empty { background: var(--dsw-alias-bg-layer-1); opacity: .35; }
