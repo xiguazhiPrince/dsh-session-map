@@ -167,7 +167,7 @@ function changeRow(
     {
       key: `${entry.group}:${entry.path}`,
       className: classes,
-      style: { paddingLeft: 14 + depth * 14 },
+      style: { paddingLeft: 14 },
       onClick: disabled ? undefined : activate,
       title: fullPath,
     },
@@ -368,7 +368,7 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
           className: 'dgw-changeDir',
           type: 'button',
           title: node.path,
-          style: { paddingLeft: 14 + depth * 14 },
+          style: { paddingLeft: 14 },
           onClick: () => setCollapsedDirs(state => ({ ...state, [node.path]: open })),
         },
         ...depthGuides(depth, node.path),

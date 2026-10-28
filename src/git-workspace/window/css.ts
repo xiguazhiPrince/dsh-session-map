@@ -267,8 +267,8 @@ export const CSS = `
 /* One vertical guide per nesting level, so deep paths read as a tree. */
 .dgw-changeGuide,
 .dgw-treeGuide {
-  flex: 0 0 14px;
-  width: 14px;
+  flex: 0 0 12px;
+  width: 12px;
   align-self: stretch;
   border-left: 1px solid var(--dsw-alias-border-l2);
 }
