@@ -30,7 +30,7 @@ export interface GitRightbarPrefs {
 }
 
 /** Lower bound of the commit-panel drag. */
-export const COMMIT_WIDTH_MIN = 240
+export const COMMIT_WIDTH_MIN = 280
 /** Upper bound of the commit-panel drag. */
 export const COMMIT_WIDTH_MAX = 520
 /** Default commit-panel width. */

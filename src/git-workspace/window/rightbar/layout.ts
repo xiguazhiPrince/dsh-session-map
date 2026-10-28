@@ -32,6 +32,7 @@ import { CSS } from '../css'
 import { RIGHTBAR_CSS } from './css'
 import type { GitRightbarModel } from './model'
 import { jobStatusLabel } from './model'
+import { COMMIT_WIDTH_MIN } from './prefs'
 
 /** The HEAD placeholder used before the first snapshot lands. */
 const EMPTY_HEAD: HeadState = {
@@ -156,7 +157,7 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
   const { model } = props
   const { width, height } = props.size
   const commitOpen = model.commitOpen
-  const commitWidth = Math.min(model.commitWidth, Math.max(240, width - 320))
+  const commitWidth = Math.min(model.commitWidth, Math.max(COMMIT_WIDTH_MIN, width - 320))
   const logHeight = Math.min(model.logHeight, Math.max(160, height - 220))
   const showBranches = width >= BRANCHES_MIN_WIDTH
   const showDetails = width >= DETAILS_MIN_WIDTH

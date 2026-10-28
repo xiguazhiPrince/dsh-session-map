@@ -43,6 +43,7 @@ export const RIGHTBAR_CSS = `
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
+  min-width: 280px;
   min-height: 0;
   border-right: 1px solid var(--dsw-alias-border-l1);
   background: var(--dsw-alias-bg-layer-1);
