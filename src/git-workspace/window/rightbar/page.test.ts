@@ -227,6 +227,8 @@ describe('GitRightbarLayout', () => {
     expect(markup).toContain('dgw-rb__logTree')
     expect(markup).toContain('dgw-rb__logDetails')
     expect(markup).toContain('dgw-rb__detailsDiff')
+    expect(markup).toContain('dgw-rb__detailsSplit')
+    expect(markup).toContain('dgw-rb__detailsMessage')
     expect(markup).toContain('下载远端状态')
     expect(markup).toContain('更新当前分支')
     expect(markup).toContain('推送')

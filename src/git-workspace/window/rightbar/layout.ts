@@ -119,9 +119,75 @@ function toolButton(
   )
 }
 
-/** Render the commit-detail column (metadata + file list; the diff is above). */
+/** Browser-local key for the detail column's message height. */
+const DETAIL_MESSAGE_KEY = 'dsh.git-window.detailMessageHeight'
+const DETAIL_MESSAGE_MIN = 120
+const DETAIL_MESSAGE_MAX = 600
+const DETAIL_MESSAGE_DEFAULT = 220
+
+/** Clamp the message pane height. */
+function clampMessageHeight(value: number): number {
+  return Math.min(Math.max(DETAIL_MESSAGE_MIN, Math.round(value)), DETAIL_MESSAGE_MAX)
+}
+
+/** Read the saved message height; a missing or denied store answers the default. */
+function readMessageHeight(): number {
+  if (typeof localStorage === 'undefined') return DETAIL_MESSAGE_DEFAULT
+  try {
+    const raw = localStorage.getItem(DETAIL_MESSAGE_KEY)
+    if (raw === null) return DETAIL_MESSAGE_DEFAULT
+    const value = Number(raw)
+    return Number.isFinite(value) ? clampMessageHeight(value) : DETAIL_MESSAGE_DEFAULT
+  } catch {
+    return DETAIL_MESSAGE_DEFAULT
+  }
+}
+
+/** Persist the message pane height. */
+function writeMessageHeight(value: number): void {
+  if (typeof localStorage === 'undefined') return
+  try {
+    localStorage.setItem(DETAIL_MESSAGE_KEY, String(value))
+  } catch {
+    // Blocked storage: the splitter still works for this run.
+  }
+}
+
+/** Render the commit-detail column (file list above, message below). */
 function DetailsColumn(props: { readonly model: GitRightbarModel }): React.ReactElement {
   const { model } = props
+  const [messageHeight, setMessageHeight] = React.useState<number>(() => readMessageHeight())
+  const messageHeightRef = React.useRef(messageHeight)
+  messageHeightRef.current = messageHeight
+  const drag = React.useRef<{ readonly start: number; readonly base: number } | null>(null)
+
+  React.useEffect(() => {
+    const move = (event: PointerEvent): void => {
+      const active = drag.current
+      if (active === null) return
+      setMessageHeight(clampMessageHeight(active.base + (active.start - event.clientY)))
+    }
+    const up = (): void => {
+      if (drag.current === null) return
+      drag.current = null
+      document.body.style.userSelect = ''
+      writeMessageHeight(messageHeightRef.current)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      document.body.style.userSelect = ''
+    }
+  }, [])
+
+  const startDrag = (event: React.PointerEvent): void => {
+    event.preventDefault()
+    document.body.style.userSelect = 'none'
+    drag.current = { start: event.clientY, base: messageHeight }
+  }
+
   if (model.detail === null) {
     return React.createElement('div', { className: 'dgw-rb__empty' },
       React.createElement('div', { className: 'dgw-rb__emptyBox' },
@@ -145,14 +211,28 @@ function DetailsColumn(props: { readonly model: GitRightbarModel }): React.React
       React.createElement('span', { className: 'dgw-spacer' }),
       React.createElement('span', { className: 'dgw-meta' }, `${detail.files.length} 个文件`),
     ),
-    React.createElement('div', { className: 'dgw-rb__detailsScroll' },
-      React.createElement(CommitFiles, {
-        files: detail.files,
-        selectedFile: selectedCommitFile,
-        onSelectFile: model.actions.selectCommitFile,
+    React.createElement('div', { className: 'dgw-rb__detailsBody' },
+      React.createElement('div', { className: 'dgw-rb__detailsFiles' },
+        React.createElement(CommitFiles, {
+          files: detail.files,
+          selectedFile: selectedCommitFile,
+          onSelectFile: model.actions.selectCommitFile,
+        }),
+      ),
+      React.createElement('div', {
+        className: 'dgw-rb__detailsSplit',
+        role: 'separator',
+        'aria-orientation': 'horizontal',
+        title: '拖动调整提交信息高度',
+        onPointerDown: startDrag,
       }),
-      React.createElement('div', { className: 'dgw-sectionTitle' }, '提交信息'),
-      React.createElement(CommitMeta, { detail }),
+      React.createElement('div', {
+        className: 'dgw-rb__detailsMessage',
+        style: { height: messageHeight, flexBasis: messageHeight },
+      },
+        React.createElement('div', { className: 'dgw-sectionTitle' }, '提交信息'),
+        React.createElement(CommitMeta, { detail }),
+      ),
     ),
     selectedCommitFile === null || model.diffLoading
       ? React.createElement('div', { className: 'dgw-rb__detailsDiff' },

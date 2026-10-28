@@ -122,8 +122,26 @@ export const RIGHTBAR_CSS = `
   border-bottom: 1px solid var(--dsw-alias-border-l1);
   flex: 0 0 auto;
 }
-.dgw-rb__detailsScroll { flex: 1 1 auto; max-height: none; min-height: 0; overflow: auto; padding: 8px 10px; }
-/* One-line hint pinned under the info area; the info area itself fills the column. */
+/* Files above, message below, with a draggable split between them. */
+.dgw-rb__detailsBody { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.dgw-rb__detailsFiles { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 10px; }
+.dgw-rb__detailsSplit {
+  flex: 0 0 6px;
+  height: 6px;
+  cursor: row-resize;
+  background: var(--dsw-alias-bg-layer-1);
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+.dgw-rb__detailsSplit:hover { background: color-mix(in srgb, #4f9cf9 30%, transparent); }
+.dgw-rb__detailsMessage {
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px;
+  box-sizing: border-box;
+}
+/* One-line hint pinned under both panes. */
 .dgw-rb__detailsDiff {
   flex: 0 0 auto;
   padding: 6px 12px;
