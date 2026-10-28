@@ -141,10 +141,31 @@ function gutterLine(left: DiffLine | null, right: DiffLine | null, key: string):
  * scrolling so rows stay aligned.
  */
 function SideDiff(props: { readonly hunks: readonly DiffHunk[] }): React.ReactElement {
+  const rootRef = React.useRef<HTMLDivElement | null>(null)
   const leftRef = React.useRef<HTMLDivElement | null>(null)
   const rightRef = React.useRef<HTMLDivElement | null>(null)
   const gutterTrackRef = React.useRef<HTMLDivElement | null>(null)
   const syncing = React.useRef(false)
+
+  // Native wheel deltas are tuned for reading prose, not for scanning a diff;
+  // scale them up while keeping trackpad/Shift+wheel behaviour.
+  React.useEffect(() => {
+    const root = rootRef.current
+    if (root === null) return undefined
+    const onWheel = (event: WheelEvent): void => {
+      if (event.ctrlKey) return
+      const target = event.target instanceof Element ? event.target.closest('.dgw-diffSidePane') : null
+      const pane = target instanceof HTMLElement ? target : leftRef.current
+      if (pane === null) return
+      event.preventDefault()
+      const horizontal = event.shiftKey && event.deltaX === 0
+      pane.scrollTop += horizontal ? 0 : event.deltaY * 1.8
+      pane.scrollLeft += (horizontal ? event.deltaY : event.deltaX) * 1.8
+    }
+    root.addEventListener('wheel', onWheel, { passive: false })
+    return () => root.removeEventListener('wheel', onWheel)
+  }, [])
+
   const syncScroll = (event: React.UIEvent<HTMLDivElement>): void => {
     if (syncing.current) return
     const source = event.currentTarget
@@ -181,6 +202,7 @@ function SideDiff(props: { readonly hunks: readonly DiffHunk[] }): React.ReactEl
     'div',
     {
       className: 'dgw-diff dgw-diffSide',
+      ref: rootRef,
       title: '并排视图：行号固定在中间，左右代码栏横向滚动联动，竖向滚动保持对齐（Shift + 滚轮或触控板）',
     },
     React.createElement('div', { className: 'dgw-diffSidePane', ref: leftRef, onScroll: syncScroll }, ...left),
