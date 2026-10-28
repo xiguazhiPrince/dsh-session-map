@@ -408,8 +408,8 @@ export function useGitRightbarModel(deps: GitRightbarModelDeps): GitRightbarMode
   /** Chinese label for one job kind. */
   const jobLabel = (kind: string): string => {
     switch (kind) {
-      case 'fetch': return '获取'
-      case 'update': return '更新'
+      case 'fetch': return '下载远端状态'
+      case 'update': return '更新当前分支'
       case 'push': return '推送'
       default: return kind
     }

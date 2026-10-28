@@ -219,8 +219,8 @@ describe('GitRightbarLayout', () => {
     // Wide panes show the labelled header actions, with the long explanation
     // carried by the native tooltip.
     expect(markup).toContain('dgw-rb__toolText')
-    expect(markup).toContain('获取')
-    expect(markup).toContain('更新')
+    expect(markup).toContain('下载远端状态')
+    expect(markup).toContain('更新当前分支')
     expect(markup).toContain('推送')
     expect(markup).toContain('fetch --all --prune')
     expect(markup).not.toContain('class="dgw-rb__top dgw-rb__top--compact"')

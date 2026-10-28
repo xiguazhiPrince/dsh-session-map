@@ -257,8 +257,8 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
     /** Chinese label for one job kind. */
     const jobLabel = (kind: string): string => {
       switch (kind) {
-        case 'fetch': return '获取'
-        case 'update': return '更新'
+        case 'fetch': return '下载远端状态'
+        case 'update': return '更新当前分支'
         case 'push': return '推送'
         default: return kind
       }
@@ -703,16 +703,16 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
         React.createElement('button', {
           className: 'dgw-iconBtn',
           type: 'button',
-          title: '获取（fetch）',
-          'aria-label': '获取',
+          title: '下载远端状态（fetch）：只更新远端跟踪分支，不修改工作区或本地分支',
+          'aria-label': '下载远端状态',
           disabled: workspaceId === null || jobBusy,
           onClick: () => { if (workspaceId !== null) void runJob({ kind: 'fetch', workspaceId, all: true }) },
         }, React.createElement(FetchIcon, { size: 14 })),
         React.createElement('button', {
           className: 'dgw-iconBtn',
           type: 'button',
-          title: '更新当前分支（fetch + merge）',
-          'aria-label': '更新',
+          title: '更新当前分支：先下载远端状态，再把上游合并进当前分支（fetch + merge）',
+          'aria-label': '更新当前分支',
           disabled: workspaceId === null || jobBusy || snapshot === null,
           onClick: () => { if (workspaceId !== null) void runJob({ kind: 'update', workspaceId, mode: 'merge' }) },
         }, React.createElement(RefreshIcon, { size: 14 })),

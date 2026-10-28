@@ -189,7 +189,7 @@ localStorage.removeItem('dsh.session-map.conversationViews')        // 回到出
 - **日志**：左侧分支树（HEAD / 本地 / 远程 / 标签，`feature/x` 这类名字按目录折叠、可搜索过滤；双击检出，右键检出/新建/合并/变基/重命名/删除，当前分支另有强制推送入口；标签右键删除）、中间提交列表（客户端按 `%P` 计算图线、refs 胶囊、作者与时间；右键复制哈希/创建标签/拣选/撤销/重置）、右侧提交详情（完整 message、作者/提交者、哈希、所在分支、文件列表、逐文件 diff）。合并/变基/拣选/撤销进行中时，状态栏出现「继续 / 中止操作」。
 - **提交**：按「暂存区 / 未暂存 / 未版本控制 / 冲突」分组；勾选即写 index（`git add` / `restore --staged`），丢弃未跟踪文件先 `clean -nd` 预览再 `clean -fd`，且必须经过服务端确认令牌；支持提交、修正上次提交、提交并推送、搁置（stash push/pop）。
 - **控制台**：显示 Host 实际执行的每条 argv（凭证已脱敏）、退出码与耗时。
-- **工具栏**：刷新、获取（fetch，后台作业 + SSE 进度）、更新当前分支（fetch + merge）、推送；推送无上游时自动用当前远端建立跟踪，强制推送走 `--force-with-lease` 且需二次确认（L3）。
+- **工具栏**：刷新、下载远端状态（fetch，后台作业 + SSE 进度）、更新当前分支（fetch + merge）、推送；推送无上游时自动用当前远端建立跟踪，强制推送走 `--force-with-lease` 且需二次确认（L3）。
 
 宿主路由与克隆页共用 `/plugin-git-workspace` 前缀；所有路径先按注册 Workspace 做 `realpath` 包含校验，写操作每仓库串行，破坏性操作由服务端二次确认。规格与安全测试矩阵见 [docs/git-workspace-spec.md](docs/git-workspace-spec.md) §6，实施阶段与完成状态见 [docs/git-workspace-plan.md](docs/git-workspace-plan.md)。
 
