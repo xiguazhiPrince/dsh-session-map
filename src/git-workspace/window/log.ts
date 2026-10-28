@@ -96,7 +96,7 @@ function branchRow(
         branch.isHead ? 'dgw-treeRow--current' : '',
         active ? 'dgw-treeRow--active' : '',
       ].filter(Boolean).join(' '),
-      style: { paddingLeft: 8 + depth * 12 },
+      style: { paddingLeft: 20 + depth * 14 },
       onClick: onSelect,
       onDoubleClick: branch.type === 'local' ? onCheckout : undefined,
       onContextMenu: branch.type === 'remote' ? undefined : onMenu,
@@ -168,7 +168,7 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
   const [localOpen, setLocalOpen] = React.useState(true)
   const [remoteOpen, setRemoteOpen] = React.useState(true)
   const [tagsOpen, setTagsOpen] = React.useState(true)
-  const [expanded, setExpanded] = React.useState<ReadonlySet<string>>(new Set())
+  const [collapsedFolders, setCollapsedFolders] = React.useState<ReadonlySet<string>>(new Set())
   const [menu, setMenu] = React.useState<BranchMenuState | null>(null)
   const needle = filter.trim().toLowerCase()
   const matches = (branch: BranchRef): boolean => needle === '' || branch.name.toLowerCase().includes(needle)
@@ -200,7 +200,7 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
   }
 
   const toggleFolder = (path: string): void => {
-    setExpanded((previous) => {
+    setCollapsedFolders((previous) => {
       const next = new Set(previous)
       if (next.has(path)) next.delete(path)
       else next.add(path)
@@ -225,7 +225,7 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
 
   const renderNodes = (nodes: readonly BranchTreeNode[], depth: number): React.ReactNode[] => nodes.flatMap((node) => {
     const rows: React.ReactNode[] = []
-    const paddingLeft = 8 + depth * 12
+    const paddingLeft = 20 + depth * 14
     if (node.branch !== undefined && node.children.length === 0) {
       const branch = node.branch
       rows.push(branchRow(
@@ -249,7 +249,7 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
         event => openMenu(event, { branch }),
       ))
     }
-    const open = needle !== '' || expanded.has(node.path)
+    const open = needle !== '' || !collapsedFolders.has(node.path)
     rows.push(React.createElement(
       'button',
       {

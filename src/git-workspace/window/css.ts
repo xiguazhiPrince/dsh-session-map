@@ -140,14 +140,21 @@ export const CSS = `
   align-items: center;
   gap: 4px;
   width: 100%;
-  padding: 3px 8px;
+  padding: 5px 8px 5px 10px;
   border: 0;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font-size: 11px;
   font-weight: 600;
+  letter-spacing: .02em;
   text-transform: none;
   cursor: pointer;
+}
+/* Groups read as blocks instead of one flat run of rows. */
+.dgw-treeRow + .dgw-treeSectionHead,
+.dgw-treeSectionHead + .dgw-treeSectionHead {
+  margin-top: 4px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
 }
 .dgw-treeSectionHead:hover { color: var(--dsw-alias-label-primary); }
 .dgw-treeSectionHead > svg { transition: transform .12s ease; }
@@ -156,15 +163,15 @@ export const CSS = `
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 24px;
-  padding: 0 8px 0 14px;
+  height: 26px;
+  padding: 0 8px 0 20px;
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
 }
 .dgw-treeRow:hover { background: var(--dsw-alias-bg-layer-2); }
-.dgw-treeRow--folder { width: 100%; border: 0; background: transparent; text-align: left; font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); }
+.dgw-treeRow--folder { width: 100%; border: 0; background: transparent; text-align: left; font: inherit; font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }
 .dgw-treeRow--folder > svg:first-child { transition: transform .12s ease; }
 .dgw-treeRow--folder[data-open='false'] > svg:first-child { transform: rotate(-90deg); }
 .dgw-treeRow--active,
@@ -260,11 +267,10 @@ export const CSS = `
 /* One vertical guide per nesting level, so deep paths read as a tree. */
 .dgw-changeGuide,
 .dgw-treeGuide {
-  flex: 0 0 12px;
-  width: 12px;
+  flex: 0 0 14px;
+  width: 14px;
   align-self: stretch;
-  border-left: 1px solid var(--dsw-alias-border-l1);
-  opacity: .8;
+  border-left: 1px solid var(--dsw-alias-border-l2);
 }
 .dgw-changeHead--button { width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .dgw-checkbox { flex: 0 0 14px; width: 14px; height: 14px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 3px; background: var(--dsw-alias-bg-layer-1); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; line-height: 1; color: var(--dsw-alias-bg-base); }
