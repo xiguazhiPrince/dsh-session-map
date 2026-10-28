@@ -312,20 +312,54 @@ export const CSS = `
 .dgw-modal { width: 360px; max-width: calc(100% - 32px); border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-overlay); padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
 .dgw-modalTitle { font-weight: 600; }
 .dgw-modalText { font-size: 12px; color: var(--dsw-alias-label-secondary); white-space: pre-wrap; word-break: break-word; }
-.dgw-modal--wide { width: 560px; }
-.dgw-pushPreview {
+/* Push preview: IDEA-style two panes, commits on the left, changed files on the right. */
+.dgw-pushModal {
+  width: min(900px, calc(100vw - 80px));
+  height: min(620px, calc(100vh - 120px));
+  max-width: none;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.dgw-pushModal > .dgw-modalTitle { flex: 0 0 auto; padding: 12px 16px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+.dgw-pushBody { display: flex; flex: 1 1 auto; min-height: 0; }
+.dgw-pushLeft {
+  flex: 0 0 280px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  max-height: 360px;
   overflow: auto;
-  padding: 6px 8px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 6px;
+  border-right: 1px solid var(--dsw-alias-border-l1);
 }
-.dgw-pushSectionHead { margin-top: 4px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
-.dgw-pushCommits, .dgw-pushFiles { display: flex; flex-direction: column; gap: 2px; }
-.dgw-pushCommit, .dgw-pushFile, .dgw-pushFolder { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.dgw-pushMapping {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.dgw-pushCommits { display: flex; flex-direction: column; }
+.dgw-pushCommit {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  font-size: 12px;
+}
+.dgw-pushRight { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.dgw-pushSectionHead {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+}
+.dgw-pushFiles { flex: 1 1 auto; overflow: auto; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; }
+.dgw-pushFolder, .dgw-pushFile { display: flex; align-items: center; gap: 8px; font-size: 11px; }
 .dgw-pushFolder { color: var(--dsw-alias-label-primary); font-weight: 600; }
 .dgw-pushFolder > svg, .dgw-pushFile > svg { flex: 0 0 auto; color: var(--dsw-alias-label-secondary); }
 .dgw-pushFolderName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -333,6 +367,15 @@ export const CSS = `
 .dgw-pushSubject, .dgw-pushFilePath { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dgw-pushFilePath { font-family: var(--dsw-font-mono, ui-monospace, monospace); }
 .dgw-pushFileStatus { flex: 0 0 14px; color: var(--dsw-alias-label-secondary); }
+.dgw-pushEmpty { padding: 12px; font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.dgw-pushFooter {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
 .dgw-choice { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dsw-alias-label-primary); cursor: pointer; }
 .dgw-choice input { accent-color: var(--dsw-alias-brand-primary); }
 .dgw-modalActions { display: flex; justify-content: flex-end; gap: 8px; }

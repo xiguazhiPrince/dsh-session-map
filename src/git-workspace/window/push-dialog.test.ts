@@ -44,7 +44,6 @@ describe('PushDialog', () => {
       onCancel: noop,
     }))
     expect(markup).toContain('feature/aic → origin/feature/aic')
-    expect(markup).toContain('待推送提交（1）')
     expect(markup).toContain('feat(aic): M1 录入、删除撤回')
     expect(markup).toContain('server')
     expect(markup).toContain('run.ts')

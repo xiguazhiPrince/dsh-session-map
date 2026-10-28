@@ -104,12 +104,8 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
     { className: 'dgw-modalBackdrop' },
     React.createElement(
       'div',
-      { className: 'dgw-modal dgw-modal--wide', role: 'dialog', 'aria-label': '推送当前分支' },
+      { className: 'dgw-modal dgw-pushModal', role: 'dialog', 'aria-label': '推送当前分支' },
       React.createElement('div', { className: 'dgw-modalTitle' }, '推送当前分支'),
-      React.createElement('div', { className: 'dgw-modalText' },
-        `${props.branch} → ${target}`,
-        createsUpstream ? '（将建立上游跟踪）' : '',
-      ),
       props.loading
         ? React.createElement('div', { className: 'dgw-loading' }, '正在计算待推送提交…')
         : null,
@@ -120,44 +116,53 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
         ? null
         : React.createElement(
           'div',
-          { className: 'dgw-pushPreview' },
-          React.createElement('div', { className: 'dgw-pushSectionHead' },
-            createsUpstream ? '当前分支还没有上游，无法预览待推送提交' : `待推送提交（${props.preview.commits.length}）`,
-          ),
-          createsUpstream
-            ? null
-            : React.createElement('div', { className: 'dgw-pushCommits' },
-              ...props.preview.commits.map(commit => React.createElement(
-                'div',
-                { className: 'dgw-pushCommit', key: commit.oid },
-                React.createElement('span', { className: 'dgw-hash' }, commit.shortOid),
-                React.createElement('span', { className: 'dgw-pushSubject', title: commit.subject }, commit.subject),
-                React.createElement('span', { className: 'dgw-meta' }, commit.author.name),
-              )),
+          { className: 'dgw-pushBody' },
+          React.createElement(
+            'div',
+            { className: 'dgw-pushLeft' },
+            React.createElement('div', { className: 'dgw-pushMapping' },
+              `${props.branch} → ${target}`,
+              createsUpstream ? '（将建立上游跟踪）' : '',
             ),
-          React.createElement('div', { className: 'dgw-pushSectionHead' },
-            `变更文件（${props.preview.files.length}）`,
+            createsUpstream
+              ? React.createElement('div', { className: 'dgw-pushEmpty' }, '当前分支还没有上游，无法预览待推送提交')
+              : React.createElement('div', { className: 'dgw-pushCommits' },
+                ...props.preview.commits.map(commit => React.createElement(
+                  'div',
+                  { className: 'dgw-pushCommit', key: commit.oid, title: commit.subject },
+                  React.createElement('span', { className: 'dgw-pushSubject' }, commit.subject),
+                  React.createElement('span', { className: 'dgw-meta' }, commit.author.name),
+                )),
+              ),
+            props.preview.truncated
+              ? React.createElement('div', { className: 'dgw-meta' }, '提交较多，仅显示最近 100 条')
+              : null,
           ),
-          React.createElement('div', { className: 'dgw-pushFiles' },
-            ...(fileTree === null ? [] : renderPreviewFolder(fileTree, 0)),
+          React.createElement(
+            'div',
+            { className: 'dgw-pushRight' },
+            React.createElement('div', { className: 'dgw-pushSectionHead' },
+              `变更文件（${props.preview.files.length}）`,
+            ),
+            React.createElement('div', { className: 'dgw-pushFiles' },
+              ...(fileTree === null ? [] : renderPreviewFolder(fileTree, 0)),
+            ),
           ),
-          props.preview.truncated
-            ? React.createElement('div', { className: 'dgw-meta' }, '提交较多，仅显示最近 100 条')
-            : null,
         ),
-      props.canForce
-        ? React.createElement('label', { className: 'dgw-choice' },
-          React.createElement('input', {
-            type: 'checkbox',
-            checked: props.force,
-            onChange: (event: React.ChangeEvent<HTMLInputElement>) => props.onForce(event.target.checked),
-          }),
-          '强制推送（--force-with-lease，会再次确认）',
-        )
-        : null,
       React.createElement(
         'div',
-        { className: 'dgw-modalActions' },
+        { className: 'dgw-pushFooter' },
+        props.canForce
+          ? React.createElement('label', { className: 'dgw-choice' },
+            React.createElement('input', {
+              type: 'checkbox',
+              checked: props.force,
+              onChange: (event: React.ChangeEvent<HTMLInputElement>) => props.onForce(event.target.checked),
+            }),
+            '强制推送（--force-with-lease，会再次确认）',
+          )
+          : null,
+        React.createElement('span', { className: 'dgw-spacer' }),
         React.createElement('button', { className: 'dgw-btn', type: 'button', onClick: props.onCancel, disabled: props.busy }, '取消'),
         React.createElement('button', {
           className: props.force ? 'dgw-btn dgw-btn--danger' : 'dgw-btn dgw-btn--primary',
