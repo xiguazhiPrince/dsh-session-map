@@ -173,6 +173,8 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
     const [selectedHash, setSelectedHash] = React.useState<string | null>(null)
     const [selectedOids, setSelectedOids] = React.useState<readonly string[]>([])
     const [mergedFiles, setMergedFiles] = React.useState<readonly FileChange[] | null>(null)
+    const [multiDetails, setMultiDetails] = React.useState<ReadonlyMap<string, CommitDetail> | null>(null)
+    const pendingFileRef = React.useRef<string | null>(null)
     const [detail, setDetail] = React.useState<CommitDetail | null>(null)
     const [detailLoading, setDetailLoading] = React.useState(false)
     const [detailError, setDetailError] = React.useState<GitApiError | null>(null)
@@ -263,20 +265,40 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
     React.useEffect(() => {
       if (workspaceId === null || selectedOids.length <= 1) {
         setMergedFiles(null)
+        setMultiDetails(null)
         return undefined
       }
       let cancelled = false
       void Promise.all(selectedOids.map(async (oid) => {
         try {
-          return (await runtime.commit(workspaceId, oid)).commit.files
+          return { oid, detail: (await runtime.commit(workspaceId, oid)).commit }
         } catch {
-          return [] as readonly FileChange[]
+          return { oid, detail: null }
         }
-      })).then((groups) => {
-        if (!cancelled) setMergedFiles(mergeCommitFiles(groups))
+      })).then((entries) => {
+        if (cancelled) return
+        const map = new Map<string, CommitDetail>()
+        for (const entry of entries) {
+          if (entry.detail !== null) map.set(entry.oid, entry.detail)
+        }
+        setMultiDetails(map)
+        setMergedFiles(mergeCommitFiles([...map.values()].map(detail => detail.files)))
       })
       return () => { cancelled = true }
     }, [selectedOids, workspaceId])
+
+    /** Pick the selected commit that contains a merged-view file, then load its diff. */
+    const selectMergedFile = (path: string): void => {
+      const target = selectedOids.find(oid => multiDetails?.get(oid)?.files.some(file => file.path === path) === true)
+        ?? selectedHash
+      if (target === null) return
+      if (target !== selectedHash) {
+        pendingFileRef.current = path
+        setSelectedHash(target)
+      } else {
+        setSelectedFile(path)
+      }
+    }
 
     const appendCommands = React.useCallback((incoming: readonly CommandReceipt[]): void => {
       if (incoming.length === 0) return
@@ -737,8 +759,12 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
         setDetail(result.commit)
         setDetailError(null)
         appendCommands(result.commands)
+        const pending = pendingFileRef.current
+        pendingFileRef.current = null
+        const restored = pending !== null && result.commit.files.some(file => file.path === pending)
         const first = result.commit.files[0]
-        if (first !== undefined) setSelectedFile(first.path)
+        if (restored) setSelectedFile(pending)
+        else if (first !== undefined) setSelectedFile(first.path)
       }).catch((error: unknown) => {
         if (stopped || isAbortError(error)) return
         setDetailError(toApiError(error))
@@ -1011,7 +1037,7 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
                   selectedFile,
                   diff,
                   diffLoading,
-                  onSelectFile: setSelectedFile,
+                  onSelectFile: selectedOids.length > 1 ? selectMergedFile : setSelectedFile,
                   ...(mergedFiles === null ? {} : { mergedFiles, selectedCount: selectedOids.length }),
                 }),
                 ),

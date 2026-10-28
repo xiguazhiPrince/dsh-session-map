@@ -9,7 +9,7 @@
  * @module dsh-session-map/git-workspace/window/rightbar/layout
  */
 import * as React from 'react'
-import type { FileChange, HeadState } from '../../git-types'
+import type { CommitDetail, FileChange, HeadState } from '../../git-types'
 import { CommitPane } from '../commit'
 import { BranchTree, CommitFiles, CommitMeta, LogList, formatWhen, mergeCommitFiles } from '../log'
 import { DiffView, diffStats } from '../diff-view'
@@ -158,6 +158,7 @@ function DetailsColumn(props: {
   readonly model: GitRightbarModel
   readonly mergedFiles?: readonly FileChange[] | undefined
   readonly selectedCount?: number | undefined
+  readonly onSelectFile?: ((path: string) => void) | undefined
 }): React.ReactElement {
   const { model } = props
   const [messageHeight, setMessageHeight] = React.useState<number>(() => readMessageHeight())
@@ -225,8 +226,8 @@ function DetailsColumn(props: {
       React.createElement('div', { className: 'dgw-rb__detailsFiles' },
         React.createElement(CommitFiles, {
           files,
-          selectedFile: multi ? null : selectedCommitFile,
-          onSelectFile: multi ? () => undefined : model.actions.selectCommitFile,
+          selectedFile: selectedCommitFile,
+          onSelectFile: props.onSelectFile ?? model.actions.selectCommitFile,
         }),
       ),
       multi
@@ -281,24 +282,41 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
   const [pushForce, setPushForce] = React.useState(false)
   const [selectedOids, setSelectedOids] = React.useState<readonly string[]>([])
   const [mergedFiles, setMergedFiles] = React.useState<readonly FileChange[] | null>(null)
+  const [multiDetails, setMultiDetails] = React.useState<ReadonlyMap<string, CommitDetail> | null>(null)
 
   React.useEffect(() => {
     if (model.workspaceId === null || selectedOids.length <= 1) {
       setMergedFiles(null)
+      setMultiDetails(null)
       return undefined
     }
     let cancelled = false
     void Promise.all(selectedOids.map(async (oid) => {
       try {
-        return (await model.runtime.commit(model.workspaceId as string, oid)).commit.files
+        return { oid, detail: (await model.runtime.commit(model.workspaceId as string, oid)).commit }
       } catch {
-        return [] as readonly FileChange[]
+        return { oid, detail: null }
       }
-    })).then((groups) => {
-      if (!cancelled) setMergedFiles(mergeCommitFiles(groups))
+    })).then((entries) => {
+      if (cancelled) return
+      const map = new Map<string, CommitDetail>()
+      for (const entry of entries) {
+        if (entry.detail !== null) map.set(entry.oid, entry.detail)
+      }
+      setMultiDetails(map)
+      setMergedFiles(mergeCommitFiles([...map.values()].map(detail => detail.files)))
     })
     return () => { cancelled = true }
   }, [selectedOids, model.workspaceId, model.runtime])
+
+  /** Open a merged-view file in the selected commit that contains it. */
+  const selectDetailFile = (path: string): void => {
+    const target = selectedOids.find(oid => multiDetails?.get(oid)?.files.some(file => file.path === path) === true)
+      ?? model.selectedOid
+    if (target === null) return
+    model.actions.selectCommit(target)
+    model.actions.openCommitFile(target, path)
+  }
 
   const openPushPreview = async (): Promise<void> => {
     if (model.workspaceId === null) return
@@ -583,6 +601,7 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
         { className: 'dgw-rb__logDetails', style: { width: logDetailWidth, flexBasis: logDetailWidth } },
         React.createElement(DetailsColumn, {
           model,
+          onSelectFile: selectDetailFile,
           ...(mergedFiles === null ? {} : { mergedFiles, selectedCount: selectedOids.length }),
         }),
       )
@@ -598,6 +617,7 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
         ),
         React.createElement(DetailsColumn, {
           model,
+          onSelectFile: selectDetailFile,
           ...(mergedFiles === null ? {} : { mergedFiles, selectedCount: selectedOids.length }),
         }),
       )

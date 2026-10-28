@@ -929,14 +929,14 @@ export function DetailPane(props: DetailPaneProps): React.ReactElement {
         : React.createElement(CommitMeta, { detail }),
       React.createElement(CommitFiles, {
         files,
-        selectedFile: multi ? null : props.selectedFile,
-        onSelectFile: multi ? () => undefined : props.onSelectFile,
+        selectedFile: props.selectedFile,
+        onSelectFile: props.onSelectFile,
       }),
     ),
     React.createElement(DiffViewPane, {
       diff: props.diff,
-      file: multi ? null : props.selectedFile,
-      loading: multi ? false : props.diffLoading,
+      file: props.selectedFile,
+      loading: props.diffLoading,
       mode: 'unified',
     }),
   )

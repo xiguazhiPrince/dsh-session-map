@@ -121,6 +121,7 @@ const ACTIONS: GitRightbarActions = {
   selectCommit: noop,
   selectChange: noop,
   selectCommitFile: noop,
+  openCommitFile: noop,
   continueOperation: noop,
   abortOperation: noop,
   checkoutBranch: noop,

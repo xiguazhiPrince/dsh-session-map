@@ -149,6 +149,8 @@ export interface GitRightbarActions {
   readonly selectCommit: (oid: string) => void
   readonly selectChange: (entry: ChangedEntry) => void
   readonly selectCommitFile: (path: string) => void
+  /** Open one file from a specific commit (merged multi-select view). */
+  readonly openCommitFile: (oid: string, path: string) => void
   readonly continueOperation: () => void
   readonly abortOperation: () => void
   readonly checkoutBranch: (ref: string) => void
@@ -712,6 +714,9 @@ export function useGitRightbarModel(deps: GitRightbarModelDeps): GitRightbarMode
     selectCommitFile: (path: string) => {
       if (detail === null) return
       setTarget({ kind: 'commit', hash: detail.oid, path })
+    },
+    openCommitFile: (oid: string, path: string) => {
+      setTarget({ kind: 'commit', hash: oid, path })
     },
     continueOperation,
     abortOperation,
