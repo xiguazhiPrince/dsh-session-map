@@ -332,8 +332,20 @@ export const CSS = `
   border-right: 1px solid var(--dsw-alias-border-l1);
 }
 /* The branch row stays pinned; only the commit list scrolls. */
-.dgw-pushMapping { flex: 0 0 auto; }
-.dgw-pushCommits { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.dgw-pushMapping { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+.dgw-pushBranchToggle { flex: 0 0 auto; display: inline-flex; padding: 0; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; }
+.dgw-pushBranchToggle svg { transition: transform .12s ease; }
+.dgw-pushBranchToggle[data-open='true'] svg { transform: rotate(90deg); }
+.dgw-pushMappingText { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dgw-pushCommits {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  margin-left: 18px;
+  border-left: 1px solid var(--dsw-alias-border-l1);
+}
 .dgw-pushMapping {
   flex: 0 0 auto;
   padding: 8px 12px;
@@ -346,12 +358,11 @@ export const CSS = `
 }
 .dgw-pushMapping:hover { background: var(--dsw-alias-bg-layer-2); }
 .dgw-pushMapping--active { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
-.dgw-pushCommits { display: flex; flex-direction: column; }
 .dgw-pushCommit {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 6px 12px;
+  padding: 6px 12px 6px 10px;
   border-bottom: 1px solid var(--dsw-alias-border-l1);
   font-size: 12px;
   cursor: pointer;

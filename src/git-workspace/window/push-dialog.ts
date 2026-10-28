@@ -6,7 +6,7 @@
  */
 import * as React from 'react'
 import type { CommitDetail, FileChange, PushPreview } from '../git-types'
-import { FileIcon, FolderIcon } from './icons'
+import { FileIcon, FolderIcon, ChevronIcon } from './icons'
 
 /** Props for the push preview. */
 export interface PushDialogProps {
@@ -104,6 +104,7 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
   const [selectedDetail, setSelectedDetail] = React.useState<CommitDetail | null>(null)
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [detailError, setDetailError] = React.useState<string | null>(null)
+  const [commitsOpen, setCommitsOpen] = React.useState(true)
   const files: readonly FileChange[] = selectedOid === null
     ? props.preview?.files ?? []
     : selectedDetail?.files ?? []
@@ -159,24 +160,39 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
               onClick: showAll,
               title: '查看全部待推送文件',
             },
-            `${props.branch} → ${target}`,
-            createsUpstream ? '（将建立上游跟踪）' : '',
+            React.createElement('button', {
+              className: 'dgw-pushBranchToggle',
+              type: 'button',
+              'data-open': commitsOpen,
+              'aria-label': commitsOpen ? '收起提交列表' : '展开提交列表',
+              onClick: (event: React.MouseEvent) => {
+                event.stopPropagation()
+                setCommitsOpen(open => !open)
+              },
+            }, React.createElement(ChevronIcon, { size: 12 })),
+            React.createElement('span', { className: 'dgw-pushMappingText' },
+              `${props.branch} → ${target}`,
+              createsUpstream ? '（将建立上游跟踪）' : '',
+            ),
+            React.createElement('span', { className: 'dgw-meta' }, `${props.preview.commits.length} 个提交`),
             ),
             createsUpstream
               ? React.createElement('div', { className: 'dgw-pushEmpty' }, '当前分支还没有上游，无法预览待推送提交')
-              : React.createElement('div', { className: 'dgw-pushCommits' },
-                ...props.preview.commits.map(commit => React.createElement(
-                  'div',
-                  {
-                    className: 'dgw-pushCommit' + (selectedOid === commit.oid ? ' dgw-pushCommit--active' : ''),
-                    key: commit.oid,
-                    title: commit.subject,
-                    onClick: () => { void selectCommit(commit.oid) },
-                  },
-                  React.createElement('span', { className: 'dgw-pushSubject' }, commit.subject),
-                  React.createElement('span', { className: 'dgw-meta' }, commit.author.name),
-                )),
-              ),
+              : commitsOpen
+                ? React.createElement('div', { className: 'dgw-pushCommits' },
+                  ...props.preview.commits.map(commit => React.createElement(
+                    'div',
+                    {
+                      className: 'dgw-pushCommit' + (selectedOid === commit.oid ? ' dgw-pushCommit--active' : ''),
+                      key: commit.oid,
+                      title: commit.subject,
+                      onClick: () => { void selectCommit(commit.oid) },
+                    },
+                    React.createElement('span', { className: 'dgw-pushSubject' }, commit.subject),
+                    React.createElement('span', { className: 'dgw-meta' }, commit.author.name),
+                  )),
+                )
+                : null,
             props.preview.truncated
               ? React.createElement('div', { className: 'dgw-meta' }, '提交较多，仅显示最近 100 条')
               : null,
