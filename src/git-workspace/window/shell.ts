@@ -98,6 +98,41 @@ function selectCurrent(state: SessionsSnapshotLike): string | undefined {
 /** Every command receipt the console keeps. */
 const MAX_CONSOLE_ROWS = 300
 
+/** Browser-local key for the log tab's column widths. */
+export const LOG_COLUMNS_KEY = 'dsh.git-window.logColumns'
+/** Width bounds for the branch tree and the commit-detail column. */
+const TREE_WIDTH_MIN = 180
+const TREE_WIDTH_MAX = 420
+const DETAIL_WIDTH_MIN = 260
+const DETAIL_WIDTH_MAX = 640
+
+/** The two adjustable log columns. */
+interface LogColumns {
+  readonly tree: number
+  readonly detail: number
+}
+
+/** Clamp one column width into its allowed range. */
+function clampWidth(value: number, min: number, max: number): number {
+  return Math.min(Math.max(min, Math.round(value)), max)
+}
+
+/** Read the saved column widths, falling back to the historical defaults. */
+function readLogColumns(): LogColumns {
+  const fallback: LogColumns = { tree: 260, detail: 380 }
+  const raw = readStored(LOG_COLUMNS_KEY)
+  if (raw === null) return fallback
+  try {
+    const parsed = JSON.parse(raw) as { readonly tree?: unknown; readonly detail?: unknown }
+    return {
+      tree: typeof parsed.tree === 'number' ? clampWidth(parsed.tree, TREE_WIDTH_MIN, TREE_WIDTH_MAX) : fallback.tree,
+      detail: typeof parsed.detail === 'number' ? clampWidth(parsed.detail, DETAIL_WIDTH_MIN, DETAIL_WIDTH_MAX) : fallback.detail,
+    }
+  } catch {
+    return fallback
+  }
+}
+
 /** Poll interval while the tab is visible and focused. */
 const POLL_VISIBLE_MS = 3_000
 /** Poll interval after the panel has been hidden for a while. */
@@ -164,6 +199,44 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
     const [forcePushTarget, setForcePushTarget] = React.useState<string | null>(null)
     const [forcePushBusy, setForcePushBusy] = React.useState(false)
     const [forcePushError, setForcePushError] = React.useState<GitApiError | null>(null)
+    const [logColumns, setLogColumns] = React.useState<LogColumns>(() => readLogColumns())
+    const logColumnsRef = React.useRef(logColumns)
+    logColumnsRef.current = logColumns
+    const columnDrag = React.useRef<{ readonly kind: 'tree' | 'detail'; readonly startX: number; readonly base: number } | null>(null)
+
+    React.useEffect(() => {
+      const move = (event: PointerEvent): void => {
+        const drag = columnDrag.current
+        if (drag === null) return
+        const delta = event.clientX - drag.startX
+        setLogColumns(previous => drag.kind === 'tree'
+          ? { ...previous, tree: clampWidth(drag.base + delta, TREE_WIDTH_MIN, TREE_WIDTH_MAX) }
+          : { ...previous, detail: clampWidth(drag.base - delta, DETAIL_WIDTH_MIN, DETAIL_WIDTH_MAX) })
+      }
+      const up = (): void => {
+        if (columnDrag.current === null) return
+        columnDrag.current = null
+        document.body.style.userSelect = ''
+        writeStored(LOG_COLUMNS_KEY, JSON.stringify(logColumnsRef.current))
+      }
+      window.addEventListener('pointermove', move)
+      window.addEventListener('pointerup', up)
+      return () => {
+        window.removeEventListener('pointermove', move)
+        window.removeEventListener('pointerup', up)
+        document.body.style.userSelect = ''
+      }
+    }, [])
+
+    const startColumnDrag = (kind: 'tree' | 'detail', event: React.PointerEvent): void => {
+      event.preventDefault()
+      document.body.style.userSelect = 'none'
+      columnDrag.current = {
+        kind,
+        startX: event.clientX,
+        base: kind === 'tree' ? logColumns.tree : logColumns.detail,
+      }
+    }
 
     const remembered = readStored(WORKSPACE_KEY)
     const candidate = items.find(item => item.workspaceId === choice)
@@ -776,7 +849,10 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
                 : React.createElement(
                   'div',
                   { className: 'dgw-logLayout' },
-                React.createElement(BranchTree, {
+                React.createElement(
+                  'div',
+                  { className: 'dgw-treeCol', style: { width: logColumns.tree, flexBasis: logColumns.tree } },
+                  React.createElement(BranchTree, {
                   head: head ?? { oid: null, branch: null, detached: false, unborn: false, upstream: null, operation: 'none' },
                   branches,
                   selectedRef: branchFilter,
@@ -795,6 +871,14 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
                     setForcePushTarget(name)
                     setForcePushError(null)
                   },
+                }),
+                ),
+                React.createElement('div', {
+                  className: 'dgw-splitter',
+                  role: 'separator',
+                  'aria-orientation': 'vertical',
+                  title: '拖动调整分支树宽度',
+                  onPointerDown: (event: React.PointerEvent) => startColumnDrag('tree', event),
                 }),
                 React.createElement(LogList, {
                   commits: log.commits,
@@ -821,6 +905,16 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
                     setTagError(null)
                   },
                 }),
+                React.createElement('div', {
+                  className: 'dgw-splitter',
+                  role: 'separator',
+                  'aria-orientation': 'vertical',
+                  title: '拖动调整提交详情宽度',
+                  onPointerDown: (event: React.PointerEvent) => startColumnDrag('detail', event),
+                }),
+                React.createElement(
+                  'div',
+                  { className: 'dgw-detailCol', style: { width: logColumns.detail, flexBasis: logColumns.detail } },
                 React.createElement(DetailPane, {
                   detail,
                   loading: detailLoading,
@@ -829,6 +923,7 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
                   diffLoading,
                   onSelectFile: setSelectedFile,
                 }),
+                ),
               ),
           ),
       snapshot === null

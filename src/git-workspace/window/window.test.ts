@@ -125,6 +125,10 @@ describe('Git panel shell', () => {
     expect(markup).toContain('文本或哈希')
     expect(markup).toContain('选择一个提交查看详情')
     expect(markup).toContain('dsh-session-map')
+    // The log tab exposes two draggable column splitters around the commit list.
+    expect(markup).toContain('dgw-treeCol')
+    expect(markup).toContain('dgw-detailCol')
+    expect(markup.match(/class="dgw-splitter"/g)).toHaveLength(2)
   })
 
   it('ships its own stylesheet with theme tokens', () => {

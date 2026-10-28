@@ -207,6 +207,13 @@ export const CSS = `
 .dgw-loadMore { width: 100%; border: 0; border-top: 1px solid var(--dsw-alias-border-l1); background: transparent; color: var(--dsw-alias-label-secondary); font-size: 12px; padding: 6px; cursor: pointer; }
 .dgw-loadMore:hover { color: var(--dsw-alias-label-primary); }
 .dgw-detail { display: flex; flex-direction: column; flex: 0 0 380px; width: 380px; min-width: 300px; min-height: 0; }
+/* The log tab's outer columns own the adjustable width; the panes fill them. */
+.dgw-treeCol { display: flex; flex-direction: column; flex: 0 0 auto; min-height: 0; min-width: 0; }
+.dgw-treeCol > .dgw-tree { width: 100%; flex: 1 1 auto; min-width: 0; }
+.dgw-detailCol { display: flex; flex-direction: column; flex: 0 0 auto; min-height: 0; min-width: 0; }
+.dgw-detailCol > .dgw-detail { width: 100%; flex: 1 1 auto; min-width: 0; }
+.dgw-splitter { flex: 0 0 5px; width: 5px; cursor: col-resize; background: transparent; }
+.dgw-splitter:hover, .dgw-splitter:active { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 30%, transparent); }
 .dgw-detailHead { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--dsw-alias-border-l1); min-height: 37px; }
 .dgw-hash { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 12px; color: var(--dsw-alias-label-primary); }
 .dgw-detailScroll { flex: 0 0 auto; max-height: 45%; overflow: auto; padding: 8px 10px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
