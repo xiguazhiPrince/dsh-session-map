@@ -9,11 +9,11 @@
  * @module dsh-session-map/git-workspace/window/shell
  */
 import * as React from 'react'
-import type { CommandReceipt, CommitDetail, DiffView, GitJobView, HeadState, RepoSnapshot, BranchRef, PushPreview } from '../git-types'
+import type { CommandReceipt, CommitDetail, DiffView, FileChange, GitJobView, HeadState, RepoSnapshot, BranchRef, PushPreview } from '../git-types'
 import type { GitAction } from '../git-actions'
 import { parseUnifiedDiff } from '../git-parse'
 import { computeGraph } from './lanes'
-import { BranchTree, DetailPane, LogList, formatWhen } from './log'
+import { BranchTree, DetailPane, LogList, formatWhen, mergeCommitFiles } from './log'
 import { BranchDialog, type BranchPrompt } from './branch'
 import { ForcePushDialog, ResetDialog, TagDeleteDialog, TagDialog, type ResetMode } from './history'
 import { UpdateDialog, readUpdateMode, writeUpdateMode, type UpdateMode } from './update-dialog'
@@ -171,6 +171,8 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
     const [logLoadingMore, setLogLoadingMore] = React.useState(false)
     const [logError, setLogError] = React.useState<GitApiError | null>(null)
     const [selectedHash, setSelectedHash] = React.useState<string | null>(null)
+    const [selectedOids, setSelectedOids] = React.useState<readonly string[]>([])
+    const [mergedFiles, setMergedFiles] = React.useState<readonly FileChange[] | null>(null)
     const [detail, setDetail] = React.useState<CommitDetail | null>(null)
     const [detailLoading, setDetailLoading] = React.useState(false)
     const [detailError, setDetailError] = React.useState<GitApiError | null>(null)
@@ -256,6 +258,25 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
     const upstreamOid = upstreamRef === null
       ? null
       : snapshot?.branches.find(branch => branch.type === 'remote' && (branch.ref === upstreamRef || branch.name === upstreamRef || upstreamRef.endsWith('/' + branch.name)))?.oid ?? null
+
+    // Several selected commits: merge their file lists for the detail column.
+    React.useEffect(() => {
+      if (workspaceId === null || selectedOids.length <= 1) {
+        setMergedFiles(null)
+        return undefined
+      }
+      let cancelled = false
+      void Promise.all(selectedOids.map(async (oid) => {
+        try {
+          return (await runtime.commit(workspaceId, oid)).commit.files
+        } catch {
+          return [] as readonly FileChange[]
+        }
+      })).then((groups) => {
+        if (!cancelled) setMergedFiles(mergeCommitFiles(groups))
+      })
+      return () => { cancelled = true }
+    }, [selectedOids, workspaceId])
 
     const appendCommands = React.useCallback((incoming: readonly CommandReceipt[]): void => {
       if (incoming.length === 0) return
@@ -952,6 +973,7 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
                   commits: log.commits,
                   graph,
                   selectedOid: selectedHash,
+                  onSelectionChange: setSelectedOids,
                   branchLabel: branchFilter,
                   query: queryInput,
                   loading: logLoading,
@@ -990,6 +1012,7 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
                   diff,
                   diffLoading,
                   onSelectFile: setSelectedFile,
+                  ...(mergedFiles === null ? {} : { mergedFiles, selectedCount: selectedOids.length }),
                 }),
                 ),
               ),

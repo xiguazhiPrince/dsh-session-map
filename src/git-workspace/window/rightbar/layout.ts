@@ -9,9 +9,9 @@
  * @module dsh-session-map/git-workspace/window/rightbar/layout
  */
 import * as React from 'react'
-import type { HeadState } from '../../git-types'
+import type { FileChange, HeadState } from '../../git-types'
 import { CommitPane } from '../commit'
-import { BranchTree, CommitFiles, CommitMeta, LogList, formatWhen } from '../log'
+import { BranchTree, CommitFiles, CommitMeta, LogList, formatWhen, mergeCommitFiles } from '../log'
 import { DiffView, diffStats } from '../diff-view'
 import { ErrorBanner, NoRepo } from '../feedback'
 import { BranchDialog } from '../branch'
@@ -154,7 +154,11 @@ function writeMessageHeight(value: number): void {
 }
 
 /** Render the commit-detail column (file list above, message below). */
-function DetailsColumn(props: { readonly model: GitRightbarModel }): React.ReactElement {
+function DetailsColumn(props: {
+  readonly model: GitRightbarModel
+  readonly mergedFiles?: readonly FileChange[] | undefined
+  readonly selectedCount?: number | undefined
+}): React.ReactElement {
   const { model } = props
   const [messageHeight, setMessageHeight] = React.useState<number>(() => readMessageHeight())
   const messageHeightRef = React.useRef(messageHeight)
@@ -197,50 +201,62 @@ function DetailsColumn(props: { readonly model: GitRightbarModel }): React.React
   }
   const detail = model.detail
   const selectedCommitFile = model.target !== null && model.target.kind === 'commit' ? model.target.path : null
+  const multi = (props.selectedCount ?? 1) > 1 && props.mergedFiles !== undefined
+  const files = multi ? props.mergedFiles as readonly FileChange[] : detail.files
   return React.createElement(
     'div',
     { className: 'dgw-rb__details' },
     React.createElement('div', { className: 'dgw-rb__detailsHead' },
-      React.createElement('span', { className: 'dgw-hash' }, detail.shortOid),
-      React.createElement('button', {
-        className: 'dgw-iconBtn',
-        type: 'button',
-        title: '复制完整哈希',
-        onClick: () => copy(detail.oid),
-      }, React.createElement(CopyIcon, { size: 13 })),
+      multi
+        ? React.createElement('span', { className: 'dgw-hash' }, `${props.selectedCount ?? 0} 个提交`)
+        : React.createElement(React.Fragment, null,
+          React.createElement('span', { className: 'dgw-hash' }, detail.shortOid),
+          React.createElement('button', {
+            className: 'dgw-iconBtn',
+            type: 'button',
+            title: '复制完整哈希',
+            onClick: () => copy(detail.oid),
+          }, React.createElement(CopyIcon, { size: 13 })),
+        ),
       React.createElement('span', { className: 'dgw-spacer' }),
-      React.createElement('span', { className: 'dgw-meta' }, `${detail.files.length} 个文件`),
+      React.createElement('span', { className: 'dgw-meta' }, `${files.length} 个文件`),
     ),
     React.createElement('div', { className: 'dgw-rb__detailsBody' },
       React.createElement('div', { className: 'dgw-rb__detailsFiles' },
         React.createElement(CommitFiles, {
-          files: detail.files,
-          selectedFile: selectedCommitFile,
-          onSelectFile: model.actions.selectCommitFile,
+          files,
+          selectedFile: multi ? null : selectedCommitFile,
+          onSelectFile: multi ? () => undefined : model.actions.selectCommitFile,
         }),
       ),
-      React.createElement('div', {
-        className: 'dgw-rb__detailsSplit',
-        role: 'separator',
-        'aria-orientation': 'horizontal',
-        title: '拖动调整提交信息高度',
-        onPointerDown: startDrag,
-      }),
-      React.createElement('div', {
-        className: 'dgw-rb__detailsMessage',
-        style: { height: messageHeight, flexBasis: messageHeight },
-      },
-        React.createElement('div', { className: 'dgw-sectionTitle' }, '提交信息'),
-        React.createElement(CommitMeta, { detail }),
-      ),
-    ),
-    selectedCommitFile === null || model.diffLoading
-      ? React.createElement('div', { className: 'dgw-rb__detailsDiff' },
-        React.createElement('div', { className: 'dgw-rb__detailsHint' },
-          selectedCommitFile === null ? '选择一个文件查看差异' : '正在读取差异…',
+      multi
+        ? null
+        : React.createElement(React.Fragment, null,
+          React.createElement('div', {
+            className: 'dgw-rb__detailsSplit',
+            role: 'separator',
+            'aria-orientation': 'horizontal',
+            title: '拖动调整提交信息高度',
+            onPointerDown: startDrag,
+          }),
+          React.createElement('div', {
+            className: 'dgw-rb__detailsMessage',
+            style: { height: messageHeight, flexBasis: messageHeight },
+          },
+            React.createElement('div', { className: 'dgw-sectionTitle' }, '提交信息'),
+            React.createElement(CommitMeta, { detail }),
+          ),
         ),
-      )
-      : null,
+    ),
+    multi
+      ? null
+      : selectedCommitFile === null || model.diffLoading
+        ? React.createElement('div', { className: 'dgw-rb__detailsDiff' },
+          React.createElement('div', { className: 'dgw-rb__detailsHint' },
+            selectedCommitFile === null ? '选择一个文件查看差异' : '正在读取差异…',
+          ),
+        )
+        : null,
   )
 }
 
@@ -263,6 +279,26 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
   const [pushPreviewLoading, setPushPreviewLoading] = React.useState(false)
   const [pushPreviewError, setPushPreviewError] = React.useState<string | null>(null)
   const [pushForce, setPushForce] = React.useState(false)
+  const [selectedOids, setSelectedOids] = React.useState<readonly string[]>([])
+  const [mergedFiles, setMergedFiles] = React.useState<readonly FileChange[] | null>(null)
+
+  React.useEffect(() => {
+    if (model.workspaceId === null || selectedOids.length <= 1) {
+      setMergedFiles(null)
+      return undefined
+    }
+    let cancelled = false
+    void Promise.all(selectedOids.map(async (oid) => {
+      try {
+        return (await model.runtime.commit(model.workspaceId as string, oid)).commit.files
+      } catch {
+        return [] as readonly FileChange[]
+      }
+    })).then((groups) => {
+      if (!cancelled) setMergedFiles(mergeCommitFiles(groups))
+    })
+    return () => { cancelled = true }
+  }, [selectedOids, model.workspaceId, model.runtime])
 
   const openPushPreview = async (): Promise<void> => {
     if (model.workspaceId === null) return
@@ -514,6 +550,7 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
       commits: model.commits,
       graph: model.graph,
       selectedOid: model.selectedOid,
+      onSelectionChange: setSelectedOids,
       branchLabel: model.branchFilter,
       query: model.queryInput,
       loading: model.logLoading,
@@ -544,7 +581,10 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
       ? React.createElement(
         'div',
         { className: 'dgw-rb__logDetails', style: { width: logDetailWidth, flexBasis: logDetailWidth } },
-        React.createElement(DetailsColumn, { model }),
+        React.createElement(DetailsColumn, {
+          model,
+          ...(mergedFiles === null ? {} : { mergedFiles, selectedCount: selectedOids.length }),
+        }),
       )
       : null,
     !showDetails && drawerOpen
@@ -556,7 +596,10 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
           React.createElement('span', { className: 'dgw-spacer' }),
           iconButton('drawer-close', '关闭详情', React.createElement(CloseIcon, { size: 13 }), () => setDrawerOpen(false)),
         ),
-        React.createElement(DetailsColumn, { model }),
+        React.createElement(DetailsColumn, {
+          model,
+          ...(mergedFiles === null ? {} : { mergedFiles, selectedCount: selectedOids.length }),
+        }),
       )
       : null,
   )

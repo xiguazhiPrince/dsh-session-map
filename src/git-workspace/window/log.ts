@@ -464,6 +464,8 @@ export interface LogListProps {
   readonly loading: boolean
   readonly hasMore: boolean
   readonly onSelect: (oid: string) => void
+  /** Report the full multi-selection (Ctrl/Shift) to the carrier. */
+  readonly onSelectionChange?: ((oids: readonly string[]) => void) | undefined
   readonly onQueryChange: (value: string) => void
   readonly onClearBranch: () => void
   readonly onLoadMore: () => void
@@ -582,6 +584,11 @@ export function LogList(props: LogListProps): React.ReactElement {
     })
     if (props.selectedOid !== null && anchorRef.current === null) anchorRef.current = props.selectedOid
   }, [props.commits, props.selectedOid])
+
+  // Report every change (including pruning after a filter) to the carrier.
+  React.useEffect(() => {
+    props.onSelectionChange?.([...selectedOids])
+  }, [selectedOids, props.onSelectionChange])
 
   const selectRow = (commit: CommitRow, event: React.MouseEvent): void => {
     const ids = props.commits.map(row => row.oid)
@@ -776,6 +783,31 @@ export interface DetailPaneProps {
   readonly diff: DiffView | null
   readonly diffLoading: boolean
   readonly onSelectFile: (path: string) => void
+  /** Union of the selected commits' files when several are selected. */
+  readonly mergedFiles?: readonly FileChange[] | undefined
+  /** Number of selected commits; more than one switches to the merged view. */
+  readonly selectedCount?: number | undefined
+}
+
+/** Merge several commits' file lists by path for the multi-select detail view. */
+export function mergeCommitFiles(groups: readonly (readonly FileChange[])[]): readonly FileChange[] {
+  const byPath = new Map<string, FileChange>()
+  for (const group of groups) {
+    for (const file of group) {
+      const previous = byPath.get(file.path)
+      if (previous === undefined) {
+        byPath.set(file.path, file)
+        continue
+      }
+      byPath.set(file.path, {
+        ...file,
+        additions: (previous.additions ?? 0) + (file.additions ?? 0),
+        deletions: (previous.deletions ?? 0) + (file.deletions ?? 0),
+        binary: previous.binary || file.binary,
+      })
+    }
+  }
+  return [...byPath.values()].sort((left, right) => left.path.localeCompare(right.path))
 }
 
 /** Copy text without surfacing a failure. */
@@ -862,36 +894,49 @@ export function DetailPane(props: DetailPaneProps): React.ReactElement {
     )
   }
   const detail = props.detail
+  const multi = (props.selectedCount ?? 1) > 1 && props.mergedFiles !== undefined
+  const files = multi ? props.mergedFiles as readonly FileChange[] : detail.files
   return React.createElement(
     'div',
     { className: 'dgw-detail' },
     React.createElement(
       'div',
       { className: 'dgw-detailHead' },
-      React.createElement('span', { className: 'dgw-hash' }, detail.shortOid),
-      React.createElement('button', {
-        className: 'dgw-iconBtn',
-        type: 'button',
-        title: '复制完整哈希',
-        onClick: () => copy(detail.oid),
-      }, React.createElement(CopyIcon, { size: 13 })),
+      multi
+        ? React.createElement('span', { className: 'dgw-hash' }, `${props.selectedCount ?? 0} 个提交`)
+        : React.createElement(React.Fragment, null,
+          React.createElement('span', { className: 'dgw-hash' }, detail.shortOid),
+          React.createElement('button', {
+            className: 'dgw-iconBtn',
+            type: 'button',
+            title: '复制完整哈希',
+            onClick: () => copy(detail.oid),
+          }, React.createElement(CopyIcon, { size: 13 })),
+        ),
       React.createElement('span', { className: 'dgw-spacer' }),
-      React.createElement('span', { className: 'dgw-meta' }, `${detail.files.length} 个文件`),
+      React.createElement('span', { className: 'dgw-meta' }, `${files.length} 个文件`),
     ),
     React.createElement(
       'div',
       { className: 'dgw-detailScroll' },
-      React.createElement(CommitMeta, { detail }),
+      multi
+        ? React.createElement(React.Fragment, null,
+          React.createElement('div', { className: 'dgw-sectionTitle' }, '已选择的提交'),
+          React.createElement('div', { className: 'dgw-detailMeta' },
+            React.createElement('div', null, `共 ${props.selectedCount ?? 0} 个提交，合并后的文件如下`),
+          ),
+        )
+        : React.createElement(CommitMeta, { detail }),
       React.createElement(CommitFiles, {
-        files: detail.files,
-        selectedFile: props.selectedFile,
-        onSelectFile: props.onSelectFile,
+        files,
+        selectedFile: multi ? null : props.selectedFile,
+        onSelectFile: multi ? () => undefined : props.onSelectFile,
       }),
     ),
     React.createElement(DiffViewPane, {
       diff: props.diff,
-      file: props.selectedFile,
-      loading: props.diffLoading,
+      file: multi ? null : props.selectedFile,
+      loading: multi ? false : props.diffLoading,
       mode: 'unified',
     }),
   )
