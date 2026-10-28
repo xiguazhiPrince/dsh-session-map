@@ -213,6 +213,10 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
   const openMenu = (event: React.MouseEvent, entry: { readonly branch?: BranchRef; readonly tag?: BranchRef }): void => {
     event.preventDefault()
     event.stopPropagation()
+    // A right-click selects the row as well, like the left click does; the menu
+    // then acts on that same ref.
+    if (entry.branch !== undefined) props.onSelect(entry.branch.name)
+    else if (entry.tag !== undefined) props.onSelect(entry.tag.name)
     announceMenuOpen()
     setMenu({ x: event.clientX, y: event.clientY, ...entry })
   }
