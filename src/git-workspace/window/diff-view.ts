@@ -143,18 +143,22 @@ function gutterLine(left: DiffLine | null, right: DiffLine | null, key: string):
 function SideDiff(props: { readonly hunks: readonly DiffHunk[] }): React.ReactElement {
   const leftRef = React.useRef<HTMLDivElement | null>(null)
   const rightRef = React.useRef<HTMLDivElement | null>(null)
-  const gutterRef = React.useRef<HTMLDivElement | null>(null)
+  const gutterTrackRef = React.useRef<HTMLDivElement | null>(null)
   const syncing = React.useRef(false)
   const syncScroll = (event: React.UIEvent<HTMLDivElement>): void => {
     if (syncing.current) return
     const source = event.currentTarget
     syncing.current = true
-    for (const target of [leftRef.current, rightRef.current, gutterRef.current]) {
-      if (target !== null && target !== source) target.scrollTop = source.scrollTop
+    const other = source === leftRef.current ? rightRef.current : leftRef.current
+    if (other !== null) {
+      other.scrollTop = source.scrollTop
+      other.scrollLeft = source.scrollLeft
     }
-    if (source !== gutterRef.current) {
-      const other = source === leftRef.current ? rightRef.current : leftRef.current
-      if (other !== null) other.scrollLeft = source.scrollLeft
+    // The gutter has no scrollbar of its own (its viewport is taller than the
+    // code panes by the horizontal-bar height), so translate its track instead
+    // of setting scrollTop: that keeps the numbers aligned right up to the edge.
+    if (gutterTrackRef.current !== null) {
+      gutterTrackRef.current.style.transform = `translateY(${-source.scrollTop}px)`
     }
     requestAnimationFrame(() => { syncing.current = false })
   }
@@ -175,7 +179,11 @@ function SideDiff(props: { readonly hunks: readonly DiffHunk[] }): React.ReactEl
       title: '并排视图：行号固定在中间，左右代码栏横向滚动联动，竖向滚动保持对齐（Shift + 滚轮或触控板）',
     },
     React.createElement('div', { className: 'dgw-diffSidePane', ref: leftRef, onScroll: syncScroll }, ...left),
-    React.createElement('div', { className: 'dgw-diffSideGutter', ref: gutterRef, onScroll: syncScroll }, ...gutter),
+    React.createElement(
+      'div',
+      { className: 'dgw-diffSideGutter' },
+      React.createElement('div', { className: 'dgw-diffGutterTrack', ref: gutterTrackRef }, ...gutter),
+    ),
     React.createElement('div', { className: 'dgw-diffSidePane', ref: rightRef, onScroll: syncScroll }, ...right),
   )
 }

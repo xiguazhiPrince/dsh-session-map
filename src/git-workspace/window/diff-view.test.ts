@@ -89,6 +89,7 @@ describe('DiffView', () => {
     // moves the whole side rather than a single line.
     expect(markup.match(/class="dgw-diffSidePane"/g)).toHaveLength(2)
     expect(markup).toContain('dgw-diffSideGutter')
+    expect(markup).toContain('dgw-diffGutterTrack')
     expect(markup).toContain('dgw-diffGutterNo--add')
     expect(markup).toContain('dgw-diffGutterNo--del')
     expect(markup).toContain('dgw-diffSideHunk--blank')

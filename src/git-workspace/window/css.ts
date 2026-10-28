@@ -298,7 +298,7 @@ export const CSS = `
    fixed centre gutter with both line numbers. Vertical scrolling is mirrored
    across all three so rows stay aligned; the numbers never move sideways. */
 .dgw-diffSide { display: flex; align-items: stretch; height: 100%; min-height: 0; overflow: hidden; }
-.dgw-diffSidePane { flex: 1 1 50%; min-width: 0; min-height: 0; overflow: auto; }
+.dgw-diffSidePane { flex: 1 1 50%; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; }
 /* Hide the two mirrored vertical scrollbars; the horizontal one is the control
    the user asked for, so leave it visible at each pane's bottom. */
 .dgw-diffSidePane::-webkit-scrollbar:vertical { width: 0; }
@@ -306,14 +306,12 @@ export const CSS = `
   flex: 0 0 84px;
   width: 84px;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   border-left: 1px solid var(--dsw-alias-border-l1);
   border-right: 1px solid var(--dsw-alias-border-l1);
   background: var(--dsw-alias-bg-base);
-  scrollbar-width: none;
 }
-.dgw-diffSideGutter::-webkit-scrollbar { width: 0; height: 0; }
+.dgw-diffGutterTrack { display: flex; flex-direction: column; width: 100%; will-change: transform; }
 .dgw-diffSideRow {
   display: flex;
   flex: 0 0 auto;
