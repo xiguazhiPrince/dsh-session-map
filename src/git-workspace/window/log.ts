@@ -425,32 +425,80 @@ function Gutter(props: {
   readonly lane: number
   readonly before: readonly string[]
   readonly after: readonly string[]
+  readonly parents: readonly string[]
   readonly width: number
 }): React.ReactElement {
   const step = 12
   const height = 26
   const middle = height / 2
+  const x = (lane: number): number => 6 + lane * step
+  const colour = (lane: number): string => LANE_PALETTE[lane % LANE_PALETTE.length] as string
+  const beforeIndex = new Map(props.before.map((oid, index) => [oid, index]))
+  const afterIndex = new Map(props.after.map((oid, index) => [oid, index]))
+  const extraParents = props.parents.slice(1)
+  // Lanes opened by this merge row: their vertical stub is replaced by a curve
+  // from the commit dot, otherwise the fork would look disconnected.
+  const openedLanes = new Set<number>()
+  for (const parent of extraParents) {
+    const index = afterIndex.get(parent)
+    if (index !== undefined && !beforeIndex.has(parent)) openedLanes.add(index)
+  }
   const children: React.ReactElement[] = []
-  props.after.forEach((_, index) => {
-    children.push(React.createElement('line', {
-      key: `a${index}`,
-      x1: 6 + index * step, y1: middle, x2: 6 + index * step, y2: height,
-      stroke: LANE_PALETTE[index % LANE_PALETTE.length], strokeWidth: 1.5,
-    }))
-  })
-  props.before.forEach((_, index) => {
+  props.before.forEach((oid, index) => {
     children.push(React.createElement('line', {
       key: `b${index}`,
-      x1: 6 + index * step, y1: 0, x2: 6 + index * step, y2: middle,
-      stroke: LANE_PALETTE[index % LANE_PALETTE.length], strokeWidth: 1.5,
+      x1: x(index), y1: 0, x2: x(index), y2: middle,
+      stroke: colour(index), strokeWidth: 1.5,
+    }))
+    // A merge insertion shifts the lanes to the right of the commit; connect
+    // the old and new x positions at the row's midpoint.
+    const next = afterIndex.get(oid)
+    if (next !== undefined && next !== index) {
+      children.push(React.createElement('line', {
+        key: `bs${index}`,
+        x1: x(index), y1: middle, x2: x(next), y2: middle,
+        stroke: colour(next), strokeWidth: 1.5,
+      }))
+    }
+  })
+  props.after.forEach((oid, index) => {
+    if (openedLanes.has(index)) return
+    children.push(React.createElement('line', {
+      key: `a${index}`,
+      x1: x(index), y1: middle, x2: x(index), y2: height,
+      stroke: colour(index), strokeWidth: 1.5,
+    }))
+  })
+  extraParents.forEach((parent, index) => {
+    const target = afterIndex.get(parent)
+    if (target === undefined || target === props.lane) return
+    if (!openedLanes.has(target)) {
+      // Joining a lane that is already alive: a short branch at the midpoint.
+      children.push(React.createElement('line', {
+        key: `m${index}`,
+        x1: x(props.lane), y1: middle, x2: x(target), y2: middle,
+        stroke: colour(target), strokeWidth: 1.5,
+      }))
+      return
+    }
+    // Forking a new lane: curve from the dot down into that lane.
+    const from = x(props.lane)
+    const to = x(target)
+    children.push(React.createElement('path', {
+      key: `m${index}`,
+      className: 'dgw-mergeEdge',
+      d: `M ${from} ${middle} C ${from} ${middle + 7}, ${to} ${height - 7}, ${to} ${height}`,
+      fill: 'none',
+      stroke: colour(target),
+      strokeWidth: 1.5,
     }))
   })
   children.push(React.createElement('circle', {
     key: 'dot',
-    cx: 6 + props.lane * step,
+    cx: x(props.lane),
     cy: middle,
     r: 3.5,
-    fill: LANE_PALETTE[props.lane % LANE_PALETTE.length],
+    fill: colour(props.lane),
   }))
   return React.createElement('svg', { className: 'dgw-gutter', width: props.width, height }, ...children)
 }
@@ -555,6 +603,7 @@ export function LogList(props: LogListProps): React.ReactElement {
               lane: graphRow.lane,
               before: graphRow.before,
               after: graphRow.after,
+              parents: commit.parents,
               width: gutterWidth,
             }),
             React.createElement('span', { className: 'dgw-subject' }, commit.subject),

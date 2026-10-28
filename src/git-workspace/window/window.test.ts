@@ -216,6 +216,8 @@ describe('LogList', () => {
     }))
     expect(markup).toContain('dgw-row--merge')
     expect(markup).toContain('Merge branch v2.1')
+    // The merge row draws a curved fork into the parent lane.
+    expect(markup).toContain('dgw-mergeEdge')
   })
 })
 
