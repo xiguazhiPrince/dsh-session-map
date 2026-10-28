@@ -34,6 +34,13 @@ function fileStats(additions: number | null, deletions: number | null, binary: b
   return `+${additions ?? 0} −${deletions ?? 0}`
 }
 
+/** IDEA-style local author timestamp. */
+function formatCommitDate(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('zh-CN', { hour12: false })
+}
+
 /** One folder in the push preview's changed-file tree. */
 interface PreviewFolder {
   readonly name: string
@@ -136,7 +143,12 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
   const selectedCommit = selectedOid === null
     ? null
     : props.preview?.commits.find(commit => commit.oid === selectedOid) ?? null
-  const selectedMessage = selectedDetail?.message ?? selectedCommit?.subject ?? ''
+  const selectedSubject = selectedCommit?.subject ?? selectedDetail?.subject ?? ''
+  const fullMessage = selectedDetail?.message ?? selectedCommit?.subject ?? ''
+  const bodyText = selectedSubject !== '' && fullMessage.startsWith(selectedSubject)
+    ? fullMessage.slice(selectedSubject.length).trimStart()
+    : fullMessage
+  const commitAuthor = selectedDetail?.author ?? selectedCommit?.author ?? null
 
   return React.createElement(
     'div',
@@ -222,13 +234,16 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
                     React.Fragment,
                     null,
                     React.createElement('div', { className: 'dgw-pushMessageHead' },
-                      React.createElement('span', { className: 'dgw-hash' }, selectedDetail?.shortOid ?? selectedOid.slice(0, 7)),
-                      React.createElement('span', { className: 'dgw-pushMessageSubject' }, selectedCommit?.subject ?? ''),
+                      selectedSubject,
                     ),
-                    React.createElement('div', { className: 'dgw-meta' },
-                      selectedCommit === null ? '' : `${selectedCommit.author.name} · ${selectedCommit.author.date}`,
+                    bodyText === ''
+                      ? null
+                      : React.createElement('div', { className: 'dgw-pushMessageBody' }, bodyText),
+                    React.createElement('div', { className: 'dgw-pushMessageMeta' },
+                      selectedDetail?.shortOid ?? selectedOid.slice(0, 7),
+                      commitAuthor === null ? '' : ` 作者 ${commitAuthor.name} <${commitAuthor.email}>`,
+                      commitAuthor === null ? '' : `, ${formatCommitDate(commitAuthor.date)}`,
                     ),
-                    React.createElement('div', { className: 'dgw-pushMessageBody' }, selectedMessage),
                   ),
               ),
           ),

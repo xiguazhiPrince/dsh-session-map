@@ -332,7 +332,7 @@ export const CSS = `
   flex-direction: column;
   overflow: hidden;
   border-right: 1px solid var(--dsw-alias-border-l1);
-  background: var(--dsw-alias-bg-layer-1);
+  background: var(--dsw-alias-bg-base);
 }
 /* The branch row stays pinned; only the commit list scrolls. */
 .dgw-pushMapping { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
@@ -348,11 +348,11 @@ export const CSS = `
   flex-direction: column;
   margin-left: 18px;
   border-left: 1px solid var(--dsw-alias-border-l1);
-  background: var(--dsw-alias-bg-base);
+  background: transparent;
 }
 .dgw-pushMapping {
   flex: 0 0 auto;
-  padding: 9px 12px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--dsw-alias-border-l1);
   background: transparent;
   color: var(--dsw-alias-label-primary);
@@ -361,26 +361,28 @@ export const CSS = `
   cursor: pointer;
 }
 .dgw-pushMapping:hover { background: var(--dsw-alias-bg-layer-2); }
-.dgw-pushMapping--active { background: var(--dsw-alias-brand-primary); color: var(--dsw-alias-bg-base); }
-.dgw-pushMapping--active .dgw-meta { color: inherit; opacity: .8; }
+/* Light-blue selection works in both themes: DSH's light brand is nearly black,
+   so a solid brand fill would read as a black row in the white theme. */
+.dgw-pushMapping--active { background: color-mix(in srgb, #4f9cf9 20%, transparent); color: var(--dsw-alias-label-primary); }
+.dgw-pushMapping--active .dgw-meta { color: var(--dsw-alias-label-secondary); opacity: 1; }
 .dgw-pushCommit {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 7px 12px 7px 10px;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  padding: 8px 12px 8px 10px;
+  border-bottom: 0;
   font-size: 12px;
   cursor: pointer;
 }
 .dgw-pushCommit:hover { background: var(--dsw-alias-bg-layer-1); }
-.dgw-pushCommit--active { background: var(--dsw-alias-brand-primary); color: var(--dsw-alias-bg-base); }
-.dgw-pushCommit--active .dgw-meta { color: inherit; opacity: .8; }
+.dgw-pushCommit--active { background: color-mix(in srgb, #4f9cf9 20%, transparent); color: var(--dsw-alias-label-primary); }
+.dgw-pushCommit--active .dgw-meta { color: var(--dsw-alias-label-secondary); opacity: 1; }
 .dgw-pushRight { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base); }
 .dgw-pushSectionHead {
   flex: 0 0 auto;
   padding: 8px 12px;
   border-bottom: 1px solid var(--dsw-alias-border-l1);
-  background: var(--dsw-alias-bg-layer-1);
+  background: transparent;
   font-size: 11px;
   font-weight: 600;
   color: var(--dsw-alias-label-secondary);
@@ -391,17 +393,17 @@ export const CSS = `
   flex: 0 0 auto;
   max-height: 42%;
   overflow: auto;
-  padding: 10px 12px;
+  padding: 10px 14px;
   border-top: 1px solid var(--dsw-alias-border-l1);
-  background: var(--dsw-alias-bg-layer-1);
+  background: var(--dsw-alias-bg-base);
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
 }
 .dgw-pushMessage .dgw-pushSectionHead { flex: 0 0 auto; padding: 0 0 4px; border-bottom: 0; background: transparent; }
-.dgw-pushMessageHead { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; }
-.dgw-pushMessageSubject { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dgw-pushMessageHead { font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-primary); }
 .dgw-pushMessageBody { white-space: pre-wrap; word-break: break-word; font-size: 12px; color: var(--dsw-alias-label-primary); }
+.dgw-pushMessageMeta { font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .dgw-pushFolder, .dgw-pushFile { display: flex; align-items: center; gap: 8px; font-size: 12px; height: 22px; padding-right: 4px; }
 .dgw-pushFolder { color: var(--dsw-alias-label-primary); font-weight: 600; }
 .dgw-pushFolder > svg, .dgw-pushFile > svg { flex: 0 0 auto; color: var(--dsw-alias-label-secondary); }
