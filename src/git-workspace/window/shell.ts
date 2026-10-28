@@ -16,6 +16,7 @@ import { computeGraph } from './lanes'
 import { BranchTree, DetailPane, LogList, formatWhen } from './log'
 import { BranchDialog, type BranchPrompt } from './branch'
 import { ForcePushDialog, ResetDialog, TagDeleteDialog, TagDialog, type ResetMode } from './history'
+import { UpdateDialog, readUpdatePreference, writeUpdatePreference, type UpdateMode } from './update-dialog'
 import { CommitPane } from './commit'
 import { ConsolePane } from './console'
 import { CSS } from './css'
@@ -199,6 +200,7 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
     const [forcePushTarget, setForcePushTarget] = React.useState<string | null>(null)
     const [forcePushBusy, setForcePushBusy] = React.useState(false)
     const [forcePushError, setForcePushError] = React.useState<GitApiError | null>(null)
+    const [updateDialog, setUpdateDialog] = React.useState<{ readonly mode: UpdateMode; readonly remember: boolean } | null>(null)
     const [logColumns, setLogColumns] = React.useState<LogColumns>(() => readLogColumns())
     const logColumnsRef = React.useRef(logColumns)
     logColumnsRef.current = logColumns
@@ -244,6 +246,10 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
       ?? items.find(item => current !== undefined && item.sessionIds.includes(current))
       ?? items[0]
     const workspaceId = candidate?.workspaceId ?? null
+    const upstreamRef = snapshot?.head.upstream?.ref ?? null
+    const upstreamOid = upstreamRef === null
+      ? null
+      : snapshot?.branches.find(branch => branch.type === 'remote' && (branch.ref === upstreamRef || branch.name === upstreamRef || upstreamRef.endsWith('/' + branch.name)))?.oid ?? null
 
     const appendCommands = React.useCallback((incoming: readonly CommandReceipt[]): void => {
       if (incoming.length === 0) return
@@ -535,6 +541,25 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
       }
     }
 
+    /** Show the merge/rebase choice, or run the remembered mode directly. */
+    const openUpdate = (): void => {
+      if (workspaceId === null) return
+      const preference = readUpdatePreference()
+      if (preference.skipDialog) {
+        void runJob({ kind: 'update', workspaceId, mode: preference.mode })
+        return
+      }
+      setUpdateDialog({ mode: preference.mode, remember: false })
+    }
+
+    const confirmUpdate = (): void => {
+      if (updateDialog === null || workspaceId === null) return
+      if (updateDialog.remember) writeUpdatePreference({ mode: updateDialog.mode, skipDialog: true })
+      const mode = updateDialog.mode
+      setUpdateDialog(null)
+      void runJob({ kind: 'update', workspaceId, mode })
+    }
+
     // Remember that the panel was open so the next page load can restore it;
     // clearing on unmount is what "closed" means for the sidebar.
     React.useEffect(() => {
@@ -784,10 +809,10 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
         React.createElement('button', {
           className: 'dgw-iconBtn',
           type: 'button',
-          title: '更新当前分支：先下载远端状态，再把上游合并进当前分支（fetch + merge）',
+          title: '更新当前分支：先下载远端状态，再按弹窗选择合并或变基',
           'aria-label': '更新当前分支',
           disabled: workspaceId === null || jobBusy || snapshot === null,
-          onClick: () => { if (workspaceId !== null) void runJob({ kind: 'update', workspaceId, mode: 'merge' }) },
+          onClick: openUpdate,
         }, React.createElement(RefreshIcon, { size: 14 })),
         React.createElement('button', {
           className: 'dgw-iconBtn',
@@ -1009,6 +1034,25 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
           error: forcePushError,
           onCancel: () => { if (!forcePushBusy) setForcePushTarget(null) },
           onConfirm: () => { void confirmForcePush() },
+        }),
+      updateDialog === null
+        ? null
+        : React.createElement(UpdateDialog, {
+          mode: updateDialog.mode,
+          remember: updateDialog.remember,
+          busy: jobBusy,
+          canReset: upstreamOid !== null,
+          onMode: (mode: UpdateMode) => setUpdateDialog({ ...updateDialog, mode }),
+          onRemember: (remember: boolean) => setUpdateDialog({ ...updateDialog, remember }),
+          onReset: () => {
+            if (upstreamOid === null) return
+            setUpdateDialog(null)
+            setResetTarget(upstreamOid)
+            setResetMode('hard')
+            setResetError(null)
+          },
+          onCancel: () => setUpdateDialog(null),
+          onConfirm: confirmUpdate,
         }),
     )
   }

@@ -312,6 +312,8 @@ export const CSS = `
 .dgw-modal { width: 360px; max-width: calc(100% - 32px); border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-overlay); padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
 .dgw-modalTitle { font-weight: 600; }
 .dgw-modalText { font-size: 12px; color: var(--dsw-alias-label-secondary); white-space: pre-wrap; word-break: break-word; }
+.dgw-choice { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dsw-alias-label-primary); cursor: pointer; }
+.dgw-choice input { accent-color: var(--dsw-alias-brand-primary); }
 .dgw-modalActions { display: flex; justify-content: flex-end; gap: 8px; }
 .dgw-menu { position: fixed; z-index: 20; min-width: 170px; padding: 4px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; background: var(--dsw-alias-bg-overlay); box-shadow: 0 8px 24px rgba(0,0,0,.35); display: flex; flex-direction: column; }
 .dgw-menuItem { border: 0; background: transparent; text-align: left; padding: 5px 10px; border-radius: 4px; color: var(--dsw-alias-label-primary); font-size: 12px; cursor: pointer; }

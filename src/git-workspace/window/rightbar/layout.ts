@@ -33,6 +33,7 @@ import { RIGHTBAR_CSS } from './css'
 import type { GitRightbarModel } from './model'
 import { jobStatusLabel } from './model'
 import { COMMIT_WIDTH_MIN } from './prefs'
+import { UpdateDialog, readUpdatePreference, writeUpdatePreference, type UpdateMode } from '../update-dialog'
 
 /** The HEAD placeholder used before the first snapshot lands. */
 const EMPTY_HEAD: HeadState = {
@@ -165,6 +166,29 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
   const [drag, setDrag] = React.useState<{ readonly kind: 'log' | 'commit' | 'logTree' | 'logDetail'; readonly start: number; readonly base: number } | null>(null)
   const [dragValue, setDragValue] = React.useState<number | null>(null)
   const [drawerOpen, setDrawerOpen] = React.useState(false)
+  const [updateDialog, setUpdateDialog] = React.useState<{ readonly mode: UpdateMode; readonly remember: boolean } | null>(null)
+
+  const upstreamRef = model.head?.upstream?.ref ?? null
+  const upstreamOid = upstreamRef === null
+    ? null
+    : model.branches.find(branch => branch.type === 'remote' && (branch.ref === upstreamRef || branch.name === upstreamRef || upstreamRef.endsWith('/' + branch.name)))?.oid ?? null
+
+  const openUpdate = (): void => {
+    const preference = readUpdatePreference()
+    if (preference.skipDialog) {
+      model.actions.updateBranch(preference.mode)
+      return
+    }
+    setUpdateDialog({ mode: preference.mode, remember: false })
+  }
+
+  const confirmUpdate = (): void => {
+    if (updateDialog === null) return
+    if (updateDialog.remember) writeUpdatePreference({ mode: updateDialog.mode, skipDialog: true })
+    const mode = updateDialog.mode
+    setUpdateDialog(null)
+    model.actions.updateBranch(mode)
+  }
 
   React.useEffect(() => {
     if (drag === null) return undefined
@@ -292,9 +316,9 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
     toolButton(
       'update',
       '更新当前分支',
-      '更新当前分支：先下载远端状态，再把上游合并进当前分支（fetch + merge）；有未提交更改时会被拒绝',
+      '更新当前分支：先下载远端状态，再按弹窗选择合并或变基；有未提交更改时会被拒绝',
       React.createElement(RefreshIcon, { size: 14 }),
-      model.actions.updateBranch,
+      openUpdate,
       { disabled: model.workspaceId === null || model.jobBusy },
     ),
     toolButton(
@@ -555,6 +579,23 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
         error: model.forcePushDialog.error,
         onCancel: model.actions.cancelForcePushDialog,
         onConfirm: model.actions.confirmForcePushDialog,
+      }),
+    updateDialog === null
+      ? null
+      : React.createElement(UpdateDialog, {
+        mode: updateDialog.mode,
+        remember: updateDialog.remember,
+        busy: model.jobBusy,
+        canReset: upstreamOid !== null,
+        onMode: (mode: UpdateMode) => setUpdateDialog({ ...updateDialog, mode }),
+        onRemember: (remember: boolean) => setUpdateDialog({ ...updateDialog, remember }),
+        onReset: () => {
+          if (upstreamOid === null) return
+          setUpdateDialog(null)
+          model.actions.openReset(upstreamOid)
+        },
+        onCancel: () => setUpdateDialog(null),
+        onConfirm: confirmUpdate,
       }),
   )
 }

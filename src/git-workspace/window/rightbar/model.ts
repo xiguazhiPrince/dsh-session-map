@@ -35,6 +35,7 @@ import {
 } from '../runtime'
 import type { BranchPrompt } from '../branch'
 import type { ResetMode } from '../history'
+import type { UpdateMode } from '../update-dialog'
 import {
   COMMIT_WIDTH_MIN,
   LOG_DETAIL_MAX,
@@ -138,7 +139,7 @@ export interface GitRightbarActions {
   readonly refresh: () => void
   readonly retry: () => void
   readonly fetchAll: () => void
-  readonly updateBranch: () => void
+  readonly updateBranch: (mode: UpdateMode) => void
   readonly push: () => void
   readonly cancelJob: () => void
   readonly search: (value: string) => void
@@ -499,9 +500,9 @@ export function useGitRightbarModel(deps: GitRightbarModelDeps): GitRightbarMode
     void runJob({ kind: 'fetch', workspaceId, all: true })
   }
 
-  const updateBranch = (): void => {
+  const updateBranch = (mode: UpdateMode): void => {
     if (workspaceId === null) return
-    void runJob({ kind: 'update', workspaceId, mode: 'merge' })
+    void runJob({ kind: 'update', workspaceId, mode })
   }
 
   const push = (): void => {
