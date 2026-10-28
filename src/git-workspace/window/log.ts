@@ -168,6 +168,19 @@ function leafCount(node: BranchTreeNode): number {
   return node.children.reduce((total, child) => total + leafCount(child), 0)
 }
 
+/** Every folder path in one forest, for expand/collapse-all. */
+function folderPathsOf(nodes: readonly BranchTreeNode[]): string[] {
+  const paths: string[] = []
+  const walk = (list: readonly BranchTreeNode[]): void => {
+    for (const node of list) {
+      if (node.children.length > 0) paths.push(node.path)
+      walk(node.children)
+    }
+  }
+  walk(nodes)
+  return paths
+}
+
 /** One open context menu. */
 interface BranchMenuState {
   readonly x: number
@@ -190,6 +203,11 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
   const remotes = props.branches.filter(branch => branch.type === 'remote' && matches(branch))
   const tags = props.branches.filter(branch => branch.type === 'tag' && matches(branch))
   const current = props.head.branch
+  const localTree = buildBranchTree(locals)
+  const remoteTree = buildBranchTree(remotes)
+  const folderPaths = [...folderPathsOf(localTree), ...folderPathsOf(remoteTree)]
+  const expandAllFolders = (): void => setCollapsedFolders(new Set())
+  const collapseAllFolders = (): void => setCollapsedFolders(new Set(folderPaths))
 
   React.useEffect(() => {
     if (menu === null) return undefined
@@ -320,6 +338,20 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
     React.createElement(
       'div',
       { className: 'dgw-treeScroll' },
+      folderPaths.length === 0
+        ? null
+        : React.createElement('div', { className: 'dgw-treeActions' },
+          React.createElement('button', {
+            className: 'dgw-linkBtn',
+            type: 'button',
+            onClick: expandAllFolders,
+          }, '全部展开'),
+          React.createElement('button', {
+            className: 'dgw-linkBtn',
+            type: 'button',
+            onClick: collapseAllFolders,
+          }, '全部收起'),
+        ),
       React.createElement('div', { className: 'dgw-treeSectionHead' }, 'HEAD(当前分支)'),
       current === null
         ? React.createElement(
@@ -354,7 +386,7 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
         React.createElement(ChevronIcon, { size: 12 }),
         `本地 (${locals.length})`,
       ),
-      localOpen ? renderNodes(buildBranchTree(locals), 0) : null,
+      localOpen ? renderNodes(localTree, 0) : null,
       React.createElement(
         'button',
         {
@@ -366,7 +398,7 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
         React.createElement(ChevronIcon, { size: 12 }),
         `远程 (${remotes.length})`,
       ),
-      remoteOpen ? renderNodes(buildBranchTree(remotes), 0) : null,
+      remoteOpen ? renderNodes(remoteTree, 0) : null,
       tags.length === 0
         ? null
         : React.createElement(

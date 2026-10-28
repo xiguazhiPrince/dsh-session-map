@@ -72,6 +72,8 @@ describe('CommitPane (right-column presentation)', () => {
     expect(markup).toContain('a.ts')
     expect(markup).toContain('c.md')
     expect(markup).toContain('d.txt')
+    expect(markup).toContain('全部展开')
+    expect(markup).toContain('全部收起')
   })
 
   it('marks the previewed row and makes the checkbox the staging control', () => {

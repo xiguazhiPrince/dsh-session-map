@@ -161,6 +161,8 @@ describe('BranchTree', () => {
     expect(markup).toContain('远程 (1)')
     expect(markup).toContain('main')
     expect(markup).toContain('origin')
+    expect(markup).toContain('全部展开')
+    expect(markup).toContain('全部收起')
   })
 })
 

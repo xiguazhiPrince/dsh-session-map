@@ -105,7 +105,21 @@ function buildChangeTree(rows: readonly ChangedEntry[]): { readonly files: Chang
   return { files: root.files, dirs: [...root.dirs.values()] }
 }
 
-/** Total files under one directory node (including nested directories). */
+/** Every directory path referenced by one change set, for expand/collapse-all. */
+function allChangeDirPaths(rows: readonly ChangedEntry[]): string[] {
+  const paths = new Set<string>()
+  for (const entry of rows) {
+    const parts = entry.path.split('/')
+    let prefix = ''
+    for (let index = 0; index < parts.length - 1; index += 1) {
+      prefix = prefix === '' ? (parts[index] as string) : `${prefix}/${parts[index] as string}`
+      paths.add(prefix)
+    }
+  }
+  return [...paths]
+}
+
+/** Count total files under one directory node (including nested directories). */
 function countFiles(node: DirNode): number {
   let total = node.files.length
   for (const child of node.dirs.values()) total += countFiles(child)
@@ -201,6 +215,11 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
   const [dropStashPending, setDropStashPending] = React.useState(false)
   const [collapsedDirs, setCollapsedDirs] = React.useState<Record<string, boolean>>({})
   const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>({})
+  const changeFolderPaths = allChangeDirPaths(snapshot.changes)
+  const expandAllDirs = (): void => setCollapsedDirs({})
+  const collapseAllDirs = (): void => {
+    setCollapsedDirs(Object.fromEntries(changeFolderPaths.map(path => [path, true])))
+  }
 
   const staged = snapshot.changes.filter(entry => entry.group === 'staged')
   const unstaged = snapshot.changes.filter(entry => entry.group === 'unstaged')
@@ -415,6 +434,12 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
   return React.createElement(
     'div',
     { className: 'dgw-commit' },
+    props.groupByDirectory === true && changeFolderPaths.length > 0
+      ? React.createElement('div', { className: 'dgw-changeActions' },
+        React.createElement('button', { className: 'dgw-linkBtn', type: 'button', onClick: expandAllDirs }, '全部展开'),
+        React.createElement('button', { className: 'dgw-linkBtn', type: 'button', onClick: collapseAllDirs }, '全部收起'),
+      )
+      : null,
     React.createElement(
       'div',
       { className: 'dgw-changeScroll' },

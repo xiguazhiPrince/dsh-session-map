@@ -135,6 +135,12 @@ export const CSS = `
   font-size: 12px;
 }
 .dgw-treeScroll { flex: 1 1 auto; overflow: auto; padding: 4px 0 10px; }
+/* Compact text actions above a tree (expand/collapse all). */
+.dgw-treeActions { display: flex; justify-content: flex-end; gap: 6px; padding: 2px 8px; flex: 0 0 auto; }
+.dgw-changeActions { display: flex; justify-content: flex-end; gap: 6px; padding: 4px 10px 0; flex: 0 0 auto; }
+.dgw-linkBtn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; padding: 1px 4px; border-radius: 3px; cursor: pointer; }
+.dgw-linkBtn:hover { color: var(--dsw-alias-brand-primary); background: var(--dsw-alias-bg-layer-2); }
+
 .dgw-treeSectionHead {
   display: flex;
   align-items: center;
