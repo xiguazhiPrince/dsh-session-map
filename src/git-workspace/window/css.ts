@@ -205,6 +205,8 @@ export const CSS = `
   cursor: default;
   white-space: nowrap;
   border-bottom: 1px solid transparent;
+  /* Shift-click is a range-selection gesture in the log list. */
+  user-select: none;
 }
 .dgw-row:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary) 7%, transparent); }
 .dgw-row--active,
