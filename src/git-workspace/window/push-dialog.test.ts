@@ -51,6 +51,9 @@ describe('PushDialog', () => {
     expect(markup).toContain('title="server/aic/src/run.ts"')
     expect(markup).toContain('强制推送（--force-with-lease')
     expect(markup).toContain('推送')
+    expect(markup).toContain('dgw-pushVSplit')
+    // No commit selected yet, so the horizontal message splitter is absent.
+    expect(markup).not.toContain('dgw-pushHSplit')
   })
 
   it('explains a first push without upstream', () => {

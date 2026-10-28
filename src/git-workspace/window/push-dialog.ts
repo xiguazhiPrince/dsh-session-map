@@ -41,6 +41,51 @@ function formatCommitDate(value: string): string {
   return date.toLocaleString('zh-CN', { hour12: false })
 }
 
+/** Browser-local key for the push dialog's pane sizes. */
+const PUSH_LAYOUT_KEY = 'dsh.git-window.pushLayout'
+/** Bounds for the left commit column and the bottom message pane. */
+const LEFT_MIN = 200
+const LEFT_MAX = 460
+const MESSAGE_MIN = 120
+const MESSAGE_MAX = 420
+
+interface PushLayout {
+  readonly left: number
+  readonly message: number
+}
+
+/** Clamp one pane dimension. */
+function clampPane(value: number, min: number, max: number): number {
+  return Math.min(Math.max(min, Math.round(value)), max)
+}
+
+/** Read the saved pane sizes; a missing or denied store answers defaults. */
+function readPushLayout(): PushLayout {
+  const fallback: PushLayout = { left: 280, message: 220 }
+  if (typeof localStorage === 'undefined') return fallback
+  try {
+    const raw = localStorage.getItem(PUSH_LAYOUT_KEY)
+    if (raw === null) return fallback
+    const parsed = JSON.parse(raw) as { readonly left?: unknown; readonly message?: unknown }
+    return {
+      left: typeof parsed.left === 'number' ? clampPane(parsed.left, LEFT_MIN, LEFT_MAX) : fallback.left,
+      message: typeof parsed.message === 'number' ? clampPane(parsed.message, MESSAGE_MIN, MESSAGE_MAX) : fallback.message,
+    }
+  } catch {
+    return fallback
+  }
+}
+
+/** Persist the push dialog's pane sizes. */
+function writePushLayout(layout: PushLayout): void {
+  if (typeof localStorage === 'undefined') return
+  try {
+    localStorage.setItem(PUSH_LAYOUT_KEY, JSON.stringify(layout))
+  } catch {
+    // Blocked storage: the chooser still works for this run.
+  }
+}
+
 /** One folder in the push preview's changed-file tree. */
 interface PreviewFolder {
   readonly name: string
@@ -112,6 +157,47 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [detailError, setDetailError] = React.useState<string | null>(null)
   const [commitsOpen, setCommitsOpen] = React.useState(true)
+  const [layout, setLayout] = React.useState<PushLayout>(() => readPushLayout())
+  const layoutRef = React.useRef(layout)
+  layoutRef.current = layout
+  const drag = React.useRef<{ readonly kind: 'left' | 'message'; readonly start: number; readonly base: number } | null>(null)
+
+  React.useEffect(() => {
+    const move = (event: PointerEvent): void => {
+      const active = drag.current
+      if (active === null) return
+      if (active.kind === 'left') {
+        const next = clampPane(active.base + (event.clientX - active.start), LEFT_MIN, LEFT_MAX)
+        setLayout(previous => ({ ...previous, left: next }))
+      } else {
+        const next = clampPane(active.base + (active.start - event.clientY), MESSAGE_MIN, MESSAGE_MAX)
+        setLayout(previous => ({ ...previous, message: next }))
+      }
+    }
+    const up = (): void => {
+      if (drag.current === null) return
+      drag.current = null
+      document.body.style.userSelect = ''
+      writePushLayout(layoutRef.current)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      document.body.style.userSelect = ''
+    }
+  }, [])
+
+  const startDrag = (kind: 'left' | 'message', event: React.PointerEvent): void => {
+    event.preventDefault()
+    document.body.style.userSelect = 'none'
+    drag.current = {
+      kind,
+      start: kind === 'left' ? event.clientX : event.clientY,
+      base: kind === 'left' ? layout.left : layout.message,
+    }
+  }
   const files: readonly FileChange[] = selectedOid === null
     ? props.preview?.files ?? []
     : selectedDetail?.files ?? []
@@ -170,7 +256,7 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
           { className: 'dgw-pushBody' },
           React.createElement(
             'div',
-            { className: 'dgw-pushLeft' },
+            { className: 'dgw-pushLeft', style: { width: layout.left, flexBasis: layout.left } },
             React.createElement('div', {
               className: 'dgw-pushMapping' + (selectedOid === null ? ' dgw-pushMapping--active' : ''),
               onClick: showAll,
@@ -213,6 +299,13 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
               ? React.createElement('div', { className: 'dgw-meta' }, '提交较多，仅显示最近 100 条')
               : null,
           ),
+          React.createElement('div', {
+            className: 'dgw-pushVSplit',
+            role: 'separator',
+            'aria-orientation': 'vertical',
+            title: '拖动调整左右宽度',
+            onPointerDown: (event: React.PointerEvent) => startDrag('left', event),
+          }),
           React.createElement(
             'div',
             { className: 'dgw-pushRight' },
@@ -226,7 +319,19 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
                 : React.createElement('div', { className: 'dgw-inlineError' }, detailError),
             selectedOid === null
               ? null
-              : React.createElement('div', { className: 'dgw-pushMessage' },
+              : React.createElement('div', {
+                className: 'dgw-pushHSplit',
+                role: 'separator',
+                'aria-orientation': 'horizontal',
+                title: '拖动调整提交信息高度',
+                onPointerDown: (event: React.PointerEvent) => startDrag('message', event),
+              }),
+            selectedOid === null
+              ? null
+              : React.createElement('div', {
+                className: 'dgw-pushMessage',
+                style: { height: layout.message, flexBasis: layout.message },
+              },
                 React.createElement('div', { className: 'dgw-pushSectionHead' }, '提交信息'),
                 detailLoading
                   ? React.createElement('div', { className: 'dgw-pushEmpty' }, '正在读取提交信息…')

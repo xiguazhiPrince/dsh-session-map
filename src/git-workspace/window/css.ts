@@ -378,6 +378,24 @@ export const CSS = `
 .dgw-pushCommit--active { background: color-mix(in srgb, #4f9cf9 20%, transparent); color: var(--dsw-alias-label-primary); }
 .dgw-pushCommit--active .dgw-meta { color: var(--dsw-alias-label-secondary); opacity: 1; }
 .dgw-pushRight { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base); }
+/* Two draggable edges: left/right widths, then file/message heights. */
+.dgw-pushVSplit {
+  flex: 0 0 6px;
+  width: 6px;
+  cursor: col-resize;
+  background: var(--dsw-alias-bg-layer-1);
+  border-left: 1px solid var(--dsw-alias-border-l1);
+  border-right: 1px solid var(--dsw-alias-border-l1);
+}
+.dgw-pushHSplit {
+  flex: 0 0 6px;
+  height: 6px;
+  cursor: row-resize;
+  background: var(--dsw-alias-bg-layer-1);
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+.dgw-pushVSplit:hover, .dgw-pushHSplit:hover { background: color-mix(in srgb, #4f9cf9 30%, transparent); }
 .dgw-pushSectionHead {
   flex: 0 0 auto;
   padding: 8px 12px;
@@ -391,10 +409,11 @@ export const CSS = `
 /* Bottom half of the right pane: the selected commit's full message. */
 .dgw-pushMessage {
   flex: 0 0 auto;
-  max-height: 42%;
+  max-height: none;
   overflow: auto;
   padding: 10px 14px;
-  border-top: 1px solid var(--dsw-alias-border-l1);
+  box-sizing: border-box;
+  border-top: 0;
   background: var(--dsw-alias-bg-base);
   display: flex;
   flex-direction: column;
