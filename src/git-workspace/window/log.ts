@@ -62,6 +62,9 @@ function refLabels(row: CommitRow): Array<{ readonly text: string; readonly tag:
   return labels
 }
 
+/** Width the folder chevron occupies, so branch icons align with folder icons. */
+const BRANCH_ICON_OFFSET = 18
+
 /** One vertical guide per branch-tree nesting level. */
 function treeGuides(depth: number, prefix: string): React.ReactNode[] {
   return Array.from({ length: depth }, (_, index) =>
@@ -87,6 +90,8 @@ function branchRow(
     : branch.type === 'tag'
       ? React.createElement(TagIcon, { size: 14 })
       : React.createElement(BranchIcon, { size: 14 })
+  // A branch has no chevron, so reserve its slot: the branch icon lines up
+  // with the folder icon of a folder at the same depth.
   return React.createElement(
     'div',
     {
@@ -96,7 +101,7 @@ function branchRow(
         branch.isHead ? 'dgw-treeRow--current' : '',
         active ? 'dgw-treeRow--active' : '',
       ].filter(Boolean).join(' '),
-      style: { paddingLeft: 20 + depth * 14 },
+      style: { paddingLeft: 20 + depth * 14 + BRANCH_ICON_OFFSET },
       onClick: onSelect,
       onDoubleClick: branch.type === 'local' ? onCheckout : undefined,
       onContextMenu: branch.type === 'remote' ? undefined : onMenu,
@@ -302,7 +307,10 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
       current === null
         ? React.createElement(
           'div',
-          { className: `dgw-treeRow${props.head.detached ? '' : ' dgw-treeRow--current'}` },
+          {
+            className: `dgw-treeRow${props.head.detached ? '' : ' dgw-treeRow--current'}`,
+            style: { paddingLeft: 20 + BRANCH_ICON_OFFSET },
+          },
           React.createElement(CommitIcon, { size: 14 }),
           React.createElement('span', { className: 'dgw-treeName' }, props.head.detached ? 'HEAD 已分离' : 'HEAD'),
         )
@@ -310,6 +318,7 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
           'div',
           {
             className: `dgw-treeRow dgw-treeRow--current${props.selectedRef === null ? ' dgw-treeRow--active' : ''}`,
+            style: { paddingLeft: 20 + BRANCH_ICON_OFFSET },
             onClick: () => props.onSelect(null),
             title: current,
           },
