@@ -90,8 +90,9 @@ function branchRow(
     : branch.type === 'tag'
       ? React.createElement(TagIcon, { size: 14 })
       : React.createElement(BranchIcon, { size: 14 })
-  // Only root branches need the chevron slot to line up with a root folder's
-  // icon; deeper rows are indented by their guide spans alone.
+  // Reserve the chevron slot on every branch row; the guides alone add the
+  // depth. This puts a root branch's text at a root folder's name, and a
+  // folder's child branch one level to the right of that folder.
   return React.createElement(
     'div',
     {
@@ -101,7 +102,7 @@ function branchRow(
         branch.isHead ? 'dgw-treeRow--current' : '',
         active ? 'dgw-treeRow--active' : '',
       ].filter(Boolean).join(' '),
-      style: { paddingLeft: 20 + (depth === 0 ? BRANCH_ICON_OFFSET : 0) },
+      style: { paddingLeft: 20 + BRANCH_ICON_OFFSET },
       onClick: onSelect,
       onDoubleClick: branch.type === 'local' ? onCheckout : undefined,
       onContextMenu: branch.type === 'remote' ? undefined : onMenu,
