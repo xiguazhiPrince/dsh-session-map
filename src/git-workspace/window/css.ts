@@ -261,9 +261,9 @@ export const CSS = `
 .dgw-discard:hover { color: var(--dsw-alias-state-error-primary); }
 .dgw-commitForm { flex: 0 0 auto; border-top: 1px solid var(--dsw-alias-border-l1); padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
 .dgw-textarea { min-height: 64px; max-height: 180px; resize: vertical; padding: 6px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 4px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; }
-.dgw-formRow { display: flex; align-items: center; gap: 8px; }
-.dgw-label { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
-.dgw-btn { height: 26px; padding: 0 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 4px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-size: 12px; cursor: pointer; }
+.dgw-formRow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.dgw-label { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+.dgw-btn { height: 26px; padding: 0 10px; flex: 0 0 auto; white-space: nowrap; border: 1px solid var(--dsw-alias-border-l2); border-radius: 4px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-size: 12px; cursor: pointer; }
 .dgw-btn:hover { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
 .dgw-btn:disabled { opacity: .5; cursor: default; }
 .dgw-btn--primary { background: var(--dsw-alias-brand-primary); border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-bg-base); }

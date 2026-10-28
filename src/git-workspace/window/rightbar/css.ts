@@ -161,4 +161,17 @@ export const RIGHTBAR_CSS = `
 }
 .dgw-rb__emptyBox { display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 320px; }
 .dgw-iconBtn--active { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
+
+/* The commit form is designed for the wide main panel. Inside the narrow
+   right-column pane its row must wrap into stable lines instead of shrinking
+   every label/button until the characters stack vertically. */
+.dgw-rb .dgw-commitForm { padding: 8px; gap: 6px; }
+.dgw-rb .dgw-commitForm .dgw-formRow { flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.dgw-rb .dgw-commitForm .dgw-label,
+.dgw-rb .dgw-commitForm .dgw-btn,
+.dgw-rb .dgw-commitForm .dgw-meta { flex: 0 0 auto; white-space: nowrap; }
+.dgw-rb .dgw-commitForm .dgw-btn { padding: 0 8px; }
+.dgw-rb .dgw-commitForm .dgw-spacer { flex: 1 1 100%; height: 0; }
+.dgw-rb .dgw-commitForm .dgw-meta { margin-left: auto; }
+.dgw-rb .dgw-commitForm .dgw-textarea { min-height: 52px; max-height: 120px; }
 `
