@@ -10,14 +10,14 @@
  * @module dsh-session-map/git-workspace/window/rightbar/install.test
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type {
   SidebarRightTabDefinition,
   SidebarRightTabsService,
   SlotRegistrationOptions,
   SlotsService,
 } from '../../../session-map/sidebar-right'
-import { installGitRightbarPage } from './install'
+import { installGitRightbarPage, toggleGitRightbar } from './install'
 import { GIT_RIGHTBAR_HEADER_ID, GIT_RIGHTBAR_KIND, GIT_RIGHTBAR_TYPE_ID } from './ids'
 
 /** One registration the fake slot registry received. */
@@ -153,5 +153,54 @@ describe('installGitRightbarPage', () => {
       installGitRightbarPage(fake.ctx)
       fake.registerTabs()
     }).toThrow(/already held by tab type "other-package.git"/)
+  })
+})
+
+describe('toggleGitRightbar', () => {
+  it('retries until the registry, surface and layout are mounted', () => {
+    const fake = createFakeContext()
+    installGitRightbarPage(fake.ctx)
+    expect(toggleGitRightbar(fake.ctx)).toMatchObject({ status: 'retry' })
+
+    fake.registerTabs()
+    const openTab = vi.fn()
+    const openRightbar = vi.fn()
+    fake.services.set('sidebarRight', { openTab, active: () => undefined, close: vi.fn() })
+    fake.services.set('layout', { openRightbar })
+
+    expect(toggleGitRightbar(fake.ctx)).toEqual({ status: 'opened' })
+    expect(openRightbar).toHaveBeenCalledWith(true, false)
+    expect(openTab).toHaveBeenCalledWith(GIT_RIGHTBAR_KIND)
+  })
+
+  it('closes an already active Git page instead of opening another', () => {
+    const fake = createFakeContext()
+    installGitRightbarPage(fake.ctx)
+    fake.registerTabs()
+    const close = vi.fn()
+    const openTab = vi.fn()
+    fake.services.set('sidebarRight', {
+      openTab,
+      active: () => ({ id: 'tab-git', kind: GIT_RIGHTBAR_KIND }),
+      close,
+    })
+    expect(toggleGitRightbar(fake.ctx)).toEqual({ status: 'closed' })
+    expect(close).toHaveBeenCalledWith('tab-git')
+    expect(openTab).not.toHaveBeenCalled()
+  })
+
+  it('reports a retry when the surface has not been adopted yet', () => {
+    const fake = createFakeContext()
+    installGitRightbarPage(fake.ctx)
+    fake.registerTabs()
+    fake.services.set('sidebarRight', {
+      openTab: () => { throw new Error('sidebarRight: no session surface is mounted') },
+      active: () => undefined,
+      close: vi.fn(),
+    })
+    expect(toggleGitRightbar(fake.ctx)).toEqual({
+      status: 'retry',
+      reason: 'sidebarRight: no session surface is mounted',
+    })
   })
 })

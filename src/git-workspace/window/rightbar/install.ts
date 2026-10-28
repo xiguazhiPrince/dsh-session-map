@@ -45,6 +45,44 @@ function errorText(cause: unknown): string {
   return String(cause)
 }
 
+/** One attempt to toggle the Git page in the right column. */
+export type GitRightbarToggleResult =
+  | { readonly status: 'opened' }
+  | { readonly status: 'closed' }
+  | { readonly status: 'retry'; readonly reason: string }
+
+/**
+ * Toggle the Git page once.
+ *
+ * Cold boot can run the header launcher before the right column has mounted its
+ * Session surface or claimed its tab types; `openTab` then throws "no session
+ * surface is mounted" (or has no type to open). Callers retry while the result is
+ * `retry` instead of making the user click a second time.
+ * @param ctx - browser root context carrying the right-column services.
+ * @returns what one attempt did.
+ */
+export function toggleGitRightbar(ctx: Context): GitRightbarToggleResult {
+  const tabs = lookup<SidebarRightTabsService>(ctx, 'sidebarRightTabs')
+  if (tabs === undefined || tabs.get(GIT_RIGHTBAR_KIND) === undefined) {
+    return { status: 'retry', reason: '右侧栏标签类型尚未注册' }
+  }
+  const face = lookup<SidebarRightFace>(ctx, 'sidebarRight')
+  if (face === undefined) return { status: 'retry', reason: '右侧栏服务尚未挂载' }
+  try {
+    const active = face.active()
+    if (active !== undefined && active.kind === GIT_RIGHTBAR_KIND) {
+      face.close(active.id)
+      return { status: 'closed' }
+    }
+    // Mount the column before asking it to adopt a page tab.
+    lookup<LayoutService>(ctx, 'layout')?.openRightbar?.(true, false)
+    face.openTab(GIT_RIGHTBAR_KIND)
+    return { status: 'opened' }
+  } catch (cause) {
+    return { status: 'retry', reason: errorText(cause) }
+  }
+}
+
 /**
  * Build the Session-header launcher: a real button that toggles the page.
  *
@@ -57,24 +95,37 @@ function errorText(cause: unknown): string {
 function createGitLauncher(ctx: Context): () => React.ReactElement {
   function GitLauncher(): React.ReactElement {
     const [error, setError] = React.useState<string | null>(null)
-    const onClick = (): void => {
-      try {
-        const face = lookup<SidebarRightFace>(ctx, 'sidebarRight')
-        if (face === undefined) throw new Error('右侧栏服务 sidebarRight 不可用')
-        const active = face.active()
-        if (active !== undefined && active.kind === GIT_RIGHTBAR_KIND) {
-          face.close(active.id)
-          setError(null)
+    const pending = React.useRef(false)
+    const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    React.useEffect(() => () => {
+      if (timer.current !== null) clearTimeout(timer.current)
+    }, [])
+
+    const attempt = (count: number): void => {
+      const result = toggleGitRightbar(ctx)
+      if (result.status === 'retry') {
+        if (count >= 10) {
+          pending.current = false
+          setError(result.reason)
+          // console.error lines are mirrored into this Run's diagnostics.
+          console.error('Git 右侧栏：切换失败', result.reason)
           return
         }
-        face.openTab(GIT_RIGHTBAR_KIND)
-        setError(null)
-      } catch (cause) {
-        const message = errorText(cause)
-        // console.error lines are mirrored into this Run's diagnostics.
-        console.error('Git 右侧栏：切换失败', message)
-        setError(message)
+        // The right-column services mount a few ticks after the header; retry
+        // instead of asking the user to click again.
+        timer.current = setTimeout(() => { attempt(count + 1) }, 60)
+        return
       }
+      pending.current = false
+      setError(null)
+    }
+
+    const onClick = (): void => {
+      if (pending.current) return
+      pending.current = true
+      setError(null)
+      attempt(0)
     }
     return React.createElement(
       'span',
