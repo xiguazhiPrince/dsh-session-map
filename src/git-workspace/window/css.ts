@@ -379,6 +379,22 @@ export const CSS = `
   color: var(--dsw-alias-label-secondary);
 }
 .dgw-pushFiles { flex: 1 1 auto; overflow: auto; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; }
+/* Bottom half of the right pane: the selected commit's full message. */
+.dgw-pushMessage {
+  flex: 0 0 auto;
+  max-height: 42%;
+  overflow: auto;
+  padding: 8px 12px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-1);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dgw-pushMessage .dgw-pushSectionHead { flex: 0 0 auto; padding: 0 0 4px; border-bottom: 0; }
+.dgw-pushMessageHead { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; }
+.dgw-pushMessageSubject { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dgw-pushMessageBody { white-space: pre-wrap; word-break: break-word; font-size: 12px; color: var(--dsw-alias-label-primary); }
 .dgw-pushFolder, .dgw-pushFile { display: flex; align-items: center; gap: 8px; font-size: 11px; }
 .dgw-pushFolder { color: var(--dsw-alias-label-primary); font-weight: 600; }
 .dgw-pushFolder > svg, .dgw-pushFile > svg { flex: 0 0 auto; color: var(--dsw-alias-label-secondary); }

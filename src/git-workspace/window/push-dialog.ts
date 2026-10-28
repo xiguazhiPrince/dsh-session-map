@@ -133,6 +133,10 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
   const filesTitle = selectedOid === null
     ? `全部变更（${props.preview?.files.length ?? 0}）`
     : `提交 ${selectedDetail?.shortOid ?? selectedOid.slice(0, 7)} 的文件（${files.length}）`
+  const selectedCommit = selectedOid === null
+    ? null
+    : props.preview?.commits.find(commit => commit.oid === selectedOid) ?? null
+  const selectedMessage = selectedDetail?.message ?? selectedCommit?.subject ?? ''
 
   return React.createElement(
     'div',
@@ -208,6 +212,25 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
                   ...renderPreviewFolder(fileTree, 0),
                 )
                 : React.createElement('div', { className: 'dgw-inlineError' }, detailError),
+            selectedOid === null
+              ? null
+              : React.createElement('div', { className: 'dgw-pushMessage' },
+                React.createElement('div', { className: 'dgw-pushSectionHead' }, '提交信息'),
+                detailLoading
+                  ? React.createElement('div', { className: 'dgw-pushEmpty' }, '正在读取提交信息…')
+                  : React.createElement(
+                    React.Fragment,
+                    null,
+                    React.createElement('div', { className: 'dgw-pushMessageHead' },
+                      React.createElement('span', { className: 'dgw-hash' }, selectedDetail?.shortOid ?? selectedOid.slice(0, 7)),
+                      React.createElement('span', { className: 'dgw-pushMessageSubject' }, selectedCommit?.subject ?? ''),
+                    ),
+                    React.createElement('div', { className: 'dgw-meta' },
+                      selectedCommit === null ? '' : `${selectedCommit.author.name} · ${selectedCommit.author.date}`,
+                    ),
+                    React.createElement('div', { className: 'dgw-pushMessageBody' }, selectedMessage),
+                  ),
+              ),
           ),
         ),
       React.createElement(
