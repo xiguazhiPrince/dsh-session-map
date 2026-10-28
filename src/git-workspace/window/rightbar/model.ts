@@ -140,7 +140,7 @@ export interface GitRightbarActions {
   readonly retry: () => void
   readonly fetchAll: () => void
   readonly updateBranch: (mode: UpdateMode) => void
-  readonly push: () => void
+  readonly push: (forceWithLease?: boolean) => void
   readonly cancelJob: () => void
   readonly search: (value: string) => void
   readonly clearBranch: () => void
@@ -505,7 +505,7 @@ export function useGitRightbarModel(deps: GitRightbarModelDeps): GitRightbarMode
     void runJob({ kind: 'update', workspaceId, mode })
   }
 
-  const push = (): void => {
+  const push = (forceWithLease = false): void => {
     if (workspaceId === null || snapshot === null) return
     const branch = snapshot.head.branch
     if (branch === null) {
@@ -516,6 +516,19 @@ export function useGitRightbarModel(deps: GitRightbarModelDeps): GitRightbarMode
     const needsUpstream = snapshot.head.upstream === null
     if (needsUpstream && remote === undefined) {
       setActionError(new GitApiError('no-upstream', 'no remote is configured'))
+      return
+    }
+    if (forceWithLease) {
+      const action = {
+        kind: 'push',
+        workspaceId,
+        branch,
+        forceWithLease: true,
+        ...(remote === undefined ? {} : { remote }),
+      } as const
+      void runtime.confirm(action)
+        .then(async confirmation => { await runJob(action, confirmation.token) })
+        .catch((error: unknown) => { setActionError(toApiError(error)) })
       return
     }
     void runJob({

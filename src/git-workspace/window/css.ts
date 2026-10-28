@@ -325,7 +325,11 @@ export const CSS = `
 }
 .dgw-pushSectionHead { margin-top: 4px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
 .dgw-pushCommits, .dgw-pushFiles { display: flex; flex-direction: column; gap: 2px; }
-.dgw-pushCommit, .dgw-pushFile { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.dgw-pushCommit, .dgw-pushFile, .dgw-pushFolder { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.dgw-pushFolder { color: var(--dsw-alias-label-primary); font-weight: 600; }
+.dgw-pushFolder > svg, .dgw-pushFile > svg { flex: 0 0 auto; color: var(--dsw-alias-label-secondary); }
+.dgw-pushFolderName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dgw-pushFolder > .dgw-meta { margin-left: auto; }
 .dgw-pushSubject, .dgw-pushFilePath { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dgw-pushFilePath { font-family: var(--dsw-font-mono, ui-monospace, monospace); }
 .dgw-pushFileStatus { flex: 0 0 14px; color: var(--dsw-alias-label-secondary); }

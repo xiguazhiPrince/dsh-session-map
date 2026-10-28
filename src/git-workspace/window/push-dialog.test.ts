@@ -37,13 +37,19 @@ describe('PushDialog', () => {
       loading: false,
       error: null,
       busy: false,
+      canForce: true,
+      force: false,
+      onForce: noop,
       onPush: noop,
       onCancel: noop,
     }))
     expect(markup).toContain('feature/aic → origin/feature/aic')
     expect(markup).toContain('待推送提交（1）')
     expect(markup).toContain('feat(aic): M1 录入、删除撤回')
-    expect(markup).toContain('server/aic/src/run.ts')
+    expect(markup).toContain('server')
+    expect(markup).toContain('run.ts')
+    expect(markup).toContain('title="server/aic/src/run.ts"')
+    expect(markup).toContain('强制推送（--force-with-lease')
     expect(markup).toContain('推送')
   })
 
@@ -56,10 +62,14 @@ describe('PushDialog', () => {
       loading: false,
       error: null,
       busy: false,
+      canForce: false,
+      force: false,
+      onForce: noop,
       onPush: noop,
       onCancel: noop,
     }))
     expect(markup).toContain('（将建立上游跟踪）')
     expect(markup).toContain('当前分支还没有上游，无法预览待推送提交')
+    expect(markup).not.toContain('强制推送（--force-with-lease')
   })
 })

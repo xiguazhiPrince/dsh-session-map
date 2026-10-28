@@ -206,6 +206,7 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
     const [pushPreview, setPushPreview] = React.useState<PushPreview | null>(null)
     const [pushPreviewLoading, setPushPreviewLoading] = React.useState(false)
     const [pushPreviewError, setPushPreviewError] = React.useState<string | null>(null)
+    const [pushForce, setPushForce] = React.useState(false)
     const [logColumns, setLogColumns] = React.useState<LogColumns>(() => readLogColumns())
     const logColumnsRef = React.useRef(logColumns)
     logColumnsRef.current = logColumns
@@ -435,6 +436,30 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
       })
     }
 
+    /** Force-push the current branch after the server issues an L3 token. */
+    const pushForceCurrent = async (): Promise<void> => {
+      if (workspaceId === null || snapshot === null) return
+      const branch = snapshot.head.branch
+      if (branch === null) {
+        setActionError(new GitApiError('detached-head', 'HEAD is detached'))
+        return
+      }
+      const remote = snapshot.remotes[0]?.name
+      const action = {
+        kind: 'push',
+        workspaceId,
+        branch,
+        forceWithLease: true,
+        ...(remote === undefined ? {} : { remote }),
+      } as const
+      try {
+        const confirmation = await runtime.confirm(action)
+        await runJob(action, confirmation.token)
+      } catch (error) {
+        setActionError(toApiError(error))
+      }
+    }
+
     /** Load the push preview, then show the dialog. */
     const openPushPreview = async (): Promise<void> => {
       if (workspaceId === null) return
@@ -442,6 +467,7 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
       setPushPreviewLoading(true)
       setPushPreview(null)
       setPushPreviewError(null)
+      setPushForce(false)
       try {
         const result = await runtime.pushPreview(workspaceId)
         setPushPreview(result.preview)
@@ -1078,9 +1104,13 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
           loading: pushPreviewLoading,
           error: pushPreviewError,
           busy: jobBusy,
+          canForce: snapshot?.head.upstream !== null,
+          force: pushForce,
+          onForce: setPushForce,
           onPush: () => {
             setPushOpen(false)
-            pushCurrent()
+            if (pushForce) void pushForceCurrent()
+            else pushCurrent()
           },
           onCancel: () => { if (!jobBusy) setPushOpen(false) },
         })

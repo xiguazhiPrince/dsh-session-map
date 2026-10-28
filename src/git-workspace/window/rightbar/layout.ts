@@ -173,6 +173,7 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
   const [pushPreview, setPushPreview] = React.useState<PushPreview | null>(null)
   const [pushPreviewLoading, setPushPreviewLoading] = React.useState(false)
   const [pushPreviewError, setPushPreviewError] = React.useState<string | null>(null)
+  const [pushForce, setPushForce] = React.useState(false)
 
   const openPushPreview = async (): Promise<void> => {
     if (model.workspaceId === null) return
@@ -180,6 +181,7 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
     setPushPreviewLoading(true)
     setPushPreview(null)
     setPushPreviewError(null)
+    setPushForce(false)
     try {
       const result = await model.runtime.pushPreview(model.workspaceId)
       setPushPreview(result.preview)
@@ -621,9 +623,12 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
         loading: pushPreviewLoading,
         error: pushPreviewError,
         busy: model.jobBusy,
+        canForce: model.head?.upstream != null,
+        force: pushForce,
+        onForce: setPushForce,
         onPush: () => {
           setPushOpen(false)
-          model.actions.push()
+          model.actions.push(pushForce)
         },
         onCancel: () => { if (!model.jobBusy) setPushOpen(false) },
       })
