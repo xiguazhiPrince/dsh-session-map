@@ -6,7 +6,7 @@
  */
 import * as React from 'react'
 import type { CommitDetail, FileChange, PushPreview } from '../git-types'
-import { FileIcon, FolderIcon, ChevronIcon } from './icons'
+import { FileIcon, FolderIcon, ChevronIcon, CloseIcon } from './icons'
 
 /** Props for the push preview. */
 export interface PushDialogProps {
@@ -242,7 +242,19 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
     React.createElement(
       'div',
       { className: 'dgw-modal dgw-pushModal', role: 'dialog', 'aria-label': '推送当前分支' },
-      React.createElement('div', { className: 'dgw-modalTitle' }, '推送当前分支'),
+      React.createElement(
+        'div',
+        { className: 'dgw-pushTitle' },
+        React.createElement('span', { className: 'dgw-pushTitleText' }, '推送当前分支'),
+        React.createElement('button', {
+          className: 'dgw-iconBtn dgw-pushClose',
+          type: 'button',
+          title: '关闭',
+          'aria-label': '关闭',
+          disabled: props.busy,
+          onClick: props.onCancel,
+        }, React.createElement(CloseIcon, { size: 14 })),
+      ),
       props.loading
         ? React.createElement('div', { className: 'dgw-loading' }, '正在计算待推送提交…')
         : null,

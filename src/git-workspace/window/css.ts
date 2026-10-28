@@ -323,7 +323,18 @@ export const CSS = `
   background: var(--dsw-alias-bg-overlay);
   color: var(--dsw-alias-label-primary);
 }
-.dgw-pushModal > .dgw-modalTitle { flex: 0 0 auto; padding: 13px 16px; border-bottom: 1px solid var(--dsw-alias-border-l1); font-size: 13px; }
+.dgw-pushTitle {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 10px 16px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  font-size: 13px;
+  font-weight: 600;
+}
+.dgw-pushTitleText { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dgw-pushClose { flex: 0 0 auto; }
 .dgw-pushBody { display: flex; flex: 1 1 auto; min-height: 0; }
 .dgw-pushLeft {
   flex: 0 0 280px;
