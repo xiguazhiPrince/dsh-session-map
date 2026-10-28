@@ -195,12 +195,12 @@ function changeRow(
       : React.createElement('button', {
         className: 'dgw-discard',
         type: 'button',
-        title: '丢弃更改',
+        title: '丢弃更改…',
         onClick: (event: React.MouseEvent) => {
           event.stopPropagation()
           onDiscard()
         },
-      }, '丢弃'),
+      }, '丢弃…'),
   )
 }
 
@@ -494,9 +494,9 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
           className: 'dgw-btn',
           type: 'button',
           disabled: busy || snapshot.stashCount === 0,
-          title: '删除最近一次搁置（不会应用内容）',
+          title: '删除最近一次搁置（不会应用内容，需确认）',
           onClick: () => setDropStashPending(true),
-        }, '丢弃搁置'),
+        }, '丢弃搁置…'),
         React.createElement('span', { className: 'dgw-spacer' }),
         React.createElement('span', { className: 'dgw-meta' }, `已暂存 ${staged.length}`),
         React.createElement('button', {
