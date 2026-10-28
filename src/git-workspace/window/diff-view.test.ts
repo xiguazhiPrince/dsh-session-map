@@ -88,6 +88,9 @@ describe('DiffView', () => {
     // One pane per side: each owns all its rows, so a horizontal scrollbar
     // moves the whole side rather than a single line.
     expect(markup.match(/class="dgw-diffSidePane"/g)).toHaveLength(2)
+    expect(markup).toContain('dgw-diffSideGutter')
+    expect(markup).toContain('dgw-diffGutterNo--add')
+    expect(markup).toContain('dgw-diffGutterNo--del')
     expect(markup).toContain('dgw-diffSideHunk--blank')
     expect(markup).toContain('dgw-diffSideRow--add')
     expect(markup).toContain('dgw-diffSideRow--del')

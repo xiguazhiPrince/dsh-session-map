@@ -294,15 +294,26 @@ export const CSS = `
 .dgw-menuItem:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-brand-primary); }
 .dgw-fieldLabel { font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .dgw-input { height: 26px; padding: 0 6px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 4px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-size: 12px; }
-/* Side-by-side diff: two independent scroll columns. Each pane owns every row
-   of its side, so one horizontal scrollbar moves the whole side; vertical
-   scrolling is mirrored by the component. */
+/* Side-by-side diff: two code panes that scroll horizontally (linked), and a
+   fixed centre gutter with both line numbers. Vertical scrolling is mirrored
+   across all three so rows stay aligned; the numbers never move sideways. */
 .dgw-diffSide { display: flex; align-items: stretch; height: 100%; min-height: 0; overflow: hidden; }
 .dgw-diffSidePane { flex: 1 1 50%; min-width: 0; min-height: 0; overflow: auto; }
-.dgw-diffSidePane + .dgw-diffSidePane { border-left: 1px solid var(--dsw-alias-border-l1); }
-/* Keep the mirrored vertical scrollbar out of the way; the horizontal one is
-   the control the user asked for, so leave it visible at the pane bottom. */
+/* Hide the two mirrored vertical scrollbars; the horizontal one is the control
+   the user asked for, so leave it visible at each pane's bottom. */
 .dgw-diffSidePane::-webkit-scrollbar:vertical { width: 0; }
+.dgw-diffSideGutter {
+  flex: 0 0 84px;
+  width: 84px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-left: 1px solid var(--dsw-alias-border-l1);
+  border-right: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-base);
+  scrollbar-width: none;
+}
+.dgw-diffSideGutter::-webkit-scrollbar { width: 0; height: 0; }
 .dgw-diffSideRow {
   display: flex;
   flex: 0 0 auto;
@@ -312,7 +323,7 @@ export const CSS = `
   height: 17px;
   line-height: 17px;
   white-space: pre;
-  padding-right: 8px;
+  padding: 0 8px;
 }
 .dgw-diffSideRow--add { background: var(--dgw-addBg); }
 .dgw-diffSideRow--del { background: var(--dgw-delBg); }
@@ -328,4 +339,18 @@ export const CSS = `
   background: var(--dsw-alias-bg-layer-1);
 }
 .dgw-diffSideHunk--blank { color: transparent; }
+.dgw-diffGutterRow { display: flex; flex: 0 0 auto; height: 17px; }
+.dgw-diffGutterNo {
+  flex: 1 1 50%;
+  min-width: 0;
+  padding-right: 6px;
+  text-align: right;
+  font-size: 11px;
+  line-height: 17px;
+  color: var(--dsw-alias-label-secondary);
+  user-select: none;
+}
+.dgw-diffGutterNo--add { background: var(--dgw-addBg); }
+.dgw-diffGutterNo--del { background: var(--dgw-delBg); }
+.dgw-diffGutterHunk { flex: 0 0 auto; height: 20px; background: var(--dsw-alias-bg-layer-1); }
 `

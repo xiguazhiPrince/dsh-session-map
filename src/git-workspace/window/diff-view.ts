@@ -110,52 +110,72 @@ function unifiedLine(line: DiffLine, key: string): React.ReactElement {
   )
 }
 
-/** One full line inside a side pane. */
-function sideLine(line: DiffLine | null, side: 'left' | 'right', key: string): React.ReactElement {
-  const number = line === null ? null : side === 'left' ? line.oldLine : line.newLine
+/** One code line inside a side pane; the line number lives in the centre gutter. */
+function sideLine(line: DiffLine | null, key: string): React.ReactElement {
   const tone = line === null ? '' : line.kind === '+' ? ' dgw-diffSideRow--add' : line.kind === '-' ? ' dgw-diffSideRow--del' : ''
   return React.createElement(
     'div',
     { className: `dgw-diffSideRow${tone}`, key },
-    React.createElement('span', { className: 'dgw-diffLineNo' }, number === null ? '' : String(number)),
     React.createElement('span', { className: 'dgw-diffSideText' }, line === null ? '' : line.text),
   )
 }
 
+/** One row of the fixed centre gutter: old number on the left, new on the right. */
+function gutterLine(left: DiffLine | null, right: DiffLine | null, key: string): React.ReactElement {
+  const leftTone = left !== null && left.kind === '-' ? ' dgw-diffGutterNo--del' : ''
+  const rightTone = right !== null && right.kind === '+' ? ' dgw-diffGutterNo--add' : ''
+  return React.createElement(
+    'div',
+    { className: 'dgw-diffGutterRow', key },
+    React.createElement('span', { className: `dgw-diffGutterNo${leftTone}` },
+      left === null || left.oldLine === null ? '' : String(left.oldLine)),
+    React.createElement('span', { className: `dgw-diffGutterNo${rightTone}` },
+      right === null || right.newLine === null ? '' : String(right.newLine)),
+  )
+}
+
 /**
- * Side-by-side presentation as two real scroll columns: every row of a side
- * lives in that side's pane, so its horizontal scrollbar moves the whole side.
- * Horizontal scrolling is linked and vertical scrolling is mirrored, so the two
- * sides always stay on the same code.
+ * Side-by-side presentation as two horizontal scroll panes plus a fixed centre
+ * gutter. The line numbers never move horizontally: only the code panes scroll,
+ * their horizontal positions are linked, and all three columns mirror vertical
+ * scrolling so rows stay aligned.
  */
 function SideDiff(props: { readonly hunks: readonly DiffHunk[] }): React.ReactElement {
   const leftRef = React.useRef<HTMLDivElement | null>(null)
   const rightRef = React.useRef<HTMLDivElement | null>(null)
+  const gutterRef = React.useRef<HTMLDivElement | null>(null)
   const syncing = React.useRef(false)
   const syncScroll = (event: React.UIEvent<HTMLDivElement>): void => {
     if (syncing.current) return
     const source = event.currentTarget
-    const target = source === leftRef.current ? rightRef.current : leftRef.current
-    if (target === null) return
     syncing.current = true
-    target.scrollTop = source.scrollTop
-    target.scrollLeft = source.scrollLeft
+    for (const target of [leftRef.current, rightRef.current, gutterRef.current]) {
+      if (target !== null && target !== source) target.scrollTop = source.scrollTop
+    }
+    if (source !== gutterRef.current) {
+      const other = source === leftRef.current ? rightRef.current : leftRef.current
+      if (other !== null) other.scrollLeft = source.scrollLeft
+    }
     requestAnimationFrame(() => { syncing.current = false })
   }
   const rows = pairDiffRows(props.hunks)
   const left = rows.map((row, index) => row.kind === 'hunk'
     ? React.createElement('div', { className: 'dgw-diffSideHunk', key: `h${index}` }, row.text)
-    : sideLine(row.left, 'left', `l${index}`))
+    : sideLine(row.left, `l${index}`))
+  const gutter = rows.map((row, index) => row.kind === 'hunk'
+    ? React.createElement('div', { className: 'dgw-diffGutterHunk', key: `h${index}` })
+    : gutterLine(row.left, row.right, `g${index}`))
   const right = rows.map((row, index) => row.kind === 'hunk'
     ? React.createElement('div', { className: 'dgw-diffSideHunk dgw-diffSideHunk--blank', key: `h${index}` })
-    : sideLine(row.right, 'right', `r${index}`))
+    : sideLine(row.right, `r${index}`))
   return React.createElement(
     'div',
     {
       className: 'dgw-diff dgw-diffSide',
-      title: '并排视图：左右两栏横向滚动联动，竖向滚动保持对齐（Shift + 滚轮或触控板）',
+      title: '并排视图：行号固定在中间，左右代码栏横向滚动联动，竖向滚动保持对齐（Shift + 滚轮或触控板）',
     },
     React.createElement('div', { className: 'dgw-diffSidePane', ref: leftRef, onScroll: syncScroll }, ...left),
+    React.createElement('div', { className: 'dgw-diffSideGutter', ref: gutterRef, onScroll: syncScroll }, ...gutter),
     React.createElement('div', { className: 'dgw-diffSidePane', ref: rightRef, onScroll: syncScroll }, ...right),
   )
 }
