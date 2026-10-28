@@ -216,6 +216,14 @@ describe('GitRightbarLayout', () => {
     expect(markup).toContain('仓库差异')
     expect(markup).toContain('提交 1111111')
     expect(markup).toContain('dgw-diffSideRow')
+    // Wide panes show the labelled header actions, with the long explanation
+    // carried by the native tooltip.
+    expect(markup).toContain('dgw-rb__toolText')
+    expect(markup).toContain('获取')
+    expect(markup).toContain('更新')
+    expect(markup).toContain('推送')
+    expect(markup).toContain('fetch --all --prune')
+    expect(markup).not.toContain('class="dgw-rb__top dgw-rb__top--compact"')
   })
 
   it('collapses the commit panel and the branch tree in a narrow page', () => {
@@ -230,6 +238,8 @@ describe('GitRightbarLayout', () => {
     expect(markup).not.toContain('分支或标签')
     expect(markup).toContain('仓库差异')
     expect(markup).toContain('提交详情')
+    // The words are in the DOM but the compact class hides them visually.
+    expect(markup).toContain('class="dgw-rb__top dgw-rb__top--compact"')
   })
 
   it('renders the empty states', () => {

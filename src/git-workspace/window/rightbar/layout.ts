@@ -87,6 +87,35 @@ function iconButton(
   )
 }
 
+/**
+ * One labelled toolbar button: the glyph plus a short word, with the longer
+ * explanation in the native tooltip. The right-column page's header used to be a
+ * row of anonymous glyphs, which is hard to read without hovering each one.
+ */
+function toolButton(
+  key: string,
+  label: string,
+  detail: string,
+  glyph: React.ReactElement,
+  onClick: () => void,
+  options?: { readonly disabled?: boolean; readonly active?: boolean },
+): React.ReactElement {
+  return React.createElement(
+    'button',
+    {
+      key,
+      className: 'dgw-rb__tool' + (options?.active === true ? ' dgw-rb__tool--active' : ''),
+      type: 'button',
+      title: detail,
+      'aria-label': detail,
+      onClick,
+      disabled: options?.disabled === true,
+    },
+    glyph,
+    React.createElement('span', { className: 'dgw-rb__toolText' }, label),
+  )
+}
+
 /** Render the commit-detail column (metadata + file list; the diff is above). */
 function DetailsColumn(props: { readonly model: GitRightbarModel }): React.ReactElement {
   const { model } = props
@@ -168,6 +197,9 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
   const counts = model.snapshot?.counts
   const ahead = head.upstream?.ahead ?? 0
   const behind = head.upstream?.behind ?? 0
+  // Below this width the labelled toolbar would crowd out the branch/repo
+  // chips; keep the glyphs and the detailed tooltips, drop the words.
+  const compactToolbar = width < 700
   const stats = diffStats(model.diff)
   const targetFile = model.target?.path ?? null
   const targetLabel = model.target === null
@@ -204,7 +236,7 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
 
   const toolbar = React.createElement(
     'div',
-    { className: 'dgw-rb__top' },
+    { className: 'dgw-rb__top' + (compactToolbar ? ' dgw-rb__top--compact' : '') },
     React.createElement('span', { className: 'dgw-brand' },
       React.createElement(GitPanelIcon, { size: 16, active: true }),
       React.createElement('span', null, 'Git'),
@@ -220,13 +252,62 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
       ? null
       : React.createElement('span', { className: 'dgw-rb__chip' }, `${counts.staged} 已暂存 / ${counts.unstaged + counts.untracked + counts.conflicted} 未暂存`),
     React.createElement('span', { className: 'dgw-spacer' }),
-    iconButton('panels', commitOpen ? '收起提交面板' : '展开提交面板', React.createElement(PanelLeftIcon, { size: 14 }), model.actions.toggleCommitPanel, { active: commitOpen }),
-    iconButton('refresh', '刷新', React.createElement(RefreshIcon, { size: 14 }), model.actions.retry, { disabled: model.workspaceId === null || model.snapshotLoading }),
-    iconButton('fetch', '获取（fetch）', React.createElement(FetchIcon, { size: 14 }), model.actions.fetchAll, { disabled: model.workspaceId === null || model.jobBusy }),
-    iconButton('update', '更新当前分支（fetch + merge）', React.createElement(RefreshIcon, { size: 14 }), model.actions.updateBranch, { disabled: model.workspaceId === null || model.jobBusy }),
-    iconButton('push', '推送（push）', React.createElement(PushIcon, { size: 14 }), model.actions.push, { disabled: model.workspaceId === null || model.jobBusy || model.snapshot === null }),
-    iconButton('fullscreen', '右侧栏全屏', React.createElement(FullscreenIcon, { size: 14 }), props.onFullscreen),
-    iconButton('close', '关闭', React.createElement(CloseIcon, { size: 14 }), props.onClose),
+    toolButton(
+      'panels',
+      commitOpen ? '收起变更' : '变更',
+      commitOpen
+        ? '收起左侧提交面板：提交信息、暂存区与差异预览'
+        : '展开左侧提交面板：提交信息、暂存区与差异预览',
+      React.createElement(PanelLeftIcon, { size: 14 }),
+      model.actions.toggleCommitPanel,
+      { active: commitOpen },
+    ),
+    toolButton(
+      'refresh',
+      '刷新',
+      '重新读取工作区状态、分支和提交列表（只读，不联网）',
+      React.createElement(RefreshIcon, { size: 14 }),
+      model.actions.retry,
+      { disabled: model.workspaceId === null || model.snapshotLoading },
+    ),
+    toolButton(
+      'fetch',
+      '获取',
+      '获取所有远端的最新引用（fetch --all --prune）；只更新远端跟踪分支，不修改工作区',
+      React.createElement(FetchIcon, { size: 14 }),
+      model.actions.fetchAll,
+      { disabled: model.workspaceId === null || model.jobBusy },
+    ),
+    toolButton(
+      'update',
+      '更新',
+      '更新当前分支：先 fetch，再把上游合并进本地（fetch + merge）；有未提交更改时会被拒绝',
+      React.createElement(RefreshIcon, { size: 14 }),
+      model.actions.updateBranch,
+      { disabled: model.workspaceId === null || model.jobBusy },
+    ),
+    toolButton(
+      'push',
+      '推送',
+      '推送当前分支到远端；没有上游时自动用当前远端建立跟踪',
+      React.createElement(PushIcon, { size: 14 }),
+      model.actions.push,
+      { disabled: model.workspaceId === null || model.jobBusy || model.snapshot === null },
+    ),
+    toolButton(
+      'fullscreen',
+      '全屏',
+      '把右侧栏切换到全屏，查看更宽的日志与差异',
+      React.createElement(FullscreenIcon, { size: 14 }),
+      props.onFullscreen,
+    ),
+    toolButton(
+      'close',
+      '关闭',
+      '关闭这个 Git 页面，右侧栏回到指南',
+      React.createElement(CloseIcon, { size: 14 }),
+      props.onClose,
+    ),
   )
 
   const statusBar = React.createElement(

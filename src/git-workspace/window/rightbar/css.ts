@@ -162,6 +162,32 @@ export const RIGHTBAR_CSS = `
 .dgw-rb__emptyBox { display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 320px; }
 .dgw-iconBtn--active { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
 
+/* Labelled header actions: glyph + short word, with the long explanation in the
+   native tooltip. Narrow right-column panes keep only the glyphs. */
+.dgw-rb__tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 6px;
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dgw-rb__tool:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
+.dgw-rb__tool:disabled { opacity: .45; cursor: default; }
+.dgw-rb__tool--active { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
+.dgw-rb__toolText { font-size: 11px; }
+.dgw-rb__top--compact .dgw-rb__toolText { display: none; }
+.dgw-rb__top--compact .dgw-rb__tool { padding: 0 5px; }
+.dgw-rb__top--compact { gap: 4px; }
+
 /* The commit form is designed for the wide main panel. Inside the narrow
    right-column pane its row must wrap into stable lines instead of shrinking
    every label/button until the characters stack vertically. */
