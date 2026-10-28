@@ -152,7 +152,12 @@ function SideDiff(props: { readonly hunks: readonly DiffHunk[] }): React.ReactEl
     const other = source === leftRef.current ? rightRef.current : leftRef.current
     if (other !== null) {
       other.scrollTop = source.scrollTop
-      other.scrollLeft = source.scrollLeft
+      // The two sides rarely have the same scrollWidth. Map the horizontal
+      // position proportionally so both panes reach their left/right edge
+      // together instead of the shorter one clamping and "sticking" early.
+      const sourceMax = source.scrollWidth - source.clientWidth
+      const targetMax = other.scrollWidth - other.clientWidth
+      other.scrollLeft = sourceMax <= 0 ? 0 : Math.round((source.scrollLeft / sourceMax) * Math.max(0, targetMax))
     }
     // The gutter has no scrollbar of its own (its viewport is taller than the
     // code panes by the horizontal-bar height), so translate its track instead
