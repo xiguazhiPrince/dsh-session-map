@@ -186,6 +186,33 @@ describe('LogList', () => {
     expect(markup).toContain('加载更多')
     expect(markup).toContain('<svg')
   })
+
+  it('marks merge commits but keeps their subject text', () => {
+    const merge = {
+      ...commit('2222222222222222222222222222222222222222', 'Merge branch v2.1'),
+      parents: ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'],
+    }
+    const commits = [merge]
+    const markup = renderToStaticMarkup(React.createElement(LogList, {
+      commits,
+      graph: computeGraph(commits),
+      selectedOid: null,
+      branchLabel: null,
+      query: '',
+      loading: false,
+      hasMore: false,
+      onSelect: () => undefined,
+      onQueryChange: () => undefined,
+      onClearBranch: () => undefined,
+      onLoadMore: () => undefined,
+      onCherryPick: () => undefined,
+      onRevert: () => undefined,
+      onReset: () => undefined,
+      onTagCreate: () => undefined,
+    }))
+    expect(markup).toContain('dgw-row--merge')
+    expect(markup).toContain('Merge branch v2.1')
+  })
 })
 
 describe('DetailPane', () => {

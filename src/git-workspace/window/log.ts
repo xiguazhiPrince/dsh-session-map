@@ -530,7 +530,11 @@ export function LogList(props: LogListProps): React.ReactElement {
             'div',
             {
               key: commit.oid,
-              className: `dgw-row${props.selectedOid === commit.oid ? ' dgw-row--active' : ''}`,
+              className: [
+                'dgw-row',
+                props.selectedOid === commit.oid ? 'dgw-row--active' : '',
+                commit.parents.length > 1 ? 'dgw-row--merge' : '',
+              ].filter(part => part !== '').join(' '),
               onClick: () => props.onSelect(commit.oid),
               onContextMenu: (event: React.MouseEvent) => {
                 event.preventDefault()
