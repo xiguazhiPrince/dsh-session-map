@@ -153,15 +153,13 @@ function DetailsColumn(props: { readonly model: GitRightbarModel }): React.React
         onSelectFile: model.actions.selectCommitFile,
       }),
     ),
-    React.createElement('div', { className: 'dgw-rb__detailsDiff' },
-      React.createElement('div', { className: 'dgw-rb__detailsHint' },
-        selectedCommitFile === null
-          ? '选择一个文件查看差异'
-          : model.diffLoading
-            ? '正在读取差异…'
-            : '文件差异显示在右上方',
-      ),
-    ),
+    selectedCommitFile === null || model.diffLoading
+      ? React.createElement('div', { className: 'dgw-rb__detailsDiff' },
+        React.createElement('div', { className: 'dgw-rb__detailsHint' },
+          selectedCommitFile === null ? '选择一个文件查看差异' : '正在读取差异…',
+        ),
+      )
+      : null,
   )
 }
 
