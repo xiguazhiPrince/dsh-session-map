@@ -7,7 +7,7 @@
 import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { UpdateDialog, readUpdatePreference } from './update-dialog'
+import { UpdateDialog, readUpdateMode } from './update-dialog'
 
 const noop = (): void => undefined
 
@@ -15,18 +15,16 @@ describe('UpdateDialog', () => {
   it('renders merge and rebase choices plus the reset shortcut', () => {
     const markup = renderToStaticMarkup(React.createElement(UpdateDialog, {
       mode: 'rebase',
-      remember: false,
       busy: false,
       canReset: true,
       onMode: noop,
-      onRemember: noop,
       onReset: noop,
       onCancel: noop,
       onConfirm: noop,
     }))
     expect(markup).toContain('将传入更改合并到当前分支')
     expect(markup).toContain('在传入更改上变基当前分支')
-    expect(markup).toContain('不再显示')
+    expect(markup).not.toContain('不再显示')
     expect(markup).toContain('重置到远程分支…')
     expect(markup).toContain('确定')
     expect(markup).toContain('取消')
@@ -40,11 +38,9 @@ describe('UpdateDialog', () => {
   it('disables the reset shortcut without an upstream', () => {
     const markup = renderToStaticMarkup(React.createElement(UpdateDialog, {
       mode: 'merge',
-      remember: true,
       busy: false,
       canReset: false,
       onMode: noop,
-      onRemember: noop,
       onReset: noop,
       onCancel: noop,
       onConfirm: noop,
@@ -52,7 +48,7 @@ describe('UpdateDialog', () => {
     expect(markup).toMatch(/disabled=""[^>]*>重置到远程分支…|>重置到远程分支…/)
   })
 
-  it('falls back to merge and asks every time without stored preferences', () => {
-    expect(readUpdatePreference()).toEqual({ mode: 'merge', skipDialog: false })
+  it('falls back to merge without stored preferences', () => {
+    expect(readUpdateMode()).toBe('merge')
   })
 })

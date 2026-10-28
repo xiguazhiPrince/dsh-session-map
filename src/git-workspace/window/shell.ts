@@ -16,7 +16,7 @@ import { computeGraph } from './lanes'
 import { BranchTree, DetailPane, LogList, formatWhen } from './log'
 import { BranchDialog, type BranchPrompt } from './branch'
 import { ForcePushDialog, ResetDialog, TagDeleteDialog, TagDialog, type ResetMode } from './history'
-import { UpdateDialog, readUpdatePreference, writeUpdatePreference, type UpdateMode } from './update-dialog'
+import { UpdateDialog, readUpdateMode, writeUpdateMode, type UpdateMode } from './update-dialog'
 import { CommitPane } from './commit'
 import { ConsolePane } from './console'
 import { CSS } from './css'
@@ -200,7 +200,7 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
     const [forcePushTarget, setForcePushTarget] = React.useState<string | null>(null)
     const [forcePushBusy, setForcePushBusy] = React.useState(false)
     const [forcePushError, setForcePushError] = React.useState<GitApiError | null>(null)
-    const [updateDialog, setUpdateDialog] = React.useState<{ readonly mode: UpdateMode; readonly remember: boolean } | null>(null)
+    const [updateDialog, setUpdateDialog] = React.useState<{ readonly mode: UpdateMode } | null>(null)
     const [logColumns, setLogColumns] = React.useState<LogColumns>(() => readLogColumns())
     const logColumnsRef = React.useRef(logColumns)
     logColumnsRef.current = logColumns
@@ -541,21 +541,16 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
       }
     }
 
-    /** Show the merge/rebase choice, or run the remembered mode directly. */
+    /** Show the merge/rebase choice, preselected with the last used mode. */
     const openUpdate = (): void => {
       if (workspaceId === null) return
-      const preference = readUpdatePreference()
-      if (preference.skipDialog) {
-        void runJob({ kind: 'update', workspaceId, mode: preference.mode })
-        return
-      }
-      setUpdateDialog({ mode: preference.mode, remember: false })
+      setUpdateDialog({ mode: readUpdateMode() })
     }
 
     const confirmUpdate = (): void => {
       if (updateDialog === null || workspaceId === null) return
-      if (updateDialog.remember) writeUpdatePreference({ mode: updateDialog.mode, skipDialog: true })
       const mode = updateDialog.mode
+      writeUpdateMode(mode)
       setUpdateDialog(null)
       void runJob({ kind: 'update', workspaceId, mode })
     }
@@ -1039,11 +1034,9 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
         ? null
         : React.createElement(UpdateDialog, {
           mode: updateDialog.mode,
-          remember: updateDialog.remember,
           busy: jobBusy,
           canReset: upstreamOid !== null,
-          onMode: (mode: UpdateMode) => setUpdateDialog({ ...updateDialog, mode }),
-          onRemember: (remember: boolean) => setUpdateDialog({ ...updateDialog, remember }),
+          onMode: (mode: UpdateMode) => setUpdateDialog({ mode }),
           onReset: () => {
             if (upstreamOid === null) return
             setUpdateDialog(null)

@@ -12,36 +12,34 @@ export type UpdateMode = 'merge' | 'rebase'
 /** Stored preference for the next update. */
 export interface UpdatePreference {
   readonly mode: UpdateMode
-  readonly skipDialog: boolean
 }
 
 /** Browser-local key for the update preference. */
 export const UPDATE_PREF_KEY = 'dsh.git-window.updateMode'
 
-/** Default preference: merge, ask every time. */
-const DEFAULT_UPDATE_PREFERENCE: UpdatePreference = { mode: 'merge', skipDialog: false }
+/** Default preference: merge. */
+const DEFAULT_UPDATE_MODE: UpdateMode = 'merge'
 
-/** Read the saved update preference; a denied store falls back to the default. */
-export function readUpdatePreference(): UpdatePreference {
-  if (typeof localStorage === 'undefined') return DEFAULT_UPDATE_PREFERENCE
+/** Read the last chosen mode; a denied or malformed store falls back to merge. */
+export function readUpdateMode(): UpdateMode {
+  if (typeof localStorage === 'undefined') return DEFAULT_UPDATE_MODE
   try {
     const raw = localStorage.getItem(UPDATE_PREF_KEY)
-    if (raw === null) return DEFAULT_UPDATE_PREFERENCE
-    const parsed = JSON.parse(raw) as { readonly mode?: unknown; readonly skipDialog?: unknown }
-    return {
-      mode: parsed.mode === 'rebase' ? 'rebase' : 'merge',
-      skipDialog: parsed.skipDialog === true,
-    }
+    if (raw === null) return DEFAULT_UPDATE_MODE
+    if (raw === 'rebase' || raw === 'merge') return raw
+    // Legacy object form `{ mode, skipDialog }`.
+    const parsed = JSON.parse(raw) as { readonly mode?: unknown }
+    return parsed.mode === 'rebase' ? 'rebase' : 'merge'
   } catch {
-    return DEFAULT_UPDATE_PREFERENCE
+    return DEFAULT_UPDATE_MODE
   }
 }
 
-/** Persist the update preference; denial is not an error. */
-export function writeUpdatePreference(preference: UpdatePreference): void {
+/** Persist the last chosen mode; denial is not an error. */
+export function writeUpdateMode(mode: UpdateMode): void {
   if (typeof localStorage === 'undefined') return
   try {
-    localStorage.setItem(UPDATE_PREF_KEY, JSON.stringify(preference))
+    localStorage.setItem(UPDATE_PREF_KEY, mode)
   } catch {
     // Private mode or blocked storage: the dialog still works for this run.
   }
@@ -50,12 +48,10 @@ export function writeUpdatePreference(preference: UpdatePreference): void {
 /** Props for the update dialog. */
 export interface UpdateDialogProps {
   readonly mode: UpdateMode
-  readonly remember: boolean
   readonly busy: boolean
   /** The local branch has a resolvable upstream, so reset can be offered. */
   readonly canReset: boolean
   readonly onMode: (mode: UpdateMode) => void
-  readonly onRemember: (remember: boolean) => void
   readonly onReset: () => void
   readonly onCancel: () => void
   readonly onConfirm: () => void
@@ -90,14 +86,6 @@ export function UpdateDialog(props: UpdateDialogProps): React.ReactElement {
           onChange: () => props.onMode('rebase'),
         }),
         '在传入更改上变基当前分支',
-      ),
-      React.createElement('label', { className: 'dgw-choice' },
-        React.createElement('input', {
-          type: 'checkbox',
-          checked: props.remember,
-          onChange: (event: React.ChangeEvent<HTMLInputElement>) => props.onRemember(event.target.checked),
-        }),
-        '不再显示',
       ),
       React.createElement(
         'div',
