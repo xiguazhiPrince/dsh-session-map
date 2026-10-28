@@ -1,4 +1,4 @@
-# DSH Git 工具窗口实施计划（测试夹具先行）
+﻿# DSH Git 工具窗口实施计划（测试夹具先行）
 
 > 状态：**已完成**（2026-10-27）｜ 对应规格：[git-workspace-spec.md](git-workspace-spec.md)
 > 实现提交：`1c6f3d9`（只读/提交/分支）、`541a6ea`（fetch/update/push 作业）、`ffc5b44`（历史写操作/ stash / tag / 打磨）
@@ -110,7 +110,7 @@ pnpm build                                  # 重建 lib/
 
 ### 10.1 未完成可选项（路线图）
 
-**已完成（0.4.0）**：**R1 右侧栏一页式 Git 页面** —— 原生右栏 tab type `dsh-session-map.git`（kind `git-window`）+ 会话头「Git」按钮（order 41）+ 右栏 `+` 指南卡片；会话级、自动跟随会话工作区；一页内「提交面板 + 差异查看器」在上、「分支树 + 提交列表 + 提交详情」在下；差异支持统一/并排，断点 760/700/520/800；每会话 UI 偏好 `dsh.git-window.rightbar.<sessionId>`。实现：`src/git-workspace/window/rightbar/`、`window/diff-view.ts`、`window/feedback.ts`、`src/session-map/sidebar-right.ts`。主面板 Git 工具窗口保留不变。
+**已完成（0.4.0）**：**R1 右侧栏一页式 Git 页面** —— 原生右栏 tab type `dsh-session-map.git`（kind `git-window`）+ 会话头「Git」按钮（order 41）+ 右栏 `+` 指南卡片；会话级、自动跟随会话工作区；一页内「提交面板 + 差异查看器」在上、「分支树 + 提交列表 + 提交详情」在下；差异支持统一/并排，断点 700/520/800；每会话 UI 偏好 `dsh.git-window.rightbar.<sessionId>`。实现：`src/git-workspace/window/rightbar/`、`window/diff-view.ts`、`window/feedback.ts`、`src/session-map/sidebar-right.ts`。主面板 Git 工具窗口保留不变。
 
 | # | 可选项 | 当前现状 | 说明 |
 |---|---|---|---|

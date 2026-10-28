@@ -639,7 +639,10 @@ export function useGitRightbarModel(deps: GitRightbarModelDeps): GitRightbarMode
     .filter((error): error is GitApiError => error !== null)
   const banner = failures[0] ?? null
   const notRepo = snapshotError?.code === 'not-a-repository'
-  const commitOpen = prefs.commitOpen === null ? width >= 760 : prefs.commitOpen
+  // The changes panel is the page's primary action surface: show it by default
+  // at every width. Users who want it out of the way collapse it once, and the
+  // per-session preference keeps that choice.
+  const commitOpen = prefs.commitOpen === null ? true : prefs.commitOpen
   const diffHint = target !== null && target.kind === 'change' && target.group === 'untracked'
     ? '未跟踪文件没有差异可显示'
     : undefined
