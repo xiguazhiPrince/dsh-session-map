@@ -137,6 +137,8 @@ const ACTIONS: GitRightbarActions = {
   changesChanged: noop,
   toggleCommitPanel: noop,
   setCommitWidth: noop,
+  setLogTreeWidth: noop,
+  setLogDetailWidth: noop,
   setLogHeight: noop,
   cycleDiffMode: noop,
   setBranchValue: noop,
@@ -183,6 +185,8 @@ function makeModel(overrides: Partial<GitRightbarModel> = {}): GitRightbarModel 
     diffMode: 'side',
     commitOpen: true,
     commitWidth: 320,
+    logTreeWidth: 240,
+    logDetailWidth: 320,
     logHeight: 320,
     job: null,
     jobBusy: false,
@@ -219,6 +223,8 @@ describe('GitRightbarLayout', () => {
     // Wide panes show the labelled header actions, with the long explanation
     // carried by the native tooltip.
     expect(markup).toContain('dgw-rb__toolText')
+    expect(markup).toContain('dgw-rb__logTree')
+    expect(markup).toContain('dgw-rb__logDetails')
     expect(markup).toContain('下载远端状态')
     expect(markup).toContain('更新当前分支')
     expect(markup).toContain('推送')

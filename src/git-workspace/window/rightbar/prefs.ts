@@ -19,6 +19,10 @@ export interface GitRightbarPrefs {
   readonly commitOpen: boolean | null
   /** Width of the commit panel, in px. */
   readonly commitWidth: number
+  /** Width of the branch tree in the log section, in px. */
+  readonly logTreeWidth: number
+  /** Width of the commit-detail column in the log section, in px. */
+  readonly logDetailWidth: number
   /** Height of the log area, in px. */
   readonly logHeight: number
   /** Diff presentation preference. */
@@ -35,11 +39,21 @@ export const COMMIT_WIDTH_DEFAULT = 320
 export const LOG_HEIGHT_MIN = 140
 /** Default log-area height. */
 export const LOG_HEIGHT_DEFAULT = 320
+/** Bounds and default of the branch-tree column in the log section. */
+export const LOG_TREE_MIN = 180
+export const LOG_TREE_MAX = 420
+export const LOG_TREE_DEFAULT = 240
+/** Bounds and default of the commit-detail column in the log section. */
+export const LOG_DETAIL_MIN = 240
+export const LOG_DETAIL_MAX = 560
+export const LOG_DETAIL_DEFAULT = 320
 
 /** The values a Session starts with before it recorded anything. */
 export const DEFAULT_PREFS: GitRightbarPrefs = {
   commitOpen: null,
   commitWidth: COMMIT_WIDTH_DEFAULT,
+  logTreeWidth: LOG_TREE_DEFAULT,
+  logDetailWidth: LOG_DETAIL_DEFAULT,
   logHeight: LOG_HEIGHT_DEFAULT,
   diffMode: 'auto',
 }
@@ -67,6 +81,8 @@ function sanitize(value: unknown): GitRightbarPrefs {
   return {
     commitOpen,
     commitWidth: clamp(record.commitWidth, COMMIT_WIDTH_MIN, COMMIT_WIDTH_MAX, COMMIT_WIDTH_DEFAULT),
+    logTreeWidth: clamp(record.logTreeWidth, LOG_TREE_MIN, LOG_TREE_MAX, LOG_TREE_DEFAULT),
+    logDetailWidth: clamp(record.logDetailWidth, LOG_DETAIL_MIN, LOG_DETAIL_MAX, LOG_DETAIL_DEFAULT),
     logHeight: clamp(record.logHeight, LOG_HEIGHT_MIN, 2_000, LOG_HEIGHT_DEFAULT),
     diffMode,
   }

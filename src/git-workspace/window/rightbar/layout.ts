@@ -161,22 +161,27 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
   const showBranches = width >= BRANCHES_MIN_WIDTH
   const showDetails = width >= DETAILS_MIN_WIDTH
 
-  const [drag, setDrag] = React.useState<{ readonly kind: 'log' | 'commit'; readonly start: number; readonly base: number } | null>(null)
+  const [drag, setDrag] = React.useState<{ readonly kind: 'log' | 'commit' | 'logTree' | 'logDetail'; readonly start: number; readonly base: number } | null>(null)
   const [dragValue, setDragValue] = React.useState<number | null>(null)
   const [drawerOpen, setDrawerOpen] = React.useState(false)
 
   React.useEffect(() => {
     if (drag === null) return undefined
     const move = (event: PointerEvent): void => {
-      const delta = drag.kind === 'log' ? drag.start - event.clientY : event.clientX - drag.start
-      const min = drag.kind === 'log' ? 140 : 240
-      setDragValue(Math.max(min, drag.base + delta))
+      const delta = drag.kind === 'log'
+        ? drag.start - event.clientY
+        : drag.kind === 'logDetail'
+          ? drag.start - event.clientX
+          : event.clientX - drag.start
+      setDragValue(drag.base + delta)
     }
     const up = (): void => {
       const value = dragValue
       if (value !== null) {
         if (drag.kind === 'log') model.actions.setLogHeight(value)
-        else model.actions.setCommitWidth(value)
+        else if (drag.kind === 'commit') model.actions.setCommitWidth(value)
+        else if (drag.kind === 'logTree') model.actions.setLogTreeWidth(value)
+        else model.actions.setLogDetailWidth(value)
       }
       setDrag(null)
       setDragValue(null)
@@ -191,6 +196,12 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
 
   const effectiveCommitWidth = drag !== null && drag.kind === 'commit' && dragValue !== null ? dragValue : commitWidth
   const effectiveLogHeight = drag !== null && drag.kind === 'log' && dragValue !== null ? Math.min(dragValue, Math.max(160, height - 220)) : logHeight
+  const logTreeWidth = drag !== null && drag.kind === 'logTree' && dragValue !== null
+    ? Math.min(Math.max(180, dragValue), 420)
+    : model.logTreeWidth
+  const logDetailWidth = drag !== null && drag.kind === 'logDetail' && dragValue !== null
+    ? Math.min(Math.max(240, dragValue), 560)
+    : model.logDetailWidth
 
   const head = model.head ?? EMPTY_HEAD
   const counts = model.snapshot?.counts
@@ -337,7 +348,10 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
     'div',
     { className: 'dgw-rb__logBody' },
     showBranches
-      ? React.createElement(BranchTree, {
+      ? React.createElement(
+        'div',
+        { className: 'dgw-rb__logTree', style: { width: logTreeWidth, flexBasis: logTreeWidth } },
+        React.createElement(BranchTree, {
         head,
         branches: model.branches,
         selectedRef: model.branchFilter,
@@ -350,6 +364,17 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
         onRebaseBranch: model.actions.rebaseBranch,
         onDeleteTag: model.actions.deleteTag,
         onForcePush: model.actions.openForcePush,
+      }),
+      )
+      : null,
+    showBranches
+      ? React.createElement('div', {
+        className: 'dgw-rb__vsplit',
+        title: '拖动调整分支树宽度',
+        onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => {
+          event.preventDefault()
+          setDrag({ kind: 'logTree', start: event.clientX, base: logTreeWidth })
+        },
       })
       : null,
     React.createElement(LogList, {
@@ -372,7 +397,23 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
       onReset: model.actions.openReset,
       onTagCreate: model.actions.openTagCreate,
     }),
-    showDetails ? React.createElement(DetailsColumn, { model }) : null,
+    showDetails
+      ? React.createElement('div', {
+        className: 'dgw-rb__vsplit',
+        title: '拖动调整提交详情宽度',
+        onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => {
+          event.preventDefault()
+          setDrag({ kind: 'logDetail', start: event.clientX, base: logDetailWidth })
+        },
+      })
+      : null,
+    showDetails
+      ? React.createElement(
+        'div',
+        { className: 'dgw-rb__logDetails', style: { width: logDetailWidth, flexBasis: logDetailWidth } },
+        React.createElement(DetailsColumn, { model }),
+      )
+      : null,
     !showDetails && drawerOpen
       ? React.createElement(
         'div',

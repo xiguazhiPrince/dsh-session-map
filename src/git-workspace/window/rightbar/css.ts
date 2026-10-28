@@ -98,6 +98,12 @@ export const RIGHTBAR_CSS = `
   background: var(--dsw-alias-bg-layer-1);
 }
 .dgw-rb__logBody { position: relative; flex: 1 1 auto; display: flex; min-height: 0; }
+/* The log's branch tree and detail column own their adjustable width; the
+   commit list in the middle takes the rest. */
+.dgw-rb__logTree { flex: 0 0 auto; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.dgw-rb__logTree > .dgw-tree { width: 100%; flex: 1 1 auto; min-width: 0; }
+.dgw-rb__logDetails { flex: 0 0 auto; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.dgw-rb__logDetails > .dgw-details { width: 100%; flex: 1 1 auto; min-width: 0; border-left: 0; }
 .dgw-rb__details {
   flex: 0 0 250px;
   width: 250px;

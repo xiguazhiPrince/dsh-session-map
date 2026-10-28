@@ -35,7 +35,15 @@ import {
 } from '../runtime'
 import type { BranchPrompt } from '../branch'
 import type { ResetMode } from '../history'
-import { COMMIT_WIDTH_MIN, type DiffModePref, type GitRightbarPrefs } from './prefs'
+import {
+  COMMIT_WIDTH_MIN,
+  LOG_DETAIL_MAX,
+  LOG_DETAIL_MIN,
+  LOG_TREE_MAX,
+  LOG_TREE_MIN,
+  type DiffModePref,
+  type GitRightbarPrefs,
+} from './prefs'
 
 /** Poll interval while the page is visible. */
 const POLL_VISIBLE_MS = 3_000
@@ -112,6 +120,8 @@ export interface GitRightbarModel {
   readonly diffMode: DiffMode
   readonly commitOpen: boolean
   readonly commitWidth: number
+  readonly logTreeWidth: number
+  readonly logDetailWidth: number
   readonly logHeight: number
   readonly job: GitJobView | null
   readonly jobBusy: boolean
@@ -155,6 +165,8 @@ export interface GitRightbarActions {
   readonly changesChanged: () => void
   readonly toggleCommitPanel: () => void
   readonly setCommitWidth: (width: number) => void
+  readonly setLogTreeWidth: (width: number) => void
+  readonly setLogDetailWidth: (width: number) => void
   readonly setLogHeight: (height: number) => void
   readonly cycleDiffMode: () => void
   readonly setBranchValue: (value: string) => void
@@ -719,6 +731,8 @@ export function useGitRightbarModel(deps: GitRightbarModelDeps): GitRightbarMode
     changesChanged: refresh,
     toggleCommitPanel: () => updatePrefs({ commitOpen: !commitOpen }),
     setCommitWidth: (next: number) => updatePrefs({ commitWidth: Math.min(Math.max(COMMIT_WIDTH_MIN, Math.round(next)), 520) }),
+    setLogTreeWidth: (next: number) => updatePrefs({ logTreeWidth: Math.min(Math.max(LOG_TREE_MIN, Math.round(next)), LOG_TREE_MAX) }),
+    setLogDetailWidth: (next: number) => updatePrefs({ logDetailWidth: Math.min(Math.max(LOG_DETAIL_MIN, Math.round(next)), LOG_DETAIL_MAX) }),
     setLogHeight: (next: number) => updatePrefs({ logHeight: Math.max(140, Math.round(next)) }),
     cycleDiffMode: () => {
       const resolved = resolveDiffMode(prefs.diffMode, width)
@@ -765,6 +779,8 @@ export function useGitRightbarModel(deps: GitRightbarModelDeps): GitRightbarMode
     diffMode: resolveDiffMode(prefs.diffMode, width),
     commitOpen,
     commitWidth: Math.min(Math.max(COMMIT_WIDTH_MIN, prefs.commitWidth), Math.max(COMMIT_WIDTH_MIN, width - 320)),
+    logTreeWidth: prefs.logTreeWidth,
+    logDetailWidth: prefs.logDetailWidth,
     logHeight: prefs.logHeight,
     job,
     jobBusy,
