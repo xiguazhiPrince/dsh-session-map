@@ -299,9 +299,8 @@ export const CSS = `
    across all three so rows stay aligned; the numbers never move sideways. */
 .dgw-diffSide { display: flex; align-items: stretch; height: 100%; min-height: 0; overflow: hidden; }
 .dgw-diffSidePane { flex: 1 1 50%; min-width: 0; min-height: 0; overflow-x: scroll; overflow-y: auto; overscroll-behavior: contain; }
-/* Hide the two mirrored vertical scrollbars; the horizontal one is the control
-   the user asked for, so leave it visible at each pane's bottom. */
-.dgw-diffSidePane::-webkit-scrollbar:vertical { width: 0; }
+/* Both panes keep their own (linked) vertical scrollbar, like IDEA's diff:
+   dragging either one moves both, and wheel/trackpad still works. */
 .dgw-diffSideGutter {
   flex: 0 0 84px;
   width: 84px;
