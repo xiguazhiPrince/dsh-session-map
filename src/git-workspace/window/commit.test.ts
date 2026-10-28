@@ -79,7 +79,7 @@ describe('CommitPane (right-column presentation)', () => {
     expect(markup).toContain('dgw-changeRow--active')
     expect(markup).toContain('dgw-checkbox--button')
     expect(markup).toContain('aria-pressed')
-    expect(markup).toContain('dgw-changeRow--nested')
+    expect(markup).toContain('dgw-changeGuide')
   })
 
   it('renders collapsible section headers', () => {

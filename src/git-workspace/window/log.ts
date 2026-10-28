@@ -62,6 +62,12 @@ function refLabels(row: CommitRow): Array<{ readonly text: string; readonly tag:
   return labels
 }
 
+/** One vertical guide per branch-tree nesting level. */
+function treeGuides(depth: number, prefix: string): React.ReactNode[] {
+  return Array.from({ length: depth }, (_, index) =>
+    React.createElement('span', { className: 'dgw-treeGuide', key: `${prefix}-g${index}` }))
+}
+
 /** Render one branch row. */
 function branchRow(
   branch: BranchRef,
@@ -90,12 +96,13 @@ function branchRow(
         branch.isHead ? 'dgw-treeRow--current' : '',
         active ? 'dgw-treeRow--active' : '',
       ].filter(Boolean).join(' '),
-      style: { paddingLeft: 14 + depth * 12 },
+      style: { paddingLeft: 8 + depth * 12 },
       onClick: onSelect,
       onDoubleClick: branch.type === 'local' ? onCheckout : undefined,
       onContextMenu: branch.type === 'remote' ? undefined : onMenu,
       title: branch.name,
     },
+    ...treeGuides(depth, branch.ref),
     icon,
     React.createElement('span', { className: 'dgw-treeName' }, branch.name.split('/').at(-1) ?? branch.name),
     badge === null || badge === '' ? null : React.createElement('span', { className: 'dgw-treeBadge' }, badge),
@@ -218,7 +225,7 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
 
   const renderNodes = (nodes: readonly BranchTreeNode[], depth: number): React.ReactNode[] => nodes.flatMap((node) => {
     const rows: React.ReactNode[] = []
-    const paddingLeft = 14 + depth * 12
+    const paddingLeft = 8 + depth * 12
     if (node.branch !== undefined && node.children.length === 0) {
       const branch = node.branch
       rows.push(branchRow(
@@ -253,6 +260,7 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
         'data-open': open,
         onClick: () => toggleFolder(node.path),
       },
+      ...treeGuides(depth, node.path),
       React.createElement(ChevronIcon, { size: 12 }),
       React.createElement(FolderIcon, { size: 14 }),
       React.createElement('span', { className: 'dgw-treeName' }, node.segment),

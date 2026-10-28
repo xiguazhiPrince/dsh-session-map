@@ -65,8 +65,70 @@ interface ChangeRowOptions {
   readonly selected: boolean
   /** Row click previews the entry; the checkbox owns the staging toggle. */
   readonly onSelect?: (() => void) | undefined
-  /** Nested under a directory row. */
-  readonly nested?: boolean
+  /** Directory nesting depth; each level draws one guide line. */
+  readonly depth?: number
+  /** Text to show instead of the full path (the right-column tree shows names). */
+  readonly label?: string
+}
+
+/** One directory in the right-column change tree. */
+interface DirNode {
+  readonly name: string
+  readonly path: string
+  readonly dirs: Map<string, DirNode>
+  readonly files: ChangedEntry[]
+}
+
+/** Build a directory tree for one section's rows. */
+function buildChangeTree(rows: readonly ChangedEntry[]): { readonly files: ChangedEntry[]; readonly dirs: DirNode[] } {
+  const root: DirNode = { name: '', path: '', dirs: new Map(), files: [] }
+  for (const entry of rows) {
+    const parts = entry.path.split('/')
+    let node = root
+    for (let index = 0; index < parts.length - 1; index += 1) {
+      const name = parts[index] as string
+      const path = node.path === '' ? name : `${node.path}/${name}`
+      let child = node.dirs.get(name)
+      if (child === undefined) {
+        child = { name, path, dirs: new Map(), files: [] }
+        node.dirs.set(name, child)
+      }
+      node = child
+    }
+    node.files.push(entry)
+  }
+  const sort = (node: DirNode): void => {
+    node.files.sort((left, right) => left.path.localeCompare(right.path))
+    for (const child of node.dirs.values()) sort(child)
+  }
+  sort(root)
+  return { files: root.files, dirs: [...root.dirs.values()] }
+}
+
+/** Total files under one directory node (including nested directories). */
+function countFiles(node: DirNode): number {
+  let total = node.files.length
+  for (const child of node.dirs.values()) total += countFiles(child)
+  return total
+}
+
+/** IDEA-style single-child chains collapsed into one row. */
+function compactDir(node: DirNode): { readonly node: DirNode; readonly label: string } {
+  let current = node
+  let label = node.name
+  while (current.files.length === 0 && current.dirs.size === 1) {
+    const only = [...current.dirs.values()][0]
+    if (only === undefined) break
+    label += `/${only.name}`
+    current = only
+  }
+  return { node: current, label }
+}
+
+/** One guide line per nesting level. */
+function depthGuides(depth: number, prefix: string): React.ReactNode[] {
+  return Array.from({ length: depth }, (_, index) =>
+    React.createElement('span', { className: 'dgw-changeGuide', key: `${prefix}-g${index}` }))
 }
 
 /** Render one change row. */
@@ -79,11 +141,13 @@ function changeRow(
   options: ChangeRowOptions,
 ): React.ReactElement {
   const activate = options.onSelect ?? onToggle
+  const depth = options.depth ?? 0
   const classes = [
     'dgw-changeRow',
     options.selected ? 'dgw-changeRow--active' : '',
-    options.nested === true ? 'dgw-changeRow--nested' : '',
   ].filter(part => part !== '').join(' ')
+  const fullPath = entry.oldPath === undefined ? entry.path : `${entry.oldPath} → ${entry.path}`
+  const label = options.label ?? fullPath
   const checkbox = options.onSelect === undefined
     ? React.createElement('span', { className: 'dgw-checkbox', 'data-checked': checked, 'aria-hidden': true }, checked ? '✓' : '')
     : React.createElement('button', {
@@ -103,14 +167,14 @@ function changeRow(
     {
       key: `${entry.group}:${entry.path}`,
       className: classes,
+      style: { paddingLeft: 8 + depth * 12 },
       onClick: disabled ? undefined : activate,
-      title: entry.oldPath === undefined ? entry.path : `${entry.oldPath} → ${entry.path}`,
+      title: fullPath,
     },
+    ...depthGuides(depth, entry.path),
     checkbox,
     React.createElement(FileIcon, { size: 13 }),
-    React.createElement('span', { className: 'dgw-changePath' },
-      entry.oldPath === undefined ? entry.path : `${entry.oldPath} → ${entry.path}`,
-    ),
+    React.createElement('span', { className: 'dgw-changePath' }, label),
     React.createElement('span', { className: 'dgw-changeStatus', style: { color: statusColour(entry) } }, entry.status),
     onDiscard === undefined
       ? null
@@ -270,25 +334,10 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
     { title: `未版本控制 (${untracked.length})`, rows: untracked, checked: false, discardable: true },
   ]
 
-  /** One section's rows bucketed by directory; root files come first. */
-  const rowsByDirectory = (rows: readonly ChangedEntry[]): Array<{ dir: string; rows: ChangedEntry[] }> => {
-    const buckets = new Map<string, ChangedEntry[]>()
-    for (const entry of rows) {
-      const slash = entry.path.lastIndexOf('/')
-      const dir = slash < 0 ? '' : entry.path.slice(0, slash)
-      const bucket = buckets.get(dir)
-      if (bucket === undefined) buckets.set(dir, [entry])
-      else bucket.push(entry)
-    }
-    return [...buckets.entries()]
-      .map(([dir, bucket]) => ({ dir, rows: bucket }))
-      .sort((left, right) => left.dir === '' ? -1 : right.dir === '' ? 1 : left.dir.localeCompare(right.dir))
-  }
-
-  /** Render one section's rows, flat or grouped under collapsible directories. */
+  /** Render one section's rows, flat or as a nested directory tree. */
   const renderRows = (rows: readonly ChangedEntry[], checked: boolean, discardable: boolean): React.ReactNode[] => {
     const nodes: React.ReactNode[] = []
-    const emit = (entry: ChangedEntry, nested: boolean): void => {
+    const emit = (entry: ChangedEntry, depth: number): void => {
       nodes.push(changeRow(
         entry,
         checked,
@@ -298,40 +347,43 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
         {
           selected: props.selectedKey === `${entry.group}:${entry.path}`,
           ...(props.onSelect === undefined ? {} : { onSelect: () => { props.onSelect?.(entry) } }),
-          nested,
+          depth,
+          label: entry.path.split('/').pop() ?? entry.path,
         },
       ))
     }
     if (props.groupByDirectory !== true) {
-      for (const entry of rows) emit(entry, false)
+      for (const entry of rows) emit(entry, 0)
       return nodes
     }
-    for (const group of rowsByDirectory(rows)) {
-      if (group.dir === '') {
-        for (const entry of group.rows) emit(entry, false)
-        continue
-      }
-      const open = collapsedDirs[group.dir] !== true
+    const tree = buildChangeTree(rows)
+    for (const entry of tree.files) emit(entry, 0)
+    const emitDir = (raw: DirNode, depth: number): void => {
+      const { node, label } = compactDir(raw)
+      const open = collapsedDirs[node.path] !== true
       nodes.push(React.createElement(
         'button',
         {
-          key: `dir:${group.dir}`,
+          key: `dir:${node.path}`,
           className: 'dgw-changeDir',
           type: 'button',
-          title: group.dir,
-          onClick: () => setCollapsedDirs(state => ({ ...state, [group.dir]: open })),
+          title: node.path,
+          style: { paddingLeft: 8 + depth * 12 },
+          onClick: () => setCollapsedDirs(state => ({ ...state, [node.path]: open })),
         },
+        ...depthGuides(depth, node.path),
         React.createElement('span', { className: 'dgw-changeChevron', 'data-open': open ? 'true' : 'false' },
           React.createElement(ChevronIcon, { size: 11 }),
         ),
         React.createElement(FolderIcon, { size: 13 }),
-        React.createElement('span', { className: 'dgw-changeDirName' }, group.dir.split('/').pop() ?? group.dir),
-        React.createElement('span', { className: 'dgw-changeDirCount' }, `${group.rows.length} 个文件`),
+        React.createElement('span', { className: 'dgw-changeDirName' }, label),
+        React.createElement('span', { className: 'dgw-changeDirCount' }, `${countFiles(node)} 个文件`),
       ))
-      if (open) {
-        for (const entry of group.rows) emit(entry, true)
-      }
+      if (!open) return
+      for (const child of node.dirs.values()) emitDir(child, depth + 1)
+      for (const entry of node.files) emit(entry, depth + 1)
     }
+    for (const dir of tree.dirs) emitDir(dir, 0)
     return nodes
   }
 

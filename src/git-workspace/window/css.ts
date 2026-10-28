@@ -252,20 +252,28 @@ export const CSS = `
 .dgw-changeScroll { flex: 1 1 auto; overflow: auto; min-height: 0; padding: 4px 0; }
 .dgw-changeSection { padding: 2px 0; }
 .dgw-changeHead { display: flex; align-items: center; gap: 6px; padding: 3px 10px; color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 600; }
-.dgw-changeRow { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px 0 14px; cursor: pointer; }
+.dgw-changeRow { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px 0 8px; cursor: pointer; }
 .dgw-changeRow:hover { background: var(--dsw-alias-bg-layer-2); }
 /* The right-column page previews on row click: the matching row stays marked. */
 .dgw-changeRow--active,
 .dgw-changeRow--active:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
-.dgw-changeRow--nested { padding-left: 26px; }
+/* One vertical guide per nesting level, so deep paths read as a tree. */
+.dgw-changeGuide,
+.dgw-treeGuide {
+  flex: 0 0 12px;
+  width: 12px;
+  align-self: stretch;
+  border-left: 1px solid var(--dsw-alias-border-l1);
+  opacity: .8;
+}
 .dgw-changeHead--button { width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .dgw-checkbox { flex: 0 0 14px; width: 14px; height: 14px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 3px; background: var(--dsw-alias-bg-layer-1); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; line-height: 1; color: var(--dsw-alias-bg-base); }
 .dgw-checkbox--button { padding: 0; font: inherit; cursor: pointer; }
 .dgw-checkbox[data-checked='true'] { background: var(--dsw-alias-brand-primary); border-color: var(--dsw-alias-brand-primary); }
 /* Directory rows of the grouped change tree (right-column page). */
-.dgw-changeDir { display: flex; align-items: center; gap: 5px; width: 100%; height: 24px; padding: 0 10px 0 14px; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font-size: 12px; text-align: left; cursor: pointer; white-space: nowrap; }
+.dgw-changeDir { display: flex; align-items: center; gap: 5px; width: 100%; height: 24px; padding: 0 10px 0 8px; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font-size: 12px; text-align: left; cursor: pointer; white-space: nowrap; }
 .dgw-changeDir:hover { background: var(--dsw-alias-bg-layer-2); }
-.dgw-changeDirName { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.dgw-changeDirName { flex: 0 1 auto; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .dgw-changeDirCount { margin-left: auto; color: var(--dsw-alias-label-secondary); font-size: 10px; }
 .dgw-changeChevron { display: inline-flex; transition: transform .12s ease; }
 .dgw-changeChevron[data-open='false'] { transform: rotate(-90deg); }
