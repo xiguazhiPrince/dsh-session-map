@@ -130,6 +130,7 @@ function DetailsColumn(props: { readonly model: GitRightbarModel }): React.React
     )
   }
   const detail = model.detail
+  const selectedCommitFile = model.target !== null && model.target.kind === 'commit' ? model.target.path : null
   return React.createElement(
     'div',
     { className: 'dgw-rb__details' },
@@ -148,9 +149,18 @@ function DetailsColumn(props: { readonly model: GitRightbarModel }): React.React
       React.createElement(CommitMeta, { detail }),
       React.createElement(CommitFiles, {
         files: detail.files,
-        selectedFile: model.target !== null && model.target.kind === 'commit' ? model.target.path : null,
+        selectedFile: selectedCommitFile,
         onSelectFile: model.actions.selectCommitFile,
       }),
+    ),
+    React.createElement('div', { className: 'dgw-rb__detailsDiff' },
+      React.createElement('div', { className: 'dgw-rb__detailsHint' },
+        selectedCommitFile === null
+          ? '选择一个文件查看差异'
+          : model.diffLoading
+            ? '正在读取差异…'
+            : '文件差异显示在右上方',
+      ),
     ),
   )
 }

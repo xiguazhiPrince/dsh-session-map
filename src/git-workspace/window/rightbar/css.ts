@@ -122,7 +122,21 @@ export const RIGHTBAR_CSS = `
   border-bottom: 1px solid var(--dsw-alias-border-l1);
   flex: 0 0 auto;
 }
-.dgw-rb__detailsScroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 10px; }
+.dgw-rb__detailsScroll { flex: 0 1 auto; max-height: 60%; min-height: 0; overflow: auto; padding: 8px 10px; }
+/* Remaining height reads as the diff slot instead of a blank column. */
+.dgw-rb__detailsDiff {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+.dgw-rb__detailsHint { max-width: 220px; }
 .dgw-rb__drawer {
   position: absolute;
   inset: 0;
