@@ -444,44 +444,42 @@ function Gutter(props: {
     if (index !== undefined && !beforeIndex.has(parent)) openedLanes.add(index)
   }
   const children: React.ReactElement[] = []
+  // A lane that shifts horizontally because a merge inserted another lane is
+  // drawn as one diagonal across the whole row, like IDEA's graph, instead of
+  // two verticals joined by a midpoint elbow.
+  const coveredAfter = new Set<number>()
   props.before.forEach((oid, index) => {
-    children.push(React.createElement('line', {
-      key: `b${index}`,
-      x1: x(index), y1: 0, x2: x(index), y2: middle,
-      stroke: colour(index), strokeWidth: 1.5,
-    }))
-    // A merge insertion shifts the lanes to the right of the commit; connect
-    // the old and new x positions at the row's midpoint.
     const next = afterIndex.get(oid)
-    if (next !== undefined && next !== index) {
+    if (next === undefined || next === index) {
       children.push(React.createElement('line', {
-        key: `bs${index}`,
-        x1: x(index), y1: middle, x2: x(next), y2: middle,
-        stroke: colour(next), strokeWidth: 1.5,
+        key: `b${index}`,
+        x1: x(index), y1: 0, x2: x(index), y2: middle,
+        stroke: colour(index), strokeWidth: 1.5, strokeLinecap: 'round',
       }))
+      return
     }
+    coveredAfter.add(next)
+    children.push(React.createElement('path', {
+      key: `b${index}`,
+      className: 'dgw-laneShift',
+      d: `M ${x(index)} 0 L ${x(next)} ${height}`,
+      fill: 'none',
+      stroke: colour(next),
+      strokeWidth: 1.5,
+      strokeLinecap: 'round',
+    }))
   })
   props.after.forEach((oid, index) => {
-    if (openedLanes.has(index)) return
+    if (openedLanes.has(index) || coveredAfter.has(index)) return
     children.push(React.createElement('line', {
       key: `a${index}`,
       x1: x(index), y1: middle, x2: x(index), y2: height,
-      stroke: colour(index), strokeWidth: 1.5,
+      stroke: colour(index), strokeWidth: 1.5, strokeLinecap: 'round',
     }))
   })
   extraParents.forEach((parent, index) => {
     const target = afterIndex.get(parent)
     if (target === undefined || target === props.lane) return
-    if (!openedLanes.has(target)) {
-      // Joining a lane that is already alive: a short branch at the midpoint.
-      children.push(React.createElement('line', {
-        key: `m${index}`,
-        x1: x(props.lane), y1: middle, x2: x(target), y2: middle,
-        stroke: colour(target), strokeWidth: 1.5,
-      }))
-      return
-    }
-    // Forking a new lane: curve from the dot down into that lane.
     const from = x(props.lane)
     const to = x(target)
     children.push(React.createElement('path', {
@@ -491,6 +489,7 @@ function Gutter(props: {
       fill: 'none',
       stroke: colour(target),
       strokeWidth: 1.5,
+      strokeLinecap: 'round',
     }))
   })
   children.push(React.createElement('circle', {
@@ -499,6 +498,8 @@ function Gutter(props: {
     cy: middle,
     r: 3.5,
     fill: colour(props.lane),
+    stroke: 'var(--dsw-alias-bg-base)',
+    strokeWidth: 1.5,
   }))
   return React.createElement('svg', { className: 'dgw-gutter', width: props.width, height }, ...children)
 }
