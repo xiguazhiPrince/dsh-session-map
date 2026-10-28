@@ -174,6 +174,7 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
     const [selectedOids, setSelectedOids] = React.useState<readonly string[]>([])
     const [mergedFiles, setMergedFiles] = React.useState<readonly FileChange[] | null>(null)
     const [multiDetails, setMultiDetails] = React.useState<ReadonlyMap<string, CommitDetail> | null>(null)
+    const [diffRange, setDiffRange] = React.useState<{ readonly from: string; readonly to: string; readonly file: string } | null>(null)
     const pendingFileRef = React.useRef<string | null>(null)
     const [detail, setDetail] = React.useState<CommitDetail | null>(null)
     const [detailLoading, setDetailLoading] = React.useState(false)
@@ -287,23 +288,57 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
       return () => { cancelled = true }
     }, [selectedOids, workspaceId])
 
+    // Changing the selection returns the diff to the normal single-commit flow.
+    React.useEffect(() => {
+      setDiffRange(null)
+    }, [selectedOids])
+
     /** Pick the selected commit that contains a merged-view file, then load its diff. */
     const selectMergedFile = (path: string): void => {
-      const target = selectedOids.find(oid => multiDetails?.get(oid)?.files.some(file => file.path === path) === true)
-        ?? selectedHash
-      if (target === null) return
-      if (target !== selectedHash) {
-        pendingFileRef.current = path
-        setSelectedHash(target)
-      } else {
-        setSelectedFile(path)
-      }
+      const candidates = log.commits.filter(row => selectedOids.includes(row.oid)
+        && multiDetails?.get(row.oid)?.files.some(file => file.path === path) === true)
+      if (candidates.length === 0) return
+      const latest = candidates[0] as typeof candidates[number]
+      const earliest = candidates[candidates.length - 1] as typeof candidates[number]
+      const earliestParents = multiDetails?.get(earliest.oid)?.parents ?? []
+      const firstParent = earliestParents[0] ?? '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
+      setSelectedFile(path)
+      setDiffRange({ from: firstParent, to: latest.oid, file: path })
     }
 
     const appendCommands = React.useCallback((incoming: readonly CommandReceipt[]): void => {
       if (incoming.length === 0) return
       setCommands(previous => [...previous, ...incoming].slice(-MAX_CONSOLE_ROWS))
     }, [])
+
+    // Net diff for a file changed across several selected commits.
+    React.useEffect(() => {
+      if (workspaceId === null || diffRange === null) return undefined
+      let stopped = false
+      const controller = new AbortController()
+      setDiffLoading(true)
+      runtime.diff({
+        workspaceId,
+        hash: diffRange.to,
+        from: diffRange.from,
+        file: diffRange.file,
+        context: 3,
+      }, controller.signal).then((result: DiffResult) => {
+        if (stopped) return
+        setDiff(parseUnifiedDiff(result.patch, diffRange.file, result.truncated))
+        setDiffError(null)
+        appendCommands(result.commands)
+      }).catch((error: unknown) => {
+        if (stopped || isAbortError(error)) return
+        setDiffError(toApiError(error))
+      }).finally(() => {
+        if (!stopped) setDiffLoading(false)
+      })
+      return () => {
+        stopped = true
+        controller.abort()
+      }
+    }, [workspaceId, diffRange, appendCommands])
 
     const retry = React.useCallback((): void => {
       setSnapshotError(null)
@@ -779,6 +814,7 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
 
     // File diff, loaded only for the selected file.
     React.useEffect(() => {
+      if (diffRange !== null) return undefined
       if (workspaceId === null || selectedHash === null || selectedFile === null) {
         setDiff(null)
         return undefined
@@ -801,7 +837,7 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
         stopped = true
         controller.abort()
       }
-    }, [workspaceId, selectedHash, selectedFile, appendCommands])
+    }, [workspaceId, selectedHash, selectedFile, appendCommands, diffRange])
 
     const loadMore = (): void => {
       if (workspaceId === null || logLoadingMore) return

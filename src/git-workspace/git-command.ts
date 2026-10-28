@@ -307,6 +307,8 @@ export function verifyCommitArgs(value: string): readonly string[] {
 /** One diff request. */
 export interface DiffParams {
   readonly hash?: string | undefined
+  /** Optional older revision: diff from this commit to `hash`. */
+  readonly from?: string | undefined
   readonly file: string
   readonly staged?: boolean | undefined
   readonly context: number
@@ -320,6 +322,9 @@ export function diffArgs(params: DiffParams): readonly string[] {
     '--no-textconv',
     `--unified=${params.context}`,
   ]
+  if (params.hash !== undefined && params.from !== undefined) {
+    return ['diff', ...common, params.from, params.hash, '--', params.file]
+  }
   if (params.hash !== undefined) {
     return ['show', '--format=', '--patch', ...common, params.hash, '--', params.file]
   }

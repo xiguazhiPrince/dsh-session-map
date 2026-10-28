@@ -55,6 +55,7 @@ const POLL_HIDDEN_MS = 10_000
 export type DiffTarget =
   | { readonly kind: 'change'; readonly path: string; readonly group: ChangedEntry['group'] }
   | { readonly kind: 'commit'; readonly hash: string; readonly path: string }
+  | { readonly kind: 'commitRange'; readonly hash: string; readonly from: string; readonly path: string }
 
 /** The open branch dialog. */
 export interface BranchDialogState {
@@ -151,6 +152,8 @@ export interface GitRightbarActions {
   readonly selectCommitFile: (path: string) => void
   /** Open one file from a specific commit (merged multi-select view). */
   readonly openCommitFile: (oid: string, path: string) => void
+  /** Open the net diff of a file across a range of commits. */
+  readonly openCommitRange: (from: string, to: string, path: string) => void
   readonly continueOperation: () => void
   readonly abortOperation: () => void
   readonly checkoutBranch: (ref: string) => void
@@ -387,7 +390,9 @@ export function useGitRightbarModel(deps: GitRightbarModelDeps): GitRightbarMode
     setDiffLoading(true)
     const request = target.kind === 'commit'
       ? { workspaceId, hash: target.hash, file: target.path, context: 3 }
-      : { workspaceId, file: target.path, staged: target.group === 'staged', context: 3 }
+      : target.kind === 'commitRange'
+        ? { workspaceId, hash: target.hash, from: target.from, file: target.path, context: 3 }
+        : { workspaceId, file: target.path, staged: target.group === 'staged', context: 3 }
     runtime.diff(request, controller.signal).then((result) => {
       if (stopped) return
       setDiff(parseUnifiedDiff(result.patch, target.path, result.truncated))
@@ -717,6 +722,9 @@ export function useGitRightbarModel(deps: GitRightbarModelDeps): GitRightbarMode
     },
     openCommitFile: (oid: string, path: string) => {
       setTarget({ kind: 'commit', hash: oid, path })
+    },
+    openCommitRange: (from: string, to: string, path: string) => {
+      setTarget({ kind: 'commitRange', hash: to, from, path })
     },
     continueOperation,
     abortOperation,

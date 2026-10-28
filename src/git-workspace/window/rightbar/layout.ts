@@ -201,7 +201,9 @@ function DetailsColumn(props: {
     )
   }
   const detail = model.detail
-  const selectedCommitFile = model.target !== null && model.target.kind === 'commit' ? model.target.path : null
+  const selectedCommitFile = model.target !== null && (model.target.kind === 'commit' || model.target.kind === 'commitRange')
+    ? model.target.path
+    : null
   const multi = (props.selectedCount ?? 1) > 1 && props.mergedFiles !== undefined
   const files = multi ? props.mergedFiles as readonly FileChange[] : detail.files
   return React.createElement(
@@ -311,8 +313,18 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
 
   /** Open a merged-view file in the selected commit that contains it. */
   const selectDetailFile = (path: string): void => {
-    const target = selectedOids.find(oid => multiDetails?.get(oid)?.files.some(file => file.path === path) === true)
-      ?? model.selectedOid
+    if (selectedOids.length > 1) {
+      const candidates = model.commits.filter(row => selectedOids.includes(row.oid)
+        && multiDetails?.get(row.oid)?.files.some(file => file.path === path) === true)
+      if (candidates.length > 0) {
+        const latest = candidates[0] as typeof candidates[number]
+        const earliest = candidates[candidates.length - 1] as typeof candidates[number]
+        const firstParent = multiDetails?.get(earliest.oid)?.parents[0] ?? '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
+        model.actions.openCommitRange(firstParent, latest.oid, path)
+        return
+      }
+    }
+    const target = model.selectedOid
     if (target === null) return
     model.actions.selectCommit(target)
     model.actions.openCommitFile(target, path)
@@ -403,11 +415,13 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
     ? null
     : model.target.kind === 'commit'
       ? '提交 ' + model.target.hash.slice(0, 7)
-      : model.target.group === 'staged'
-        ? '暂存区'
-        : model.target.group === 'untracked'
-          ? '未跟踪'
-          : '工作区'
+      : model.target.kind === 'commitRange'
+        ? `提交范围 ${model.target.from.slice(0, 7)}..${model.target.hash.slice(0, 7)}`
+        : model.target.group === 'staged'
+          ? '暂存区'
+          : model.target.group === 'untracked'
+            ? '未跟踪'
+            : '工作区'
 
   const diffHeader = React.createElement(
     'div',

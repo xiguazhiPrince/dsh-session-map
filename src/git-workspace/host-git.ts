@@ -473,11 +473,14 @@ export function createGitWindowHandler(deps: GitWindowDeps): GitWindowRouteHandl
     if (!normalized.ok) throw new RouteFailure('invalid-path', 400, normalized.message)
     const hash = optionalFilter(url, 'hash')
     if (hash !== undefined && !isSafeHash(hash)) throw new RouteFailure('invalid-ref', 400, 'the commit hash is not valid')
+    const from = optionalFilter(url, 'from')
+    if (from !== undefined && !isSafeHash(from)) throw new RouteFailure('invalid-ref', 400, 'the base commit hash is not valid')
     const staged = url.searchParams.get('staged') === '1'
     const context = integerParam(url, 'context', 3, 0, 20)
     const gitPath = await runner.gitPath()
     const result = await runner.run(read(gitPath, repo, diffArgs({
       ...(hash === undefined ? {} : { hash }),
+      ...(from === undefined ? {} : { from }),
       file: normalized.path,
       staged,
       context,

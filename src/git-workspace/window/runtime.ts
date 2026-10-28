@@ -63,6 +63,8 @@ export interface CommitResult {
 export interface DiffRequest {
   readonly workspaceId: string
   readonly hash?: string | undefined
+  /** Optional older revision: diff from this commit to `hash`. */
+  readonly from?: string | undefined
   readonly file: string
   readonly staged?: boolean | undefined
   readonly context?: number | undefined
@@ -290,6 +292,7 @@ export function createGitWindowRuntime(): GitWindowApi {
         `${ROUTE}/diff${queryString({
           workspaceId: request.workspaceId,
           hash: request.hash,
+          from: request.from,
           file: request.file,
           staged: request.staged === true ? 1 : undefined,
           context: request.context ?? 3,

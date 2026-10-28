@@ -163,6 +163,11 @@ describe('read argument builders', () => {
     expect(commit[0]).toBe('show')
     expect(commit).toContain('--unified=5')
     expect(commit.at(-2)).toBe('--')
+    const range = diffArgs({ hash: 'def5678', from: 'abc1234', file: 'a.txt', context: 3 })
+    expect(range[0]).toBe('diff')
+    expect(range).toContain('abc1234')
+    expect(range).toContain('def5678')
+    expect(range.at(-2)).toBe('--')
   })
 })
 
