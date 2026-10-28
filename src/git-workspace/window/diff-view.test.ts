@@ -78,17 +78,20 @@ describe('DiffView', () => {
     expect(markup).toContain('const dock = useDock()')
   })
 
-  it('renders the side-by-side presentation with an empty filler side', () => {
+  it('renders the side-by-side presentation as two scroll columns', () => {
     const markup = renderToStaticMarkup(React.createElement(DiffView, {
       diff: DIFF,
       file: 'src/app.ts',
       loading: false,
       mode: 'side',
     }))
-    expect(markup).toContain('dgw-diffSideRow')
-    expect(markup).toContain('dgw-diffSideCell--empty')
-    expect(markup).toContain('dgw-diffSideCell--add')
-    expect(markup).toContain('dgw-diffSideCell--del')
+    // One pane per side: each owns all its rows, so a horizontal scrollbar
+    // moves the whole side rather than a single line.
+    expect(markup.match(/class="dgw-diffSidePane"/g)).toHaveLength(2)
+    expect(markup).toContain('dgw-diffSideHunk--blank')
+    expect(markup).toContain('dgw-diffSideRow--add')
+    expect(markup).toContain('dgw-diffSideRow--del')
+    expect(markup).toContain('const dock = useDock()')
   })
 
   it('renders the empty states', () => {

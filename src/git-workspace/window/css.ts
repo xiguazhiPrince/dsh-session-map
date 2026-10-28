@@ -294,27 +294,38 @@ export const CSS = `
 .dgw-menuItem:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-brand-primary); }
 .dgw-fieldLabel { font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .dgw-input { height: 26px; padding: 0 6px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 4px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-size: 12px; }
-/* Side-by-side diff (right-column page). One row is two aligned halves; a
-   missing line on either side keeps the row height with a muted filler. */
-.dgw-diffSide { display: flex; flex-direction: column; }
-.dgw-diffSideRow { display: flex; align-items: stretch; }
-/* Each side scrolls horizontally on its own. The scrollbar chrome stays hidden
-   so one long line does not make that row taller than its pair; trackpad /
-   Shift+wheel still scrolls the hovered side independently. */
-.dgw-diffSideCell {
+/* Side-by-side diff: two independent scroll columns. Each pane owns every row
+   of its side, so one horizontal scrollbar moves the whole side; vertical
+   scrolling is mirrored by the component. */
+.dgw-diffSide { display: flex; align-items: stretch; height: 100%; min-height: 0; overflow: hidden; }
+.dgw-diffSidePane { flex: 1 1 50%; min-width: 0; min-height: 0; overflow: auto; }
+.dgw-diffSidePane + .dgw-diffSidePane { border-left: 1px solid var(--dsw-alias-border-l1); }
+/* Keep the mirrored vertical scrollbar out of the way; the horizontal one is
+   the control the user asked for, so leave it visible at the pane bottom. */
+.dgw-diffSidePane::-webkit-scrollbar:vertical { width: 0; }
+.dgw-diffSideRow {
   display: flex;
-  flex: 1 1 50%;
-  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  width: max-content;
+  min-width: 100%;
+  height: 17px;
+  line-height: 17px;
   white-space: pre;
   padding-right: 8px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
 }
-.dgw-diffSideCell::-webkit-scrollbar { height: 0; }
-.dgw-diffSideCell > span:last-child { flex: 0 0 auto; }
-.dgw-diffSideCell--add { background: var(--dgw-addBg); }
-.dgw-diffSideCell--del { background: var(--dgw-delBg); }
-.dgw-diffSideCell--empty { background: var(--dsw-alias-bg-layer-1); opacity: .35; }
-.dgw-diffSideRow > .dgw-diffSideCell:first-child { border-right: 1px solid var(--dsw-alias-border-l1); }
+.dgw-diffSideRow--add { background: var(--dgw-addBg); }
+.dgw-diffSideRow--del { background: var(--dgw-delBg); }
+.dgw-diffSideText { flex: 0 0 auto; }
+.dgw-diffSideHunk {
+  flex: 0 0 auto;
+  width: max-content;
+  min-width: 100%;
+  height: 20px;
+  line-height: 20px;
+  padding: 0 8px;
+  color: var(--dsw-alias-brand-primary);
+  background: var(--dsw-alias-bg-layer-1);
+}
+.dgw-diffSideHunk--blank { color: transparent; }
 `

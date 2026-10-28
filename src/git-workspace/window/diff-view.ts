@@ -110,18 +110,52 @@ function unifiedLine(line: DiffLine, key: string): React.ReactElement {
   )
 }
 
-/** One side of a paired row. */
-function sideCell(line: DiffLine | null, side: 'left' | 'right', key: string): React.ReactElement {
-  if (line === null) {
-    return React.createElement('span', { className: 'dgw-diffSideCell dgw-diffSideCell--empty', key })
-  }
-  const number = side === 'left' ? line.oldLine : line.newLine
-  const tone = line.kind === '+' ? ' dgw-diffSideCell--add' : line.kind === '-' ? ' dgw-diffSideCell--del' : ''
+/** One full line inside a side pane. */
+function sideLine(line: DiffLine | null, side: 'left' | 'right', key: string): React.ReactElement {
+  const number = line === null ? null : side === 'left' ? line.oldLine : line.newLine
+  const tone = line === null ? '' : line.kind === '+' ? ' dgw-diffSideRow--add' : line.kind === '-' ? ' dgw-diffSideRow--del' : ''
   return React.createElement(
-    'span',
-    { className: `dgw-diffSideCell${tone}`, key },
+    'div',
+    { className: `dgw-diffSideRow${tone}`, key },
     React.createElement('span', { className: 'dgw-diffLineNo' }, number === null ? '' : String(number)),
-    React.createElement('span', null, line.text),
+    React.createElement('span', { className: 'dgw-diffSideText' }, line === null ? '' : line.text),
+  )
+}
+
+/**
+ * Side-by-side presentation as two real scroll columns: every row of a side
+ * lives in that side's pane, so its horizontal scrollbar moves the whole side
+ * instead of one line. Vertical scrolling is mirrored between the panes so the
+ * rows stay aligned.
+ */
+function SideDiff(props: { readonly hunks: readonly DiffHunk[] }): React.ReactElement {
+  const leftRef = React.useRef<HTMLDivElement | null>(null)
+  const rightRef = React.useRef<HTMLDivElement | null>(null)
+  const syncing = React.useRef(false)
+  const syncScroll = (event: React.UIEvent<HTMLDivElement>): void => {
+    if (syncing.current) return
+    const source = event.currentTarget
+    const target = source === leftRef.current ? rightRef.current : leftRef.current
+    if (target === null) return
+    syncing.current = true
+    target.scrollTop = source.scrollTop
+    requestAnimationFrame(() => { syncing.current = false })
+  }
+  const rows = pairDiffRows(props.hunks)
+  const left = rows.map((row, index) => row.kind === 'hunk'
+    ? React.createElement('div', { className: 'dgw-diffSideHunk', key: `h${index}` }, row.text)
+    : sideLine(row.left, 'left', `l${index}`))
+  const right = rows.map((row, index) => row.kind === 'hunk'
+    ? React.createElement('div', { className: 'dgw-diffSideHunk dgw-diffSideHunk--blank', key: `h${index}` })
+    : sideLine(row.right, 'right', `r${index}`))
+  return React.createElement(
+    'div',
+    {
+      className: 'dgw-diff dgw-diffSide',
+      title: '并排视图：左右两栏各自横向滚动（Shift + 滚轮或触控板），竖向滚动保持对齐',
+    },
+    React.createElement('div', { className: 'dgw-diffSidePane', ref: leftRef, onScroll: syncScroll }, ...left),
+    React.createElement('div', { className: 'dgw-diffSidePane', ref: rightRef, onScroll: syncScroll }, ...right),
   )
 }
 
@@ -149,24 +183,7 @@ export function DiffView(props: DiffViewProps): React.ReactElement {
     )
   }
   if (props.mode === 'side') {
-    return React.createElement(
-      'div',
-      {
-        className: 'dgw-diff dgw-diffSide',
-        title: '并排视图：左右两栏可各自横向滚动（触控板左右滑动，或按住 Shift 滚动滚轮）',
-      },
-      ...pairDiffRows(props.diff.hunks).map((row, index) => {
-        if (row.kind === 'hunk') {
-          return React.createElement('div', { className: 'dgw-hunkHead', key: `h${index}` }, row.text)
-        }
-        return React.createElement(
-          'div',
-          { className: 'dgw-diffSideRow', key: `r${index}` },
-          sideCell(row.left, 'left', `l${index}`),
-          sideCell(row.right, 'right', `r${index}`),
-        )
-      }),
-    )
+    return React.createElement(SideDiff, { hunks: props.diff.hunks })
   }
   return React.createElement(
     'div',
