@@ -124,9 +124,9 @@ function sideLine(line: DiffLine | null, side: 'left' | 'right', key: string): R
 
 /**
  * Side-by-side presentation as two real scroll columns: every row of a side
- * lives in that side's pane, so its horizontal scrollbar moves the whole side
- * instead of one line. Vertical scrolling is mirrored between the panes so the
- * rows stay aligned.
+ * lives in that side's pane, so its horizontal scrollbar moves the whole side.
+ * Horizontal scrolling is linked and vertical scrolling is mirrored, so the two
+ * sides always stay on the same code.
  */
 function SideDiff(props: { readonly hunks: readonly DiffHunk[] }): React.ReactElement {
   const leftRef = React.useRef<HTMLDivElement | null>(null)
@@ -139,6 +139,7 @@ function SideDiff(props: { readonly hunks: readonly DiffHunk[] }): React.ReactEl
     if (target === null) return
     syncing.current = true
     target.scrollTop = source.scrollTop
+    target.scrollLeft = source.scrollLeft
     requestAnimationFrame(() => { syncing.current = false })
   }
   const rows = pairDiffRows(props.hunks)
@@ -152,7 +153,7 @@ function SideDiff(props: { readonly hunks: readonly DiffHunk[] }): React.ReactEl
     'div',
     {
       className: 'dgw-diff dgw-diffSide',
-      title: '并排视图：左右两栏各自横向滚动（Shift + 滚轮或触控板），竖向滚动保持对齐',
+      title: '并排视图：左右两栏横向滚动联动，竖向滚动保持对齐（Shift + 滚轮或触控板）',
     },
     React.createElement('div', { className: 'dgw-diffSidePane', ref: leftRef, onScroll: syncScroll }, ...left),
     React.createElement('div', { className: 'dgw-diffSidePane', ref: rightRef, onScroll: syncScroll }, ...right),
