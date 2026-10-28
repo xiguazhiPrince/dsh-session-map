@@ -233,10 +233,9 @@ export const CSS = `
 .dgw-splitter:hover, .dgw-splitter:active { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 30%, transparent); }
 .dgw-detailHead { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--dsw-alias-border-l1); min-height: 37px; }
 .dgw-hash { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 12px; color: var(--dsw-alias-label-primary); }
-/* Without a selected file the commit info owns the whole detail pane; once a
-   file is chosen the diff gets the lower part and this block is capped. */
-.dgw-detailScroll { flex: 1 1 auto; min-height: 0; max-height: none; overflow: auto; padding: 9px 10px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
-.dgw-detailScroll--pinned { flex: 0 0 auto; max-height: 60%; }
+/* The commit info keeps its natural height (capped when the message is long);
+   the diff pane below fills the rest and shows its own placeholder. */
+.dgw-detailScroll { flex: 0 0 auto; max-height: 60%; min-height: 120px; overflow: auto; padding: 9px 10px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
 .dgw-msg { white-space: pre-wrap; word-break: break-word; margin-bottom: 8px; font-size: 12px; line-height: 18px; }
 .dgw-detailMeta { font-size: 11px; color: var(--dsw-alias-label-secondary); display: flex; flex-direction: column; gap: 3px; }
 .dgw-detailRefs { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }

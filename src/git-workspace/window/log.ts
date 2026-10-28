@@ -819,7 +819,6 @@ export function DetailPane(props: DetailPaneProps): React.ReactElement {
     )
   }
   const detail = props.detail
-  const showDiff = props.selectedFile !== null
   return React.createElement(
     'div',
     { className: 'dgw-detail' },
@@ -838,7 +837,7 @@ export function DetailPane(props: DetailPaneProps): React.ReactElement {
     ),
     React.createElement(
       'div',
-      { className: showDiff ? 'dgw-detailScroll dgw-detailScroll--pinned' : 'dgw-detailScroll' },
+      { className: 'dgw-detailScroll' },
       React.createElement(CommitMeta, { detail }),
       React.createElement(CommitFiles, {
         files: detail.files,
@@ -846,14 +845,12 @@ export function DetailPane(props: DetailPaneProps): React.ReactElement {
         onSelectFile: props.onSelectFile,
       }),
     ),
-    showDiff
-      ? React.createElement(DiffViewPane, {
-        diff: props.diff,
-        file: props.selectedFile,
-        loading: props.diffLoading,
-        mode: 'unified',
-      })
-      : null,
+    React.createElement(DiffViewPane, {
+      diff: props.diff,
+      file: props.selectedFile,
+      loading: props.diffLoading,
+      mode: 'unified',
+    }),
   )
 }
 
