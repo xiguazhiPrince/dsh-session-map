@@ -328,9 +328,12 @@ export const CSS = `
   min-width: 0;
   display: flex;
   flex-direction: column;
-  overflow: auto;
+  overflow: hidden;
   border-right: 1px solid var(--dsw-alias-border-l1);
 }
+/* The branch row stays pinned; only the commit list scrolls. */
+.dgw-pushMapping { flex: 0 0 auto; }
+.dgw-pushCommits { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
 .dgw-pushMapping {
   flex: 0 0 auto;
   padding: 8px 12px;

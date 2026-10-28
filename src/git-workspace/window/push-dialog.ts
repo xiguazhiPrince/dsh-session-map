@@ -130,7 +130,7 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
   }
 
   const filesTitle = selectedOid === null
-    ? `变更文件（${props.preview?.files.length ?? 0}）`
+    ? `全部变更（${props.preview?.files.length ?? 0}）`
     : `提交 ${selectedDetail?.shortOid ?? selectedOid.slice(0, 7)} 的文件（${files.length}）`
 
   return React.createElement(
