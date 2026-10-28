@@ -148,13 +148,35 @@ function renderPreviewFolder(folder: PreviewFolder, depth: number): React.ReactN
   return rows
 }
 
+/** Merge several commits' file lists by path (multi-select preview). */
+function mergeFileGroups(groups: readonly (readonly FileChange[])[]): readonly FileChange[] {
+  const byPath = new Map<string, FileChange>()
+  for (const group of groups) {
+    for (const file of group) {
+      const previous = byPath.get(file.path)
+      if (previous === undefined) {
+        byPath.set(file.path, file)
+        continue
+      }
+      byPath.set(file.path, {
+        ...file,
+        additions: (previous.additions ?? 0) + (file.additions ?? 0),
+        deletions: (previous.deletions ?? 0) + (file.deletions ?? 0),
+        binary: previous.binary || file.binary,
+      })
+    }
+  }
+  return [...byPath.values()].sort((left, right) => left.path.localeCompare(right.path))
+}
+
 /** Render the push preview. */
 export function PushDialog(props: PushDialogProps): React.ReactElement {
   const target = props.upstream ?? `${props.remote ?? 'origin'}/${props.branch}`
   const createsUpstream = props.upstream === null
-  const [selectedOid, setSelectedOid] = React.useState<string | null>(null)
-  const [selectedDetail, setSelectedDetail] = React.useState<CommitDetail | null>(null)
-  const [detailLoading, setDetailLoading] = React.useState(false)
+  const [selectedOids, setSelectedOids] = React.useState<ReadonlySet<string>>(new Set())
+  const [anchorOid, setAnchorOid] = React.useState<string | null>(null)
+  const [details, setDetails] = React.useState<ReadonlyMap<string, CommitDetail>>(new Map())
+  const [detailLoading, setDetailLoading] = React.useState<ReadonlySet<string>>(new Set())
   const [detailError, setDetailError] = React.useState<string | null>(null)
   const [commitsOpen, setCommitsOpen] = React.useState(true)
   const [layout, setLayout] = React.useState<PushLayout>(() => readPushLayout())
@@ -198,43 +220,108 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
       base: kind === 'left' ? layout.left : layout.message,
     }
   }
-  const files: readonly FileChange[] = selectedOid === null
-    ? props.preview?.files ?? []
-    : selectedDetail?.files ?? []
-  const fileTree = buildPreviewTree(files)
-
-  const showAll = (): void => {
-    setSelectedOid(null)
-    setSelectedDetail(null)
-    setDetailError(null)
-  }
-
-  const selectCommit = async (oid: string): Promise<void> => {
-    setSelectedOid(oid)
-    setSelectedDetail(null)
-    setDetailLoading(true)
-    setDetailError(null)
-    try {
-      setSelectedDetail(await props.loadCommit(oid))
-    } catch (error) {
-      setDetailError(error instanceof Error ? error.message : String(error))
-    } finally {
-      setDetailLoading(false)
+  const ensureDetails = (oids: readonly string[]): void => {
+    const missing = oids.filter(oid => !details.has(oid) && !detailLoading.has(oid))
+    if (missing.length === 0) return
+    setDetailLoading(previous => {
+      const next = new Set(previous)
+      for (const oid of missing) next.add(oid)
+      return next
+    })
+    for (const oid of missing) {
+      void props.loadCommit(oid)
+        .then((detail) => {
+          setDetails(previous => {
+            const next = new Map(previous)
+            next.set(oid, detail)
+            return next
+          })
+        })
+        .catch((error: unknown) => {
+          setDetailError(error instanceof Error ? error.message : String(error))
+        })
+        .finally(() => {
+          setDetailLoading(previous => {
+            const next = new Set(previous)
+            next.delete(oid)
+            return next
+          })
+        })
     }
   }
 
-  const filesTitle = selectedOid === null
+  const showAll = (): void => {
+    setSelectedOids(new Set())
+    setAnchorOid(null)
+    setDetailError(null)
+  }
+
+  const selectSingle = (oid: string): void => {
+    setSelectedOids(new Set([oid]))
+    setAnchorOid(oid)
+    setDetailError(null)
+    ensureDetails([oid])
+  }
+
+  const toggleCommit = (oid: string): void => {
+    setSelectedOids((previous) => {
+      const next = new Set(previous)
+      if (next.has(oid)) next.delete(oid)
+      else next.add(oid)
+      return next
+    })
+    setAnchorOid(oid)
+    setDetailError(null)
+    ensureDetails([oid])
+  }
+
+  const selectRange = (oid: string): void => {
+    const commits = props.preview?.commits ?? []
+    const to = commits.findIndex(commit => commit.oid === oid)
+    const from = anchorOid === null ? -1 : commits.findIndex(commit => commit.oid === anchorOid)
+    if (to < 0 || from < 0) {
+      selectSingle(oid)
+      return
+    }
+    const low = Math.min(from, to)
+    const high = Math.max(from, to)
+    const ids = commits.slice(low, high + 1).map(commit => commit.oid)
+    setSelectedOids(new Set(ids))
+    setDetailError(null)
+    ensureDetails(ids)
+  }
+
+  const onCommitClick = (oid: string, event: React.MouseEvent): void => {
+    if (event.shiftKey) selectRange(oid)
+    else if (event.ctrlKey || event.metaKey) toggleCommit(oid)
+    else selectSingle(oid)
+  }
+
+  const selectedList = [...selectedOids]
+  const singleOid = selectedList.length === 1 ? selectedList[0] as string : null
+  const singleDetail = singleOid === null ? null : details.get(singleOid) ?? null
+  const selectionLoading = selectedList.some(oid => detailLoading.has(oid))
+  const files: readonly FileChange[] = selectedList.length === 0
+    ? props.preview?.files ?? []
+    : selectedList.length === 1
+      ? singleDetail?.files ?? []
+      : mergeFileGroups(selectedList.map(oid => details.get(oid)?.files ?? []))
+  const fileTree = buildPreviewTree(files)
+
+  const filesTitle = selectedList.length === 0
     ? `全部变更（${props.preview?.files.length ?? 0}）`
-    : `提交 ${selectedDetail?.shortOid ?? selectedOid.slice(0, 7)} 的文件（${files.length}）`
-  const selectedCommit = selectedOid === null
+    : selectedList.length === 1
+      ? `提交 ${singleDetail?.shortOid ?? singleOid?.slice(0, 7) ?? ''} 的文件（${files.length}）`
+      : `所选 ${selectedList.length} 个提交的文件（${files.length}）`
+  const selectedCommit = singleOid === null
     ? null
-    : props.preview?.commits.find(commit => commit.oid === selectedOid) ?? null
-  const selectedSubject = selectedCommit?.subject ?? selectedDetail?.subject ?? ''
-  const fullMessage = selectedDetail?.message ?? selectedCommit?.subject ?? ''
+    : props.preview?.commits.find(commit => commit.oid === singleOid) ?? null
+  const selectedSubject = selectedCommit?.subject ?? singleDetail?.subject ?? ''
+  const fullMessage = singleDetail?.message ?? selectedCommit?.subject ?? ''
   const bodyText = selectedSubject !== '' && fullMessage.startsWith(selectedSubject)
     ? fullMessage.slice(selectedSubject.length).trimStart()
     : fullMessage
-  const commitAuthor = selectedDetail?.author ?? selectedCommit?.author ?? null
+  const commitAuthor = singleDetail?.author ?? selectedCommit?.author ?? null
 
   return React.createElement(
     'div',
@@ -270,7 +357,7 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
             'div',
             { className: 'dgw-pushLeft', style: { width: layout.left, flexBasis: layout.left } },
             React.createElement('div', {
-              className: 'dgw-pushMapping' + (selectedOid === null ? ' dgw-pushMapping--active' : ''),
+              className: 'dgw-pushMapping' + (selectedOids.size === 0 ? ' dgw-pushMapping--active' : ''),
               onClick: showAll,
               title: '查看全部待推送文件',
             },
@@ -297,10 +384,10 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
                   ...props.preview.commits.map(commit => React.createElement(
                     'div',
                     {
-                      className: 'dgw-pushCommit' + (selectedOid === commit.oid ? ' dgw-pushCommit--active' : ''),
+                      className: 'dgw-pushCommit' + (selectedOids.has(commit.oid) ? ' dgw-pushCommit--active' : ''),
                       key: commit.oid,
-                      title: commit.subject,
-                      onClick: () => { void selectCommit(commit.oid) },
+                      title: `${commit.subject}（Ctrl 点选、Shift 连选）`,
+                      onClick: (event: React.MouseEvent) => onCommitClick(commit.oid, event),
                     },
                     React.createElement('span', { className: 'dgw-pushSubject' }, commit.subject),
                     React.createElement('span', { className: 'dgw-meta' }, commit.author.name),
@@ -322,14 +409,14 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
             'div',
             { className: 'dgw-pushRight' },
             React.createElement('div', { className: 'dgw-pushSectionHead' }, filesTitle),
-            detailLoading
+            selectionLoading
               ? React.createElement('div', { className: 'dgw-pushEmpty' }, '正在读取提交文件…')
               : detailError === null
                 ? React.createElement('div', { className: 'dgw-pushFiles' },
                   ...renderPreviewFolder(fileTree, 0),
                 )
                 : React.createElement('div', { className: 'dgw-inlineError' }, detailError),
-            selectedOid === null
+            singleOid === null
               ? null
               : React.createElement('div', {
                 className: 'dgw-pushHSplit',
@@ -338,14 +425,14 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
                 title: '拖动调整提交信息高度',
                 onPointerDown: (event: React.PointerEvent) => startDrag('message', event),
               }),
-            selectedOid === null
+            singleOid === null
               ? null
               : React.createElement('div', {
                 className: 'dgw-pushMessage',
                 style: { height: layout.message, flexBasis: layout.message },
               },
                 React.createElement('div', { className: 'dgw-pushSectionHead' }, '提交信息'),
-                detailLoading
+                singleOid !== null && detailLoading.has(singleOid)
                   ? React.createElement('div', { className: 'dgw-pushEmpty' }, '正在读取提交信息…')
                   : React.createElement(
                     React.Fragment,
@@ -357,7 +444,7 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
                       ? null
                       : React.createElement('div', { className: 'dgw-pushMessageBody' }, bodyText),
                     React.createElement('div', { className: 'dgw-pushMessageMeta' },
-                      selectedDetail?.shortOid ?? selectedOid.slice(0, 7),
+                      singleDetail?.shortOid ?? singleOid.slice(0, 7),
                       commitAuthor === null ? '' : ` 作者 ${commitAuthor.name} <${commitAuthor.email}>`,
                       commitAuthor === null ? '' : `, ${formatCommitDate(commitAuthor.date)}`,
                     ),
