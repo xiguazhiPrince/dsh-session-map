@@ -21,7 +21,6 @@ import {
   CloseIcon,
   CopyIcon,
   FetchIcon,
-  FullscreenIcon,
   GitPanelIcon,
   PanelLeftIcon,
   PushIcon,
@@ -293,20 +292,6 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
       React.createElement(PushIcon, { size: 14 }),
       model.actions.push,
       { disabled: model.workspaceId === null || model.jobBusy || model.snapshot === null },
-    ),
-    toolButton(
-      'fullscreen',
-      '全屏',
-      '把右侧栏切换到全屏，查看更宽的日志与差异',
-      React.createElement(FullscreenIcon, { size: 14 }),
-      props.onFullscreen,
-    ),
-    toolButton(
-      'close',
-      '关闭',
-      '关闭这个 Git 页面，右侧栏回到指南',
-      React.createElement(CloseIcon, { size: 14 }),
-      props.onClose,
     ),
   )
 
