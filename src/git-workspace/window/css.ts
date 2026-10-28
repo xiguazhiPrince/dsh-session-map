@@ -165,15 +165,19 @@ export const CSS = `
   gap: 6px;
   height: 26px;
   padding: 0 8px 0 20px;
+  background: transparent;
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
 }
-.dgw-treeRow:hover { background: var(--dsw-alias-bg-layer-2); }
+.dgw-treeRow:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent); }
 .dgw-treeRow--folder { width: 100%; border: 0; background: transparent; text-align: left; font: inherit; font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }
 .dgw-treeRow--folder > svg:first-child { transition: transform .12s ease; }
 .dgw-treeRow--folder[data-open='false'] > svg:first-child { transform: rotate(-90deg); }
+/* Current branch gets a light brand wash; the branch-filter selection is
+   stronger and keeps its tint even while hovered. */
+.dgw-treeRow--current { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 7%, transparent); }
 .dgw-treeRow--active,
 .dgw-treeRow--active:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
 .dgw-treeRow > svg { flex: 0 0 auto; color: var(--dsw-alias-label-secondary); }
