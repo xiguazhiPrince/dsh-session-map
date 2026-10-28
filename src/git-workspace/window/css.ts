@@ -344,6 +344,9 @@ export const CSS = `
   overflow: hidden;
   border-right: 1px solid var(--dsw-alias-border-l1);
   background: var(--dsw-alias-bg-base);
+  /* Shift-click extends the row selection; without this the browser would also
+     drag-select the commit text. */
+  user-select: none;
 }
 /* The branch row stays pinned; only the commit list scrolls. */
 .dgw-pushMapping { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
