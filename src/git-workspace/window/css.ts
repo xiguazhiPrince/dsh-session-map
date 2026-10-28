@@ -167,7 +167,8 @@ export const CSS = `
 .dgw-treeRow--folder { width: 100%; border: 0; background: transparent; text-align: left; font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); }
 .dgw-treeRow--folder > svg:first-child { transition: transform .12s ease; }
 .dgw-treeRow--folder[data-open='false'] > svg:first-child { transform: rotate(-90deg); }
-.dgw-treeRow--active { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
+.dgw-treeRow--active,
+.dgw-treeRow--active:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
 .dgw-treeRow > svg { flex: 0 0 auto; color: var(--dsw-alias-label-secondary); }
 .dgw-treeRow--current > svg { color: var(--dsw-alias-brand-primary); }
 .dgw-treeName { overflow: hidden; text-overflow: ellipsis; }
@@ -183,12 +184,14 @@ export const CSS = `
   gap: 6px;
   height: 26px;
   padding: 0 8px 0 0;
+  background: transparent;
   cursor: default;
   white-space: nowrap;
   border-bottom: 1px solid transparent;
 }
 .dgw-row:hover { background: var(--dsw-alias-bg-layer-1); }
-.dgw-row--active { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 16%, transparent); }
+.dgw-row--active,
+.dgw-row--active:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 16%, transparent); }
 .dgw-rowMenu { flex: 0 0 auto; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 14px; line-height: 1; cursor: pointer; opacity: 0; }
 .dgw-row:hover .dgw-rowMenu { opacity: 1; }
 .dgw-rowMenu:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
@@ -210,7 +213,8 @@ export const CSS = `
 .dgw-sectionTitle { font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); margin: 8px 0 4px; }
 .dgw-fileRow { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 4px; border-radius: 3px; cursor: pointer; white-space: nowrap; }
 .dgw-fileRow:hover { background: var(--dsw-alias-bg-layer-2); }
-.dgw-fileRow--active { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
+.dgw-fileRow--active,
+.dgw-fileRow--active:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
 .dgw-fileRow > svg { flex: 0 0 auto; color: var(--dsw-alias-label-secondary); }
 .dgw-filePath { overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 11px; }
 .dgw-fileStat { flex: 0 0 auto; font-size: 10px; color: var(--dsw-alias-label-secondary); }
@@ -241,7 +245,8 @@ export const CSS = `
 .dgw-changeRow { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px 0 14px; cursor: pointer; }
 .dgw-changeRow:hover { background: var(--dsw-alias-bg-layer-2); }
 /* The right-column page previews on row click: the matching row stays marked. */
-.dgw-changeRow--active { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
+.dgw-changeRow--active,
+.dgw-changeRow--active:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
 .dgw-changeRow--nested { padding-left: 26px; }
 .dgw-changeHead--button { width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .dgw-checkbox { flex: 0 0 14px; width: 14px; height: 14px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 3px; background: var(--dsw-alias-bg-layer-1); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; line-height: 1; color: var(--dsw-alias-bg-base); }
