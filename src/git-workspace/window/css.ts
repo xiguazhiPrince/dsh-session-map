@@ -283,7 +283,8 @@ export const CSS = `
    missing line on either side keeps the row height with a muted filler. */
 .dgw-diffSide { display: flex; flex-direction: column; }
 .dgw-diffSideRow { display: flex; align-items: stretch; }
-.dgw-diffSideCell { display: flex; flex: 1 1 50%; min-width: 0; white-space: pre; padding-right: 8px; }
+.dgw-diffSideCell { display: flex; flex: 1 1 50%; min-width: 0; white-space: pre; padding-right: 8px; overflow: hidden; }
+.dgw-diffSideCell > span:last-child { overflow: hidden; }
 .dgw-diffSideCell--add { background: var(--dgw-addBg); }
 .dgw-diffSideCell--del { background: var(--dgw-delBg); }
 .dgw-diffSideCell--empty { background: var(--dsw-alias-bg-layer-1); opacity: .35; }
