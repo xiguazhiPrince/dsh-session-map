@@ -225,7 +225,7 @@ describe('LogList', () => {
 })
 
 describe('DetailPane', () => {
-  it('renders message, meta, files and the empty diff placeholder', () => {
+  it('renders message, meta, files and the empty diff hint', () => {
     const markup = renderToStaticMarkup(React.createElement(DetailPane, {
       detail: DETAIL,
       loading: false,
