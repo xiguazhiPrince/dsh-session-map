@@ -567,6 +567,49 @@ export function LogList(props: LogListProps): React.ReactElement {
   const laneCount = props.graph.reduce((max, row) => Math.max(max, row.lane + 1, row.before.length, row.after.length), 1)
   const gutterWidth = laneCount * 12 + 8
   const [menu, setMenu] = React.useState<{ readonly x: number; readonly y: number; readonly commit: CommitRow } | null>(null)
+  const [selectedOids, setSelectedOids] = React.useState<ReadonlySet<string>>(
+    () => new Set(props.selectedOid === null ? [] : [props.selectedOid]),
+  )
+  const anchorRef = React.useRef<string | null>(props.selectedOid)
+
+  // Keep the local multi-selection valid when the page/filter replaces the list.
+  React.useEffect(() => {
+    const available = new Set(props.commits.map(commit => commit.oid))
+    setSelectedOids((previous) => {
+      const next = new Set([...previous].filter(oid => available.has(oid)))
+      if (next.size === previous.size && [...next].every(oid => previous.has(oid))) return previous
+      return next
+    })
+    if (props.selectedOid !== null && anchorRef.current === null) anchorRef.current = props.selectedOid
+  }, [props.commits, props.selectedOid])
+
+  const selectRow = (commit: CommitRow, event: React.MouseEvent): void => {
+    const ids = props.commits.map(row => row.oid)
+    const anchor = anchorRef.current
+    let next: Set<string>
+    if (event.shiftKey && anchor !== null) {
+      const from = ids.indexOf(anchor)
+      const to = ids.indexOf(commit.oid)
+      if (from >= 0 && to >= 0) {
+        const low = Math.min(from, to)
+        const high = Math.max(from, to)
+        next = new Set(ids.slice(low, high + 1))
+      } else {
+        next = new Set([commit.oid])
+        anchorRef.current = commit.oid
+      }
+    } else if (event.ctrlKey || event.metaKey) {
+      next = new Set(selectedOids)
+      if (next.has(commit.oid)) next.delete(commit.oid)
+      else next.add(commit.oid)
+      anchorRef.current = commit.oid
+    } else {
+      next = new Set([commit.oid])
+      anchorRef.current = commit.oid
+    }
+    setSelectedOids(next)
+    props.onSelect(commit.oid)
+  }
 
   React.useEffect(() => {
     if (menu === null) return undefined
@@ -650,10 +693,10 @@ export function LogList(props: LogListProps): React.ReactElement {
               key: commit.oid,
               className: [
                 'dgw-row',
-                props.selectedOid === commit.oid ? 'dgw-row--active' : '',
+                selectedOids.has(commit.oid) ? 'dgw-row--active' : '',
                 commit.parents.length > 1 ? 'dgw-row--merge' : '',
               ].filter(part => part !== '').join(' '),
-              onClick: () => props.onSelect(commit.oid),
+              onClick: (event: React.MouseEvent) => selectRow(commit, event),
               onContextMenu: (event: React.MouseEvent) => {
                 event.preventDefault()
                 event.stopPropagation()
