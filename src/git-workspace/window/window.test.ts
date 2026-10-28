@@ -87,6 +87,7 @@ const runtime: GitWindowApi = {
   log: async () => ({ commits: [commit('1111111111111111111111111111111111111111', 'Merge branch v2.1')], hasMore: false, truncated: false, commands: [] }),
   commit: async () => ({ commit: DETAIL, commands: [] }),
   diff: async () => ({ patch: '', binary: false, truncated: false, commands: [] }),
+  pushPreview: async () => ({ preview: { upstream: null, commits: [], files: [], truncated: false }, commands: [] }),
   confirm: async () => ({ token: 'token', expiresAt: Date.now() + 60_000 }),
   action: async () => ({ commands: [], summary: 'ok' }),
   job: async (id: string) => ({

@@ -268,6 +268,26 @@ export function commitNumstatArgs(hash: string): readonly string[] {
   return ['show', '--first-parent', '--format=', '--numstat', '-z', '-M', hash]
 }
 
+/** Files changed between the merge base of `base` and HEAD (push preview). */
+export function rangeFilesArgs(base: string): readonly string[] {
+  return ['diff', '--name-status', '-z', '-M', `${base}...HEAD`]
+}
+
+/** Line stats between the merge base of `base` and HEAD (push preview). */
+export function rangeNumstatArgs(base: string): readonly string[] {
+  return ['diff', '--numstat', '-z', '-M', `${base}...HEAD`]
+}
+
+/** Resolve one ref to its commit id for a read-only comparison. */
+export function verifyRefArgs(ref: string): readonly string[] {
+  return ['rev-parse', '--verify', `${ref}^{commit}`]
+}
+
+/** The current branch's upstream ref, or a failing exit when none is set. */
+export function upstreamRefArgs(): readonly string[] {
+  return ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']
+}
+
 /** Branches and remote branches whose tip contains the commit. */
 export function containsArgs(hash: string): readonly string[] {
   return [

@@ -13,6 +13,7 @@ import type {
   GitJobStarted,
   GitJobView,
   LogPayload,
+  PushPreview,
   RepoSnapshot,
 } from '../git-types'
 import type { GitAction } from '../git-actions'
@@ -75,12 +76,20 @@ export interface DiffResult {
   readonly commands: readonly CommandReceipt[]
 }
 
+/** Push-preview round-trip answer. */
+export interface PushPreviewResult {
+  readonly preview: PushPreview
+  readonly commands: readonly CommandReceipt[]
+}
+
 /** Everything the panel asks the Host. */
 export interface GitWindowApi {
   snapshot(workspaceId: string, signal?: AbortSignal): Promise<SnapshotResult>
   log(request: LogRequest, signal?: AbortSignal): Promise<LogPayload>
   commit(workspaceId: string, hash: string, signal?: AbortSignal): Promise<CommitResult>
   diff(request: DiffRequest, signal?: AbortSignal): Promise<DiffResult>
+  /** Commits and files a push would send above the current upstream. */
+  pushPreview(workspaceId: string, signal?: AbortSignal): Promise<PushPreviewResult>
   /** Ask the Host for a single-use confirmation token. */
   confirm(action: GitAction, signal?: AbortSignal): Promise<{ readonly token: string; readonly expiresAt: number }>
   /** Execute one write action; network actions answer with a background job. */
@@ -288,6 +297,12 @@ export function createGitWindowRuntime(): GitWindowApi {
         signal,
       )
       return payload
+    },
+    async pushPreview(workspaceId: string, signal?: AbortSignal): Promise<PushPreviewResult> {
+      return await getJson<PushPreviewResult>(
+        `${ROUTE}/push-preview${queryString({ workspaceId })}`,
+        signal,
+      )
     },
     async confirm(action: GitAction, signal?: AbortSignal): Promise<{ readonly token: string; readonly expiresAt: number }> {
       return await postJson<{ readonly token: string; readonly expiresAt: number }>(`${ROUTE}/confirm`, action, signal)

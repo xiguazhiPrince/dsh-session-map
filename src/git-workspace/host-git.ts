@@ -11,7 +11,7 @@
  */
 import { realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, resolve } from 'node:path'
-import type { CommandReceipt, CommitDetail, GitPlatform, RepoSnapshot, ResolvedRepo } from './git-types'
+import type { CommandReceipt, CommitDetail, GitPlatform, PushPreview, RepoSnapshot, ResolvedRepo } from './git-types'
 import {
   commitFilesArgs,
   commitMetaArgs,
@@ -21,11 +21,15 @@ import {
   forEachRefArgs,
   gitPathArgs,
   logArgs,
+  rangeFilesArgs,
+  rangeNumstatArgs,
   readInvocation,
   remoteVerboseArgs,
   repoProbeArgs,
   statusArgs,
+  upstreamRefArgs,
   verifyCommitArgs,
+  verifyRefArgs,
   type GitInvocation,
 } from './git-command'
 import {
@@ -494,6 +498,52 @@ export function createGitWindowHandler(deps: GitWindowDeps): GitWindowRouteHandl
     }
   }
 
+  /** Push-preview route: commits and files above the branch's upstream. */
+  const pushPreviewRoute = async (url: URL, controller: AbortController): Promise<unknown> => {
+    const repo = await resolveRepo(requiredString(url, 'workspaceId'))
+    const gitPath = await runner.gitPath()
+    const commands: CommandReceipt[] = []
+    const upstream = await runner.run(read(gitPath, repo, upstreamRefArgs(), { label: 'push-upstream' }), controller.signal)
+    commands.push(upstream.receipt)
+    if (upstream.exitCode !== 0) {
+      const preview: PushPreview = { upstream: null, commits: [], files: [], truncated: false }
+      return { ok: true, preview, commands }
+    }
+    const upstreamRef = upstream.stdout.trim()
+    if (upstreamRef === '' || !isSafeRefName(upstreamRef)) {
+      throw new RouteFailure('invalid-ref', 400, 'the upstream ref is not valid')
+    }
+    const base = await runner.run(read(gitPath, repo, verifyRefArgs(upstreamRef), { label: 'push-base' }), controller.signal)
+    commands.push(base.receipt)
+    if (base.exitCode !== 0) throw classifyFailure(base.stderr, base.exitCode)
+    const baseHash = base.stdout.trim()
+    if (!isSafeHash(baseHash)) throw new RouteFailure('invalid-ref', 400, 'the upstream commit is not a hash')
+    const limit = 100
+    const [log, files, stats] = await Promise.all([
+      runner.run(read(gitPath, repo, logArgs({ ref: `${baseHash}..HEAD`, limit, skip: 0 }), { timeoutMs: 20_000, label: 'push-log' }), controller.signal),
+      runner.run(read(gitPath, repo, rangeFilesArgs(baseHash), { timeoutMs: 20_000, label: 'push-files' }), controller.signal),
+      runner.run(read(gitPath, repo, rangeNumstatArgs(baseHash), { timeoutMs: 20_000, label: 'push-stats' }), controller.signal),
+    ])
+    commands.push(log.receipt, files.receipt, stats.receipt)
+    if (log.exitCode !== 0 && /does not have any commits yet|bad revision/i.test(log.stderr)) {
+      const preview: PushPreview = { upstream: upstreamRef, commits: [], files: [], truncated: false }
+      return { ok: true, preview, commands }
+    }
+    for (const result of [log, files, stats]) {
+      if (result.exitCode !== 0) throw classifyFailure(result.stderr, result.exitCode)
+    }
+    const parsedLog = parseLogZ(log.stdout)
+    const parsedFiles = parseNameStatusZ(files.stdout)
+    const parsedStats = parseNumstatZ(stats.stdout)
+    const preview: PushPreview = {
+      upstream: upstreamRef,
+      commits: parsedLog.commits,
+      files: mergeFileStats(parsedFiles.files, parsedStats.entries as readonly NumstatEntry[]),
+      truncated: parsedLog.truncated || log.truncated || parsedLog.commits.length >= limit,
+    }
+    return { ok: true, preview, commands }
+  }
+
   return async (request, response, url, method): Promise<boolean> => {
     if (!url.pathname.startsWith(`${GIT_WORKSPACE_ROUTE}/`)) return false
     const path = url.pathname.slice(GIT_WORKSPACE_ROUTE.length)
@@ -520,6 +570,11 @@ export function createGitWindowHandler(deps: GitWindowDeps): GitWindowRouteHandl
       if (path === '/diff') {
         if (method !== 'GET') throw new RouteFailure('invalid-request', 405, 'use GET')
         sendJson(response, 200, await diffRoute(url, controller))
+        return true
+      }
+      if (path === '/push-preview') {
+        if (method !== 'GET') throw new RouteFailure('invalid-request', 405, 'use GET')
+        sendJson(response, 200, await pushPreviewRoute(url, controller))
         return true
       }
       throw new RouteFailure('invalid-request', 404, `unknown endpoint: ${method} ${url.pathname}`)

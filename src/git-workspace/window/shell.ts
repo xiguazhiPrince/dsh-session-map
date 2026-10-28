@@ -9,7 +9,7 @@
  * @module dsh-session-map/git-workspace/window/shell
  */
 import * as React from 'react'
-import type { CommandReceipt, CommitDetail, DiffView, GitJobView, HeadState, RepoSnapshot, BranchRef } from '../git-types'
+import type { CommandReceipt, CommitDetail, DiffView, GitJobView, HeadState, RepoSnapshot, BranchRef, PushPreview } from '../git-types'
 import type { GitAction } from '../git-actions'
 import { parseUnifiedDiff } from '../git-parse'
 import { computeGraph } from './lanes'
@@ -17,6 +17,7 @@ import { BranchTree, DetailPane, LogList, formatWhen } from './log'
 import { BranchDialog, type BranchPrompt } from './branch'
 import { ForcePushDialog, ResetDialog, TagDeleteDialog, TagDialog, type ResetMode } from './history'
 import { UpdateDialog, readUpdateMode, writeUpdateMode, type UpdateMode } from './update-dialog'
+import { PushDialog } from './push-dialog'
 import { CommitPane } from './commit'
 import { ConsolePane } from './console'
 import { CSS } from './css'
@@ -201,6 +202,10 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
     const [forcePushBusy, setForcePushBusy] = React.useState(false)
     const [forcePushError, setForcePushError] = React.useState<GitApiError | null>(null)
     const [updateDialog, setUpdateDialog] = React.useState<{ readonly mode: UpdateMode } | null>(null)
+    const [pushOpen, setPushOpen] = React.useState(false)
+    const [pushPreview, setPushPreview] = React.useState<PushPreview | null>(null)
+    const [pushPreviewLoading, setPushPreviewLoading] = React.useState(false)
+    const [pushPreviewError, setPushPreviewError] = React.useState<string | null>(null)
     const [logColumns, setLogColumns] = React.useState<LogColumns>(() => readLogColumns())
     const logColumnsRef = React.useRef(logColumns)
     logColumnsRef.current = logColumns
@@ -428,6 +433,23 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
         workspaceId,
         ...(needsUpstream && remote !== undefined ? { remote, branch, setUpstream: true } : {}),
       })
+    }
+
+    /** Load the push preview, then show the dialog. */
+    const openPushPreview = async (): Promise<void> => {
+      if (workspaceId === null) return
+      setPushOpen(true)
+      setPushPreviewLoading(true)
+      setPushPreview(null)
+      setPushPreviewError(null)
+      try {
+        const result = await runtime.pushPreview(workspaceId)
+        setPushPreview(result.preview)
+      } catch (error) {
+        setPushPreviewError(toApiError(error).message)
+      } finally {
+        setPushPreviewLoading(false)
+      }
     }
 
     /** Run one write action that needs no dialog and refresh the views. */
@@ -815,7 +837,7 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
           title: '推送（push）',
           'aria-label': '推送',
           disabled: workspaceId === null || jobBusy || snapshot === null,
-          onClick: pushCurrent,
+          onClick: () => { void openPushPreview() },
         }, React.createElement(PushIcon, { size: 14 })),
       ),
       React.createElement(
@@ -1047,6 +1069,22 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
           onCancel: () => setUpdateDialog(null),
           onConfirm: confirmUpdate,
         }),
+      pushOpen
+        ? React.createElement(PushDialog, {
+          branch: snapshot?.head.branch ?? '',
+          remote: snapshot?.remotes[0]?.name ?? null,
+          upstream: snapshot?.head.upstream?.ref ?? null,
+          preview: pushPreview,
+          loading: pushPreviewLoading,
+          error: pushPreviewError,
+          busy: jobBusy,
+          onPush: () => {
+            setPushOpen(false)
+            pushCurrent()
+          },
+          onCancel: () => { if (!jobBusy) setPushOpen(false) },
+        })
+        : null,
     )
   }
 }

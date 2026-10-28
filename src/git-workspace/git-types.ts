@@ -136,6 +136,15 @@ export interface CommitDetail extends CommitRow {
   readonly containedInBranches: readonly string[]
 }
 
+/** What a push would send, compared with the branch's upstream. */
+export interface PushPreview {
+  /** Upstream ref, or null when the branch has none yet. */
+  readonly upstream: string | null
+  readonly commits: readonly CommitRow[]
+  readonly files: readonly FileChange[]
+  readonly truncated: boolean
+}
+
 /** One line inside a unified diff hunk. */
 export interface DiffLine {
   readonly kind: '+' | '-' | ' '

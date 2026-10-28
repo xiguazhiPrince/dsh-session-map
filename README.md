@@ -189,7 +189,7 @@ localStorage.removeItem('dsh.session-map.conversationViews')        // 回到出
 - **日志**：左侧分支树（HEAD / 本地 / 远程 / 标签，`feature/x` 这类名字按目录折叠、可搜索过滤；双击检出，右键检出/新建/合并/变基/重命名/删除，当前分支另有强制推送入口；标签右键删除）、中间提交列表（客户端按 `%P` 计算图线、refs 胶囊、作者与时间；右键复制哈希/创建标签/拣选/撤销/重置）、右侧提交详情（完整 message、作者/提交者、哈希、所在分支、文件列表、逐文件 diff）。合并/变基/拣选/撤销进行中时，状态栏出现「继续 / 中止操作」。
 - **提交**：按「暂存区 / 未暂存 / 未版本控制 / 冲突」分组；勾选即写 index（`git add` / `restore --staged`），丢弃未跟踪文件先 `clean -nd` 预览再 `clean -fd`，且必须经过服务端确认令牌；支持提交、修正上次提交、提交并推送、搁置（stash push/pop）。
 - **控制台**：显示 Host 实际执行的每条 argv（凭证已脱敏）、退出码与耗时。
-- **工具栏**：刷新、下载远端状态（fetch，后台作业 + SSE 进度）、更新当前分支（fetch + merge）、推送；推送无上游时自动用当前远端建立跟踪，强制推送走 `--force-with-lease` 且需二次确认（L3）。
+- **工具栏**：刷新、下载远端状态（fetch，后台作业 + SSE 进度）、更新当前分支（弹窗选择合并 / 变基）、推送（先预览待推送提交与变更文件再执行）；推送无上游时自动用当前远端建立跟踪，强制推送走 `--force-with-lease` 且需二次确认（L3）。
 
 宿主路由与克隆页共用 `/plugin-git-workspace` 前缀；所有路径先按注册 Workspace 做 `realpath` 包含校验，写操作每仓库串行，破坏性操作由服务端二次确认。规格与安全测试矩阵见 [docs/git-workspace-spec.md](docs/git-workspace-spec.md) §6，实施阶段与完成状态见 [docs/git-workspace-plan.md](docs/git-workspace-plan.md)。
 
@@ -201,7 +201,7 @@ localStorage.removeItem('dsh.session-map.conversationViews')        // 回到出
 - **响应式**：提交面板默认展开（窄屏也显示，可用工具栏「变更」手动收起）、<520 隐藏分支树、<800 详情改抽屉、<700 差异统一；两条分隔条可拖。UI 偏好（提交面板开关/宽度、日志区高度、差异视图）按会话存 `dsh.git-window.rightbar.<sessionId>`。
 - 主面板的 Git 工具窗口不受影响，两个载体可以同时开着。
 
-**当前状态（0.4.0-dev）**：只读、提交、分支、同步与历史写操作已实现，另有会话级右侧栏一页式 Git 页面；`pnpm test` 覆盖 238 个本地用例（`GIT_WS_IT=1` 时 253 个，含 15 条真实 git 集成用例：未确认丢弃不改文件、clean 不删 ignored、锁不清除、提交信息不执行 shell、stash/tag、非快进推送被拒且确认后才能 force-with-lease、clean 不跟随符号链接等）。右侧栏页面新增 17 个用例（差异配对与并排渲染、布局宽窄与空态、注册竞态、提交面板目录分组与行/复选框分工）。剩余可选项（O1–O7）的现状与说明见 [docs/git-workspace-plan.md](docs/git-workspace-plan.md) §10.1：冲突合并编辑器、stash 完整列表、远程标签删除、子模块/worktree、大仓库虚拟滚动、非当前分支仅快进更新、kill 恢复用例。
+**当前状态（0.4.0-dev）**：只读、提交、分支、同步与历史写操作已实现，另有会话级右侧栏一页式 Git 页面；`pnpm test` 覆盖 248 个本地用例（`GIT_WS_IT=1` 时 263 个，含 15 条真实 git 集成用例：未确认丢弃不改文件、clean 不删 ignored、锁不清除、提交信息不执行 shell、stash/tag、非快进推送被拒且确认后才能 force-with-lease、clean 不跟随符号链接等）。剩余可选项（O1–O7）的现状与说明见 [docs/git-workspace-plan.md](docs/git-workspace-plan.md) §10.1：冲突合并编辑器、stash 完整列表、远程标签删除、子模块/worktree、大仓库虚拟滚动、非当前分支仅快进更新、kill 恢复用例。
 
 **本地验证**：`pnpm build` 后需要让 web profile 指向本仓库（`dsh plugin --profile web add link:<本仓库路径>`）并重启/刷新；npm 安装的副本不会热更新宿主路由。
 

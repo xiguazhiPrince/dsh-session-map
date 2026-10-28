@@ -34,6 +34,8 @@ import type { GitRightbarModel } from './model'
 import { jobStatusLabel } from './model'
 import { COMMIT_WIDTH_MIN } from './prefs'
 import { UpdateDialog, readUpdateMode, writeUpdateMode, type UpdateMode } from '../update-dialog'
+import { PushDialog } from '../push-dialog'
+import type { PushPreview } from '../../git-types'
 
 /** The HEAD placeholder used before the first snapshot lands. */
 const EMPTY_HEAD: HeadState = {
@@ -167,6 +169,26 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
   const [dragValue, setDragValue] = React.useState<number | null>(null)
   const [drawerOpen, setDrawerOpen] = React.useState(false)
   const [updateDialog, setUpdateDialog] = React.useState<{ readonly mode: UpdateMode } | null>(null)
+  const [pushOpen, setPushOpen] = React.useState(false)
+  const [pushPreview, setPushPreview] = React.useState<PushPreview | null>(null)
+  const [pushPreviewLoading, setPushPreviewLoading] = React.useState(false)
+  const [pushPreviewError, setPushPreviewError] = React.useState<string | null>(null)
+
+  const openPushPreview = async (): Promise<void> => {
+    if (model.workspaceId === null) return
+    setPushOpen(true)
+    setPushPreviewLoading(true)
+    setPushPreview(null)
+    setPushPreviewError(null)
+    try {
+      const result = await model.runtime.pushPreview(model.workspaceId)
+      setPushPreview(result.preview)
+    } catch (error) {
+      setPushPreviewError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setPushPreviewLoading(false)
+    }
+  }
 
   const upstreamRef = model.head?.upstream?.ref ?? null
   const upstreamOid = upstreamRef === null
@@ -319,9 +341,9 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
     toolButton(
       'push',
       '推送',
-      '推送当前分支到远端；没有上游时自动用当前远端建立跟踪',
+      '推送当前分支到远端；会先预览待推送提交与文件',
       React.createElement(PushIcon, { size: 14 }),
-      model.actions.push,
+      () => { void openPushPreview() },
       { disabled: model.workspaceId === null || model.jobBusy || model.snapshot === null },
     ),
   )
@@ -590,5 +612,21 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
         onCancel: () => setUpdateDialog(null),
         onConfirm: confirmUpdate,
       }),
+    pushOpen
+      ? React.createElement(PushDialog, {
+        branch: model.head?.branch ?? '',
+        remote: model.snapshot?.remotes[0]?.name ?? null,
+        upstream: model.head?.upstream?.ref ?? null,
+        preview: pushPreview,
+        loading: pushPreviewLoading,
+        error: pushPreviewError,
+        busy: model.jobBusy,
+        onPush: () => {
+          setPushOpen(false)
+          model.actions.push()
+        },
+        onCancel: () => { if (!model.jobBusy) setPushOpen(false) },
+      })
+      : null,
   )
 }

@@ -312,6 +312,23 @@ export const CSS = `
 .dgw-modal { width: 360px; max-width: calc(100% - 32px); border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-overlay); padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
 .dgw-modalTitle { font-weight: 600; }
 .dgw-modalText { font-size: 12px; color: var(--dsw-alias-label-secondary); white-space: pre-wrap; word-break: break-word; }
+.dgw-modal--wide { width: 560px; }
+.dgw-pushPreview {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 360px;
+  overflow: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 6px;
+}
+.dgw-pushSectionHead { margin-top: 4px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
+.dgw-pushCommits, .dgw-pushFiles { display: flex; flex-direction: column; gap: 2px; }
+.dgw-pushCommit, .dgw-pushFile { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.dgw-pushSubject, .dgw-pushFilePath { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dgw-pushFilePath { font-family: var(--dsw-font-mono, ui-monospace, monospace); }
+.dgw-pushFileStatus { flex: 0 0 14px; color: var(--dsw-alias-label-secondary); }
 .dgw-choice { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dsw-alias-label-primary); cursor: pointer; }
 .dgw-choice input { accent-color: var(--dsw-alias-brand-primary); }
 .dgw-modalActions { display: flex; justify-content: flex-end; gap: 8px; }

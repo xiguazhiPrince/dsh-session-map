@@ -730,4 +730,27 @@ describe('route surface', () => {
     expect(state.status).toBe(200)
     expect((state.json as { ok: boolean }).ok).toBe(true)
   })
+
+  it('previews the commits and files above the branch upstream', async () => {
+    const workspace = await makeWorkspace()
+    const fake = new FakeSubprocess().queueOutcome(
+      { stdout: probeOutput(workspace) },
+      { stdout: 'origin/master\n' },
+      { stdout: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' },
+      { stdout: LOG_Z },
+      { stdout: NAME_STATUS_Z },
+      { stdout: NUMSTAT_Z },
+    )
+    const { server } = harness(fake, workspace)
+    const response = await invokeRoute(server, {
+      path: '/plugin-git-workspace/push-preview?workspaceId=workspace-1',
+    })
+    expect(response.status).toBe(200)
+    const preview = (response.json as {
+      preview: { upstream: string; commits: unknown[]; files: unknown[] }
+    }).preview
+    expect(preview.upstream).toBe('origin/master')
+    expect(preview.commits.length).toBeGreaterThan(0)
+    expect(preview.files.length).toBeGreaterThan(0)
+  })
 })
