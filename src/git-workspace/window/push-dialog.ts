@@ -5,7 +5,7 @@
  * @module dsh-session-map/git-workspace/window/push-dialog
  */
 import * as React from 'react'
-import type { FileChange, PushPreview } from '../git-types'
+import type { CommitDetail, FileChange, PushPreview } from '../git-types'
 import { FileIcon, FolderIcon } from './icons'
 
 /** Props for the push preview. */
@@ -21,6 +21,8 @@ export interface PushDialogProps {
   /** Only an upstream can be force-with-lease pushed. */
   readonly canForce: boolean
   readonly force: boolean
+  /** Load one commit's file list when the user selects it in the left pane. */
+  readonly loadCommit: (oid: string) => Promise<CommitDetail>
   readonly onForce: (force: boolean) => void
   readonly onPush: () => void
   readonly onCancel: () => void
@@ -98,7 +100,39 @@ function renderPreviewFolder(folder: PreviewFolder, depth: number): React.ReactN
 export function PushDialog(props: PushDialogProps): React.ReactElement {
   const target = props.upstream ?? `${props.remote ?? 'origin'}/${props.branch}`
   const createsUpstream = props.upstream === null
-  const fileTree = props.preview === null ? null : buildPreviewTree(props.preview.files)
+  const [selectedOid, setSelectedOid] = React.useState<string | null>(null)
+  const [selectedDetail, setSelectedDetail] = React.useState<CommitDetail | null>(null)
+  const [detailLoading, setDetailLoading] = React.useState(false)
+  const [detailError, setDetailError] = React.useState<string | null>(null)
+  const files: readonly FileChange[] = selectedOid === null
+    ? props.preview?.files ?? []
+    : selectedDetail?.files ?? []
+  const fileTree = buildPreviewTree(files)
+
+  const showAll = (): void => {
+    setSelectedOid(null)
+    setSelectedDetail(null)
+    setDetailError(null)
+  }
+
+  const selectCommit = async (oid: string): Promise<void> => {
+    setSelectedOid(oid)
+    setSelectedDetail(null)
+    setDetailLoading(true)
+    setDetailError(null)
+    try {
+      setSelectedDetail(await props.loadCommit(oid))
+    } catch (error) {
+      setDetailError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const filesTitle = selectedOid === null
+    ? `变更文件（${props.preview?.files.length ?? 0}）`
+    : `提交 ${selectedDetail?.shortOid ?? selectedOid.slice(0, 7)} 的文件（${files.length}）`
+
   return React.createElement(
     'div',
     { className: 'dgw-modalBackdrop' },
@@ -120,16 +154,25 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
           React.createElement(
             'div',
             { className: 'dgw-pushLeft' },
-            React.createElement('div', { className: 'dgw-pushMapping' },
-              `${props.branch} → ${target}`,
-              createsUpstream ? '（将建立上游跟踪）' : '',
+            React.createElement('div', {
+              className: 'dgw-pushMapping' + (selectedOid === null ? ' dgw-pushMapping--active' : ''),
+              onClick: showAll,
+              title: '查看全部待推送文件',
+            },
+            `${props.branch} → ${target}`,
+            createsUpstream ? '（将建立上游跟踪）' : '',
             ),
             createsUpstream
               ? React.createElement('div', { className: 'dgw-pushEmpty' }, '当前分支还没有上游，无法预览待推送提交')
               : React.createElement('div', { className: 'dgw-pushCommits' },
                 ...props.preview.commits.map(commit => React.createElement(
                   'div',
-                  { className: 'dgw-pushCommit', key: commit.oid, title: commit.subject },
+                  {
+                    className: 'dgw-pushCommit' + (selectedOid === commit.oid ? ' dgw-pushCommit--active' : ''),
+                    key: commit.oid,
+                    title: commit.subject,
+                    onClick: () => { void selectCommit(commit.oid) },
+                  },
                   React.createElement('span', { className: 'dgw-pushSubject' }, commit.subject),
                   React.createElement('span', { className: 'dgw-meta' }, commit.author.name),
                 )),
@@ -141,12 +184,14 @@ export function PushDialog(props: PushDialogProps): React.ReactElement {
           React.createElement(
             'div',
             { className: 'dgw-pushRight' },
-            React.createElement('div', { className: 'dgw-pushSectionHead' },
-              `变更文件（${props.preview.files.length}）`,
-            ),
-            React.createElement('div', { className: 'dgw-pushFiles' },
-              ...(fileTree === null ? [] : renderPreviewFolder(fileTree, 0)),
-            ),
+            React.createElement('div', { className: 'dgw-pushSectionHead' }, filesTitle),
+            detailLoading
+              ? React.createElement('div', { className: 'dgw-pushEmpty' }, '正在读取提交文件…')
+              : detailError === null
+                ? React.createElement('div', { className: 'dgw-pushFiles' },
+                  ...renderPreviewFolder(fileTree, 0),
+                )
+                : React.createElement('div', { className: 'dgw-inlineError' }, detailError),
           ),
         ),
       React.createElement(

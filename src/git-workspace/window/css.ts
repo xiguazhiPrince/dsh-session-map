@@ -335,11 +335,14 @@ export const CSS = `
   flex: 0 0 auto;
   padding: 8px 12px;
   border-bottom: 1px solid var(--dsw-alias-border-l1);
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent);
+  background: transparent;
   color: var(--dsw-alias-label-primary);
   font-size: 12px;
   font-weight: 600;
+  cursor: pointer;
 }
+.dgw-pushMapping:hover { background: var(--dsw-alias-bg-layer-2); }
+.dgw-pushMapping--active { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
 .dgw-pushCommits { display: flex; flex-direction: column; }
 .dgw-pushCommit {
   display: flex;
@@ -348,7 +351,10 @@ export const CSS = `
   padding: 6px 12px;
   border-bottom: 1px solid var(--dsw-alias-border-l1);
   font-size: 12px;
+  cursor: pointer;
 }
+.dgw-pushCommit:hover { background: var(--dsw-alias-bg-layer-1); }
+.dgw-pushCommit--active { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
 .dgw-pushRight { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
 .dgw-pushSectionHead {
   flex: 0 0 auto;

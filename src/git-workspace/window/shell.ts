@@ -1107,6 +1107,11 @@ export function createGitPanel(runtime: GitWindowApi): (props: GitPanelProps) =>
           canForce: snapshot?.head.upstream !== null,
           force: pushForce,
           onForce: setPushForce,
+          loadCommit: async (oid: string) => {
+            if (workspaceId === null) throw new Error('no workspace')
+            const result = await runtime.commit(workspaceId, oid)
+            return result.commit
+          },
           onPush: () => {
             setPushOpen(false)
             if (pushForce) void pushForceCurrent()

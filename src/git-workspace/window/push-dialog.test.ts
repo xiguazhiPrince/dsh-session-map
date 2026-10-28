@@ -40,6 +40,7 @@ describe('PushDialog', () => {
       canForce: true,
       force: false,
       onForce: noop,
+      loadCommit: async () => { throw new Error('not used') },
       onPush: noop,
       onCancel: noop,
     }))
@@ -64,6 +65,7 @@ describe('PushDialog', () => {
       canForce: false,
       force: false,
       onForce: noop,
+      loadCommit: async () => { throw new Error('not used') },
       onPush: noop,
       onCancel: noop,
     }))

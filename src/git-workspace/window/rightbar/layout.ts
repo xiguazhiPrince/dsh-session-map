@@ -626,6 +626,11 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
         canForce: model.head?.upstream != null,
         force: pushForce,
         onForce: setPushForce,
+        loadCommit: async (oid: string) => {
+          if (model.workspaceId === null) throw new Error('no workspace')
+          const result = await model.runtime.commit(model.workspaceId, oid)
+          return result.commit
+        },
         onPush: () => {
           setPushOpen(false)
           model.actions.push(pushForce)
