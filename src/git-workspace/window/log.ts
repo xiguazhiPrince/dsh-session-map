@@ -65,6 +65,14 @@ function refLabels(row: CommitRow): Array<{ readonly text: string; readonly tag:
 /** Width the folder chevron occupies, so branch icons align with folder icons. */
 const BRANCH_ICON_OFFSET = 18
 
+/** Event used to keep at most one context menu open across the tree and list. */
+const MENU_EXCLUSIVE_EVENT = 'dsh-git-window:menu-open'
+
+/** Ask any other git list to close its context menu before this one opens. */
+function announceMenuOpen(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(MENU_EXCLUSIVE_EVENT))
+}
+
 /** One vertical guide per branch-tree nesting level. */
 function treeGuides(depth: number, prefix: string): React.ReactNode[] {
   return Array.from({ length: depth }, (_, index) =>
@@ -189,19 +197,23 @@ export function BranchTree(props: BranchTreeProps): React.ReactElement {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') close()
     }
+    const onOtherMenu = (): void => close()
     window.addEventListener('click', close)
     window.addEventListener('keydown', onKey)
     window.addEventListener('scroll', close, true)
+    window.addEventListener(MENU_EXCLUSIVE_EVENT, onOtherMenu)
     return () => {
       window.removeEventListener('click', close)
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('scroll', close, true)
+      window.removeEventListener(MENU_EXCLUSIVE_EVENT, onOtherMenu)
     }
   }, [menu])
 
   const openMenu = (event: React.MouseEvent, entry: { readonly branch?: BranchRef; readonly tag?: BranchRef }): void => {
     event.preventDefault()
     event.stopPropagation()
+    announceMenuOpen()
     setMenu({ x: event.clientX, y: event.clientY, ...entry })
   }
 
@@ -526,13 +538,16 @@ export function LogList(props: LogListProps): React.ReactElement {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') close()
     }
+    const onOtherMenu = (): void => close()
     window.addEventListener('click', close)
     window.addEventListener('keydown', onKey)
     window.addEventListener('scroll', close, true)
+    window.addEventListener(MENU_EXCLUSIVE_EVENT, onOtherMenu)
     return () => {
       window.removeEventListener('click', close)
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('scroll', close, true)
+      window.removeEventListener(MENU_EXCLUSIVE_EVENT, onOtherMenu)
     }
   }, [menu])
 
@@ -606,6 +621,7 @@ export function LogList(props: LogListProps): React.ReactElement {
               onContextMenu: (event: React.MouseEvent) => {
                 event.preventDefault()
                 event.stopPropagation()
+                announceMenuOpen()
                 setMenu({ x: event.clientX, y: event.clientY, commit })
               },
               title: `${commit.shortOid} ${commit.subject}`,
@@ -637,6 +653,7 @@ export function LogList(props: LogListProps): React.ReactElement {
               onClick: (event: React.MouseEvent<HTMLButtonElement>) => {
                 event.stopPropagation()
                 const rect = event.currentTarget.getBoundingClientRect()
+                announceMenuOpen()
                 setMenu({ x: rect.left - 170, y: rect.bottom + 2, commit })
               },
             }, '⋯'),
