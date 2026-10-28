@@ -192,9 +192,9 @@ export const CSS = `
 .dgw-row:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary) 7%, transparent); }
 .dgw-row--active,
 .dgw-row--active:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 16%, transparent); }
-/* Merge commits keep the same subject contrast as any other commit: no dimming,
-   no muted colour, even when a theme or a future rule tries to soften them. */
-.dgw-row--merge .dgw-subject { color: var(--dsw-alias-label-primary); opacity: 1; }
+/* IDEA mutes merge commits: their subject uses the secondary text tone so a
+   "Merge branch ..." entry does not compete with ordinary commits. */
+.dgw-row--merge .dgw-subject { color: var(--dsw-alias-label-secondary); }
 .dgw-rowMenu { flex: 0 0 auto; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 14px; line-height: 1; cursor: pointer; opacity: 0; }
 .dgw-row:hover .dgw-rowMenu { opacity: 1; }
 .dgw-rowMenu:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
