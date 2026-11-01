@@ -126,6 +126,14 @@ export interface SidebarRightFace {
   openTab(kind: string): void
   active(): { readonly kind: string; readonly id: string } | undefined
   close(tabId: string): void
+  /**
+   * Whether the column is currently showing its panel.
+   *
+   * `active()` still reports the layout's active tab while the column is
+   * collapsed, so a toggle must not read "the map is active" as "the map is on
+   * screen". Absent in older hosts, where the previous behaviour is kept.
+   */
+  isExpanded?(): boolean
 }
 
 /** One loaded Session event row, narrowed to what the canvas reads. */
@@ -424,13 +432,16 @@ function openInRightbar(runtime: SessionMapRuntime, kind: string): void {
  * Whether the right column is drawing the map right now.
  *
  * Asked before a jump, where it is the user's intent for this navigation; after
- * the switch the same question is about the target Session's own layout.
+ * the switch the same question is about the target Session's own layout. A
+ * collapsed column still names the map as its active layout tab, so collapse
+ * alone means "not drawing".
  * @param runtime - the plugin's live service accessors.
- * @returns true while the map is the active tab.
+ * @returns true while the map is on screen in the expanded column.
  */
 function sidebarShowsMap(runtime: SessionMapRuntime): boolean {
   try {
-    return runtime.sidebarRight().active()?.kind === MAP_KIND
+    const sidebarRight = runtime.sidebarRight()
+    return sidebarRight.isExpanded?.() !== false && sidebarRight.active()?.kind === MAP_KIND
   } catch {
     // No right column in this composition, so the jump simply does not follow.
     return false
@@ -517,6 +528,31 @@ export function createOverviewTab(runtime: SessionMapRuntime): (props: SessionVi
   return OverviewTab
 }
 
+/** What one click of the Session header's map launcher did. */
+export type MapToggleResult = 'opened' | 'closed'
+
+/**
+ * Toggle the map page in the right column.
+ *
+ * `active()` still reports the layout's active tab while the column is
+ * collapsed, so only an on-screen map is a close target. Closing a hidden map
+ * used to look like a dead button and made the next click "open" it.
+ * @param runtime - the plugin's live service accessors.
+ * @returns whether this click closed or opened the map.
+ * @throws when the right column is absent; callers show the reason.
+ */
+export function toggleMapRightbar(runtime: SessionMapRuntime): MapToggleResult {
+  const sidebarRight = runtime.sidebarRight()
+  const expanded = typeof sidebarRight.isExpanded === 'function' ? sidebarRight.isExpanded() : true
+  const active = sidebarRight.active()
+  if (expanded && active !== undefined && active.kind === MAP_KIND) {
+    sidebarRight.close(active.id)
+    return 'closed'
+  }
+  sidebarRight.openTab(MAP_KIND)
+  return 'opened'
+}
+
 /**
  * Build the Session header's launcher button.
  *
@@ -525,9 +561,8 @@ export function createOverviewTab(runtime: SessionMapRuntime): (props: SessionVi
  * cannot read the previously selected id (that lives in ui-conversation's
  * private store), so it cannot bounce back precisely. A header utility is a
  * real button and leaves the View selection alone. It toggles instead of only
- * opening: `active()` reports the tab the active pane is drawing, and
- * TabRecord.kind names its type, so "the map is the active tab" is decidable
- * without any extra state.
+ * opening: the active tab plus the column's expanded state say whether the map
+ * is on screen, without any extra state.
  * @param runtime - the plugin's live service accessors.
  * @returns the registered header utility component.
  */
@@ -538,14 +573,7 @@ export function createMapLauncher(runtime: SessionMapRuntime): () => React.React
     const [error, setError] = React.useState<string | null>(null)
     const onClick = (): void => {
       try {
-        const sidebarRight = runtime.sidebarRight()
-        const active = sidebarRight.active()
-        if (active !== undefined && active.kind === MAP_KIND) {
-          sidebarRight.close(active.id)
-          setError(null)
-          return
-        }
-        sidebarRight.openTab(MAP_KIND)
+        toggleMapRightbar(runtime)
         setError(null)
       } catch (cause) {
         const message = errorText(cause)

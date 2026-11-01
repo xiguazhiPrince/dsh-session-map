@@ -96,8 +96,10 @@ dsh --profile web --dump-config    # profile 名换成你装的那个
 | 座位 | 内容 |
 |---|---|
 | `conversation.view` | 「概览」标签页（order 20）、「会话图谱」标签页（order 30）、「技能」标签页（order 40）—— 「技能」默认注册；「概览」与「会话图谱」默认关闭，见下 |
-| `conversation.session.header.utilities` | 会话头部的「会话图谱」开关（order 40）；右侧栏已打开时再点一次关闭 |
+| `conversation.session.header.utilities` | 会话头部的「会话图谱」开关（order 40）；右侧栏正显示图谱时再点一次关闭，折叠时点它会先展开 |
 | `sidebar.right.pane.tab` | 常驻标签页 `dsh-session-map.overview` 与 `dsh-session-map.map` |
+
+右侧栏折叠时，会话头的「Git」「会话图谱」按钮都是先展开面板，而不是关掉那个看不见的页面；只有面板正显示该页时，按钮才是关闭。
 
 ### 工具栏
 

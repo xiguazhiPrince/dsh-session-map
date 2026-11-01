@@ -7,11 +7,13 @@
  */
 import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createFlag } from './flags'
+import { MAP_KIND, OVERVIEW_KIND } from './constants'
 import {
   createMapView,
   DEFAULT_FOLD_RUNS,
+  toggleMapRightbar,
   userMessagesOf,
   type MapFlags,
   type SessionEventEntryFace,
@@ -19,6 +21,7 @@ import {
   type SessionMapRuntime,
   type SessionState,
   type SessionViewProps,
+  type SidebarRightFace,
   type WorkspaceListState,
 } from './views'
 import type { SessionSummary } from './graph'
@@ -140,6 +143,70 @@ describe('canvas rendering', () => {
 
     expect(html).toContain('dsm__tagText">会话图谱默认显… (1)</span>')
     expect(html).toContain('title="会话1 · ' + title + '"')
+  })
+})
+
+/**
+ * Build a runtime whose only working surface is the fake right column.
+ * @param face - the right-column face the launcher calls.
+ * @returns the runtime the launcher reads.
+ */
+function launcherRuntime(face: SidebarRightFace): SessionMapRuntime {
+  return { sidebarRight: () => face, openSession: () => {} }
+}
+
+describe('map launcher toggle', () => {
+  it('opens instead of closing when the collapsed column still reports the map', () => {
+    const close = vi.fn()
+    const openTab = vi.fn()
+    const result = toggleMapRightbar(launcherRuntime({
+      active: () => ({ id: 'tab-map', kind: MAP_KIND }),
+      close,
+      openTab,
+      isExpanded: () => false,
+    }))
+    expect(result).toBe('opened')
+    expect(openTab).toHaveBeenCalledWith(MAP_KIND)
+    expect(close).not.toHaveBeenCalled()
+  })
+
+  it('closes the map only while it is on screen', () => {
+    const close = vi.fn()
+    const openTab = vi.fn()
+    const result = toggleMapRightbar(launcherRuntime({
+      active: () => ({ id: 'tab-map', kind: MAP_KIND }),
+      close,
+      openTab,
+      isExpanded: () => true,
+    }))
+    expect(result).toBe('closed')
+    expect(close).toHaveBeenCalledWith('tab-map')
+    expect(openTab).not.toHaveBeenCalled()
+  })
+
+  it('opens when another tab is active', () => {
+    const close = vi.fn()
+    const openTab = vi.fn()
+    const result = toggleMapRightbar(launcherRuntime({
+      active: () => ({ id: 'tab-overview', kind: OVERVIEW_KIND }),
+      close,
+      openTab,
+      isExpanded: () => true,
+    }))
+    expect(result).toBe('opened')
+    expect(openTab).toHaveBeenCalledWith(MAP_KIND)
+    expect(close).not.toHaveBeenCalled()
+  })
+
+  it('keeps the previous toggle when the host cannot report expansion', () => {
+    const close = vi.fn()
+    const result = toggleMapRightbar(launcherRuntime({
+      active: () => ({ id: 'tab-map', kind: MAP_KIND }),
+      close,
+      openTab: vi.fn(),
+    }))
+    expect(result).toBe('closed')
+    expect(close).toHaveBeenCalledWith('tab-map')
   })
 })
 
