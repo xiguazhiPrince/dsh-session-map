@@ -226,6 +226,26 @@ export const RIGHTBAR_CSS = `
 .dgw-rb__top--compact .dgw-rb__tool { padding: 0 5px; }
 .dgw-rb__top--compact { gap: 4px; }
 
+/* Text-only actions where the label beats a glyph: opening and closing the
+   commit-detail drawer. */
+.dgw-rb__textBtn {
+  flex: 0 0 auto;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dgw-rb__textBtn:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
+.dgw-rb__textBtn:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }
+.dgw-rb__textBtn--active { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-label-primary); }
+
 /* The commit form is designed for the wide main panel. Inside the narrow
    right-column pane its row must wrap into stable lines instead of shrinking
    every label/button until the characters stack vertically. */

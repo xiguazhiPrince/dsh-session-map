@@ -17,8 +17,6 @@ import { ErrorBanner, NoRepo } from '../feedback'
 import { BranchDialog } from '../branch'
 import { ForcePushDialog, ResetDialog, TagDeleteDialog, TagDialog } from '../history'
 import {
-  ChevronIcon,
-  CloseIcon,
   CopyIcon,
   FetchIcon,
   GitPanelIcon,
@@ -116,6 +114,30 @@ function toolButton(
     },
     glyph,
     React.createElement('span', { className: 'dgw-rb__toolText' }, label),
+  )
+}
+
+/**
+ * One text-only action, for controls whose label is clearer than a glyph on its
+ * own: the commit-detail drawer's open and close buttons.
+ */
+function textButton(
+  key: string,
+  label: string,
+  detail: string,
+  onClick: () => void,
+  options?: { readonly active?: boolean },
+): React.ReactElement {
+  return React.createElement(
+    'button',
+    {
+      key,
+      className: 'dgw-rb__textBtn' + (options?.active === true ? ' dgw-rb__textBtn--active' : ''),
+      type: 'button',
+      title: detail,
+      onClick,
+    },
+    label,
   )
 }
 
@@ -541,7 +563,7 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
     React.createElement('span', { className: 'dgw-spacer' }),
     showDetails
       ? null
-      : iconButton('detail', '提交详情', React.createElement(ChevronIcon, { size: 13 }), () => setDrawerOpen(open => !open), { active: drawerOpen }),
+      : textButton('detail', '提交详情', '打开或收起提交详情', () => setDrawerOpen(open => !open), { active: drawerOpen }),
     React.createElement('span', { className: 'dgw-meta' }, model.branchFilter === null ? '' : model.branchFilter),
   )
 
@@ -627,7 +649,7 @@ export function GitRightbarLayout(props: GitRightbarLayoutProps): React.ReactEle
         React.createElement('div', { className: 'dgw-rb__drawerHead' },
           React.createElement('span', { className: 'dgw-log-title' }, '提交详情'),
           React.createElement('span', { className: 'dgw-spacer' }),
-          iconButton('drawer-close', '关闭详情', React.createElement(CloseIcon, { size: 13 }), () => setDrawerOpen(false)),
+          textButton('drawer-close', '关闭详情', '关闭提交详情', () => setDrawerOpen(false)),
         ),
         React.createElement(DetailsColumn, {
           model,
