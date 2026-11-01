@@ -37,6 +37,15 @@ interface SidebarRightFace {
   openTab(kind: string): void
   active(): { readonly id: string; readonly kind: string } | undefined
   close(tabId: string): void
+  /**
+   * Whether the column is currently showing its panel.
+   *
+   * `active()` still reports the layout's active tab while the column is
+   * collapsed, so the toggle must not read "the Git tab is active" as "the Git
+   * page is on screen". Absent in older hosts, where the previous behaviour is
+   * kept.
+   */
+  isExpanded?(): boolean
 }
 
 /** Normalize one thrown value into display text. */
@@ -70,7 +79,11 @@ export function toggleGitRightbar(ctx: Context): GitRightbarToggleResult {
   if (face === undefined) return { status: 'retry', reason: '右侧栏服务尚未挂载' }
   try {
     const active = face.active()
-    if (active !== undefined && active.kind === GIT_RIGHTBAR_KIND) {
+    // Only an on-screen Git page is a close target. While the column is
+    // collapsed its active tab is still the Git layout record, so closing it
+    // there looks like a dead button and makes the next click "open" it.
+    const expanded = typeof face.isExpanded === 'function' ? face.isExpanded() : true
+    if (expanded && active !== undefined && active.kind === GIT_RIGHTBAR_KIND) {
       face.close(active.id)
       return { status: 'closed' }
     }

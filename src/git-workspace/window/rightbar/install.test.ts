@@ -183,10 +183,31 @@ describe('toggleGitRightbar', () => {
       openTab,
       active: () => ({ id: 'tab-git', kind: GIT_RIGHTBAR_KIND }),
       close,
+      isExpanded: () => true,
     })
     expect(toggleGitRightbar(fake.ctx)).toEqual({ status: 'closed' })
     expect(close).toHaveBeenCalledWith('tab-git')
     expect(openTab).not.toHaveBeenCalled()
+  })
+
+  it('opens when the collapsed column still reports Git as its active tab', () => {
+    const fake = createFakeContext()
+    installGitRightbarPage(fake.ctx)
+    fake.registerTabs()
+    const close = vi.fn()
+    const openTab = vi.fn()
+    const openRightbar = vi.fn()
+    fake.services.set('sidebarRight', {
+      openTab,
+      active: () => ({ id: 'tab-git', kind: GIT_RIGHTBAR_KIND }),
+      close,
+      isExpanded: () => false,
+    })
+    fake.services.set('layout', { openRightbar })
+    expect(toggleGitRightbar(fake.ctx)).toEqual({ status: 'opened' })
+    expect(close).not.toHaveBeenCalled()
+    expect(openRightbar).toHaveBeenCalledWith(true, true)
+    expect(openTab).toHaveBeenCalledWith(GIT_RIGHTBAR_KIND)
   })
 
   it('reports a retry when the surface has not been adopted yet', () => {
