@@ -169,7 +169,7 @@ describe('toggleGitRightbar', () => {
     fake.services.set('layout', { openRightbar })
 
     expect(toggleGitRightbar(fake.ctx)).toEqual({ status: 'opened' })
-    expect(openRightbar).toHaveBeenCalledWith(true, false)
+    expect(openRightbar).toHaveBeenCalledWith(true, true)
     expect(openTab).toHaveBeenCalledWith(GIT_RIGHTBAR_KIND)
   })
 

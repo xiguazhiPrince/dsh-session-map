@@ -74,8 +74,10 @@ export function toggleGitRightbar(ctx: Context): GitRightbarToggleResult {
       face.close(active.id)
       return { status: 'closed' }
     }
-    // Mount the column before asking it to adopt a page tab.
-    lookup<LayoutService>(ctx, 'layout')?.openRightbar?.(true, false)
+    // Mount the column before asking it to adopt a page tab. The Git page is
+    // wide by nature (commit panel + diff + log), so it opens in the column's
+    // fullscreen presentation; the column chrome can still toggle it back.
+    lookup<LayoutService>(ctx, 'layout')?.openRightbar?.(true, true)
     face.openTab(GIT_RIGHTBAR_KIND)
     return { status: 'opened' }
   } catch (cause) {
@@ -169,8 +171,15 @@ export function installGitRightbarPage(ctx: Context): void {
   }
 
   const Page = createGitRightbarPage(runtime)
-  const Body = (props: GitRightbarPageProps): React.ReactElement =>
-    React.createElement(Page, { ...props, openFullscreen, closeTab })
+  const Body = (props: GitRightbarPageProps): React.ReactElement => {
+    // Reaching this page from the guide card (or a restored tab) does not run
+    // the header toggle above, so the page itself claims the same default once
+    // it mounts. The column chrome's own fullscreen control still wins
+    // afterwards: this runs on mount, not on every render, so leaving
+    // fullscreen while the page stays open is left alone.
+    React.useEffect(() => { openFullscreen() }, [])
+    return React.createElement(Page, { ...props, openFullscreen, closeTab })
+  }
 
   // The body depends on no right-column service: register it as soon as the
   // host declares the keyed slot.
