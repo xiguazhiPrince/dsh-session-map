@@ -99,7 +99,7 @@ export function createSkillCatalogRuntime(_ctx: Context): SkillCatalogRuntime {
 }
 
 /** Whether an unknown thrown value is the abort of a page-owned request. */
-function isAbortError(error: unknown): boolean {
+export function isAbortError(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError'
 }
 
@@ -111,7 +111,7 @@ function errorText(error: unknown): string {
 }
 
 /** Format one ISO timestamp as a local wall-clock time. */
-function formatTime(iso: string | null): string | null {
+export function formatTime(iso: string | null): string | null {
   if (iso === null) return null
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return null
@@ -148,7 +148,7 @@ const DESCRIPTION_CLAMP_CHARS = 80
  * @param props - the skill to render.
  * @returns the row element.
  */
-function SkillRow({ skill }: { readonly skill: SkillView }): React.ReactElement {
+export function SkillRow({ skill }: { readonly skill: SkillView }): React.ReactElement {
   const [descriptionOpen, setDescriptionOpen] = React.useState(false)
   const description = skill.description === '' ? COPY.noDescription : skill.description
   const foldable = skill.description.length > DESCRIPTION_CLAMP_CHARS
@@ -198,7 +198,7 @@ function SkillRow({ skill }: { readonly skill: SkillView }): React.ReactElement 
  * @param props - the rows to render.
  * @returns the list wrapper.
  */
-function SkillList({ skills }: { readonly skills: readonly SkillView[] }): React.ReactElement {
+export function SkillList({ skills }: { readonly skills: readonly SkillView[] }): React.ReactElement {
   return React.createElement(
     'div',
     { className: 'sk-list' },
@@ -313,7 +313,7 @@ export function SkillCatalogPage(props: SkillCatalogPageProps): React.ReactEleme
   return React.createElement(
     'div',
     { className: 'sk-page' },
-    React.createElement('style', null, CSS),
+    React.createElement('style', null, SKILL_CSS),
     React.createElement(
       'div',
       { className: 'sk-inner' },
@@ -510,7 +510,7 @@ export function createSkillCatalogSettings(runtime: SkillCatalogRuntime): () => 
       return React.createElement(
         'div',
         { className: 'sk-page' },
-        React.createElement('style', null, CSS),
+        React.createElement('style', null, SKILL_CSS),
         React.createElement(
           'div',
           { className: 'sk-inner' },
@@ -553,7 +553,7 @@ export function createSkillCatalogSettings(runtime: SkillCatalogRuntime): () => 
 }
 
 /** Component-local stylesheet; every color is a Harness theme token. */
-const CSS = `
+export const SKILL_CSS = `
 .sk-page { box-sizing: border-box; padding: 2px 0 28px; color: var(--dsw-alias-label-primary); font-size: 13px; line-height: 1.55; font-family: inherit; }
 .sk-page * { box-sizing: border-box; }
 .sk-inner { display: flex; flex-direction: column; gap: 16px; max-width: 720px; }

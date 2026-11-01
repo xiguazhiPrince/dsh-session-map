@@ -1,6 +1,6 @@
 # dsh-session-map
 
-> A turn-tree canvas over every DSH session — nodes are users' turns, sessions are coloured lines and tags, and every fork leaves from the exact inherited turn — one conversation tab, one session-header toggle and two right-sidebar tabs. It opens on the current session's own tree, growing downward.
+> A turn-tree canvas over every DSH session — nodes are users' turns, sessions are coloured lines and tags, and every fork leaves from the exact inherited turn — two opt-in map tabs, one default-on skills tab, one session-header toggle and two right-sidebar tabs. It opens on the current session's own tree, growing downward.
 
 DSH 的会话会从某一轮 **fork** 出去，可左侧栏只是一张平铺列表：谁从谁分叉、手上这个会话在整张图里的位置，都得自己回忆。这个插件把**用户轮次**画成树——每一轮用户输入是一个节点，会话退成一条颜色和一枚会话标题标签——于是「从哪一句话分出去的」一眼可见；同一段被继承的历史只画一次，不再折成 `+N 继承` 胶囊。
 
@@ -20,7 +20,7 @@ DSH 的会话会从某一轮 **fork** 出去，可左侧栏只是一张平铺列
 | **轮次节点** | 每个用户轮次是一个节点；当前会话及祖先路径的 steering 输入也会作为后续节点出现。轮次号、提示预览、分叉数；共享的继承前缀只画一次；0 条自有输入的会话显示为会话头 chip；长直链折叠成 `+N 条输入` |
 | **画布手感** | 滚轮平移、Shift + 滚轮横向平移、Ctrl / ⌘ + 滚轮缩放、拖空白平移（不会选中文字），外加适应窗口 / 定位当前 / 100% |
 | **一屏概览** | 另有一个「会话概览」标签页：轮次、步骤、模型耗时、工具耗时、输出 token、运行状态 |
-| **三个入口** | 对话标签页、会话头部开关、右侧栏常驻标签页——哪里顺手用哪里（对话标签页默认关闭，见[使用](#对话标签栏的两个标签页默认关闭)） |
+| **三个入口** | 对话标签页、会话头部开关、右侧栏常驻标签页——哪里顺手用哪里（图谱 / 概览对话标签页默认关闭，技能标签页默认出现，见[使用](#对话标签栏的图谱与概览默认关闭)） |
 | **从 Git 克隆** | Settings 里的独立页面：填仓库地址、选存放目录（记住上次选择）、按需打开浅克隆，点「克隆」自动 clone 并添加工作区 |
 | **技能管理** | Settings 里的「技能」页：分「用户级」（`~/.dsh/skills`、`~/.agents/skills`）与「项目级」（每个工作区项目根目录下的 `.dsh/skills`、`.agents/skills`）两组列出全部已发现的技能，带来源、调用限制、`/名称` 与文件路径，可搜索、可刷新 |
 
@@ -76,7 +76,7 @@ dsh --profile web --dump-config    # profile 名换成你装的那个
 
 | 位置 | 应该看到 |
 |---|---|
-| 会话标签栏 | 「概览」与「会话图谱」两个标签页 |
+| 会话标签栏 | 「技能」标签页默认出现；「概览」「会话图谱」默认关闭，打开偏好后出现（见[使用](#对话标签栏的图谱与概览默认关闭)） |
 | 会话头部工具区 | 「会话图谱」开关；右侧栏正显示图谱时再点一次会关闭它 |
 | 右侧栏标签 | `dsh-session-map.map`（标题「会话图谱」）和 `dsh-session-map.overview`（标题「会话概览」） |
 | 会话头 / 右侧栏 `+` | 「Git」按钮（order 41）与指南卡片「Git」；打开后是右侧栏一页式 Git 页面（提交面板 + 差异 / 分支树 + 提交列表 + 提交详情） |
@@ -95,7 +95,7 @@ dsh --profile web --dump-config    # profile 名换成你装的那个
 
 | 座位 | 内容 |
 |---|---|
-| `conversation.view` | 「概览」标签页（order 20）、「会话图谱」标签页（order 30）—— **默认关闭**，见下 |
+| `conversation.view` | 「概览」标签页（order 20）、「会话图谱」标签页（order 30）、「技能」标签页（order 40）—— 「技能」默认注册；「概览」与「会话图谱」默认关闭，见下 |
 | `conversation.session.header.utilities` | 会话头部的「会话图谱」开关（order 40）；右侧栏已打开时再点一次关闭 |
 | `sidebar.right.pane.tab` | 常驻标签页 `dsh-session-map.overview` 与 `dsh-session-map.map` |
 
@@ -152,9 +152,9 @@ dsh --profile web --dump-config    # profile 名换成你装的那个
 - 直接父会话自己的自有轮次为 0 时，子会话挂在它的会话头 chip 下，而不是绕过它挂到祖先轮次上——这条规则保证空会话的层级不丢。
 - 所有环（`parentId` 互相指）都按根处理，不会递归不返回。
 
-### 对话标签栏的两个标签页默认关闭
+### 对话标签栏的图谱与概览默认关闭
 
-「概览」和「会话图谱」这两个 `conversation.view` 入口由**浏览器本地偏好**控制，默认不注册。头部开关和右侧栏的两个标签页不受影响，图谱仍然可以从右侧栏正常使用；上图里的图谱就是右侧栏那个标签页。
+「概览」和「会话图谱」这两个 `conversation.view` 入口由**浏览器本地偏好**控制，**共用同一个开关**、默认不注册——要么一起出现，要么一起不出现。**「技能」标签页不受这个开关影响，默认注册**；只有组合里没有 `remote.skills` 时它才缺席。头部开关和右侧栏的两个标签页也不受影响，图谱仍然可以从右侧栏正常使用；上图里的图谱就是右侧栏那个标签页。
 
 在页面控制台里改，**刷新后生效**（不需要重新构建或重启）：
 
@@ -164,9 +164,21 @@ localStorage.setItem('dsh.session-map.conversationViews', 'false')  // 显式关
 localStorage.removeItem('dsh.session-map.conversationViews')        // 回到出厂默认
 ```
 
-出厂默认写在 `src/session-map/index.ts` 的 `DEFAULT_CONVERSATION_VIEWS`。
+出厂默认写在 `src/session-map/index.ts` 的 `DEFAULT_CONVERSATION_VIEWS`（只作用于图谱 / 概览这两个标签页）。
 
 **为什么不用 profile 里的 `config`**：浏览器半由 web boot 用**裸 `{ name }`** 创建（`packages/client/web/src/boot-client.ts:50`），而 boot manifest 的插件行只带 `id` / `inject` / `immediately`——宿主行的 `config` 到不了客户端插件。给这个包写 `config` 不会有任何效果。
+
+### 技能标签页（当前会话生效的技能）
+
+「技能」标签页**只读**，回答一个问题：**这个会话里到底能用哪些技能**。宿主按会话的工作目录与 agent preset 解析出该会话实际生效的技能，只返回**用户可调用**（`/名称`）的那些——不需要先冷启动一个 Agent。会话不存在或还没有可读的投影、或组合里没有技能注册表时，Remote 会报错而不是返回空列表，页面显示错误与「重试」；确实没有生效技能时才是空态。
+
+- **按路径筛选**：列表顶部是「全部」加每个来源根（`~/.dsh/skills`、`~/.agents/skills`、`.dsh/skills`、`.agents/skills`、`自定义目录`、`运行时注册`）的筛选 tab，带当前匹配数量；点一个只看该路径下的技能，与搜索条件叠加，切换会话后回到「全部」。
+- **每行**：名称、来源根 chip（`~/.dsh/skills`、`~/.agents/skills`、`.dsh/skills`、`.agents/skills`、`自定义目录`、`运行时注册`）、不可被模型调用时的 `仅手动调用` 标记、描述（超过 80 字折成两行，行内「展开 / 收起」）、`何时用`、以及 SKILL.md 的绝对路径。
+- **搜索与刷新**：顶部搜索框按名称 / 描述 / 路径过滤，并与来源路径筛选叠加；「刷新」重新读取并显示更新时间；首次读取显示加载态。
+- **失败与过期**：读取失败显示错误与「重试」；刷新失败时保留上一次的列表，并在顶部挂一条提示说明这是过期结果，刷新成功才消失。
+- **跟随会话**：切换当前会话后自动重新读取，读到的是新会话生效的那份技能。
+
+浏览器半走产品自带的 `ctx.remote.skills.list({ sessionId }, signal)`（宿主 `sessionSkillCatalog` 服务），插件里不重复扫描目录；`remote.skills` 是别的包提供的可选能力，组合里没有它时这个标签页不注册，其余座位不受影响。和 Settings → 技能 的分工：那个页面列的是这台机器 / 每个项目**发现到的全部**技能，这个标签页只列**当前会话生效**的那一份。注册 id 为 `session-skills`、order 40，**默认注册**，不需要改 `dsh.session-map.conversationViews` 偏好；实现位置：`src/skill-catalog/session-tab.ts`（标签页本体），注册在 `src/session-map/index.ts`。
 
 ### 从 Git 克隆并添加工作区
 
@@ -296,6 +308,8 @@ src/git-workspace/client.test.ts 页面服务端渲染冒烟测试（vitest）
 src/skill-catalog/catalog.ts    技能目录类型：来源分层、排序去重、搜索过滤、信封解码
 src/skill-catalog/host.ts       宿主只读路由：项目根解析、按层读取 ctx.skills
 src/skill-catalog/client.ts     Settings 页（settings.section）与样式
+src/skill-catalog/session-tab.ts 会话内「技能」标签页：按会话读取生效技能、搜索、刷新与错误重试
+src/skill-catalog/session-tab.test.ts 标签页 Remote 封装与服务端渲染测试（vitest）
 src/skill-catalog/catalog.test.ts 分层与过滤规则测试（vitest）
 src/skill-catalog/host.test.ts    项目根、分组与路由测试（vitest）
 src/skill-catalog/client.test.ts  页面服务端渲染冒烟测试（vitest）

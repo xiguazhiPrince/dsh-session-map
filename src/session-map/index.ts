@@ -1,14 +1,16 @@
 /**
  * Browser half: the Session map plugin.
  *
- * Contributes the Session map UI plus three smaller seats: a composer Git
- * branch badge, the Settings → Clone from Git page, and the Settings → Skills
- * page. The map itself is a plain
+ * Contributes the Session map UI plus four smaller seats: a composer Git
+ * branch badge, a Session skills tab, the Settings → Clone from Git page, and
+ * the Settings → Skills page. The map itself is a plain
  * overview as a Conversation tab and as a right-column tab, a turn-tree canvas
  * as a Conversation tab, a right-column tab, and a Session header launcher; the
- * branch reading lives in `conversation.input.left`, the clone form is a
- * `settings.section` page (see `../git-workspace/client`), and the skills
- * catalog is another `settings.section` page (see `../skill-catalog/client`).
+ * branch reading lives in `conversation.input.left`, the Session skills list is
+ * another `conversation.view` tab (see `../skill-catalog/session-tab`), the
+ * clone form is a `settings.section` page (see `../git-workspace/client`), and
+ * the skills catalog is another `settings.section` page (see
+ * `../skill-catalog/client`).
  *
  * Services are read through `ctx.get` against local structural types rather
  * than the product's own browser packages: those are published at a prerelease
@@ -26,6 +28,7 @@ import { createFlag } from './flags'
 import { createGitWorkspaceRuntime, createGitWorkspaceSettings } from '../git-workspace/client'
 import { installGitRightbarPage, installGitWindowPanel } from '../git-workspace/window'
 import { createSkillCatalogRuntime, createSkillCatalogSettings } from '../skill-catalog/client'
+import { createSessionSkillRuntime, createSessionSkillsTab } from '../skill-catalog/session-tab'
 import {
   createTypeClaimer,
   lookup,
@@ -63,26 +66,30 @@ interface SessionsService {
 }
 
 /**
- * Browser-local preference holding whether the Conversation tab entries are
- * registered.
+ * Browser-local preference holding whether the map's Conversation tab entries
+ * (the overview and the turn-tree canvas) are registered.
  *
  * Not row config: the browser half is created by the web boot with a bare
  * `{ name }` (`packages/client/web/src/boot-client.ts`), and a boot manifest
  * row carries only `id`, `inject`, and `immediately`, so nothing a profile
  * writes reaches this program.
+ *
+ * The Session skills tab is deliberately outside this preference: it is a small
+ * read-only list, so it registers by default whenever the typed skill Remote is
+ * mounted.
  */
 const CONVERSATION_VIEWS_KEY = 'dsh.session-map.conversationViews'
 
 /**
- * Whether the Conversation tabs are registered when this browser recorded no
- * preference. The header launcher and both right-column tab types register
+ * Whether the map's Conversation tabs are registered when this browser recorded
+ * no preference. The header launcher and both right-column tab types register
  * either way, so the map stays usable from the right column alone.
  */
 const DEFAULT_CONVERSATION_VIEWS = false
 
 /**
- * Read this browser's Conversation-tab preference.
- * @returns true when the tabs should be registered.
+ * Read this browser's map Conversation-tab preference.
+ * @returns true when the map's overview and canvas tabs should be registered.
  */
 function conversationViewsEnabled(): boolean {
   if (typeof localStorage === 'undefined') return DEFAULT_CONVERSATION_VIEWS
@@ -210,7 +217,8 @@ export function apply(ctx: Context): void {
     )), 'session-map: git branch badge')
   })
 
-  // The Conversation tab entries are opt-in; see DEFAULT_CONVERSATION_VIEWS.
+  // The map's Conversation tab entries are opt-in; see
+  // DEFAULT_CONVERSATION_VIEWS.
   if (conversationViewsEnabled()) {
     ctx.effect(() => slots.inject('conversation.view', () => slots.register(
       { name: 'conversation.view', id: 'session-overview', order: 20, label: '概览' },
@@ -222,6 +230,23 @@ export function apply(ctx: Context): void {
       SessionMapTab,
     )), 'session-map: conversation view entry')
   }
+
+  // The Session's effective skills tab is registered by default: it is a small
+  // read-only view over the typed Remote the product's own `/` skill menu
+  // already uses, not part of the map's opt-in group. The Host resolves the
+  // Session's working directory and Agent preset, so this tab needs no route of
+  // its own, no cold Agent, and no second discovery pass. `remote.skills`
+  // belongs to another package, so it stays an optional capability: a
+  // composition without it keeps every other seat and simply omits this tab.
+  ctx.inject(['slots', 'remote', 'remote.skills'], (scope) => {
+    const scopedSlots = lookup<SlotsService>(scope, 'slots')
+    if (scopedSlots === undefined) return
+    const SessionSkillsTab = createSessionSkillsTab(createSessionSkillRuntime(scope))
+    scope.effect(() => scopedSlots.inject('conversation.view', () => scopedSlots.register(
+      { name: 'conversation.view', id: 'session-skills', order: 40, label: '技能' },
+      SessionSkillsTab,
+    )), 'session-skills: conversation view entry')
+  })
 
   // The right column's type registry belongs to another package whose own
   // injections are wider, so its apply can land after this one. Reading the
