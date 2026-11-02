@@ -79,6 +79,7 @@ describe('read argument builders', () => {
       'status', '--porcelain=v2', '-z', '--branch', '--show-stash', '--untracked-files=normal',
     ])
     expect(statusArgs('no')).toContain('--untracked-files=no')
+    expect(statusArgs('all')).toContain('--untracked-files=all')
   })
 
   it('builds repository probe, ref and remote commands', () => {

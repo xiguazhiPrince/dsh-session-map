@@ -295,6 +295,8 @@ export const CSS = `
 .dgw-changeDirCount { margin-left: auto; color: var(--dsw-alias-label-secondary); font-size: 10px; }
 .dgw-changeChevron { display: inline-flex; transition: transform .12s ease; }
 .dgw-changeChevron[data-open='true'] { transform: rotate(90deg); }
+/* Shown when a huge untracked tree made the Host fall back to collapsed dirs. */
+.dgw-changeNote { padding: 2px 10px 4px 28px; color: var(--dsw-alias-label-secondary); font-size: 10px; line-height: 1.5; }
 .dgw-changePath { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 11px; }
 .dgw-changeStatus { flex: 0 0 auto; font-size: 10px; font-weight: 700; }
 .dgw-discard { flex: 0 0 auto; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 10px; cursor: pointer; opacity: 0; }

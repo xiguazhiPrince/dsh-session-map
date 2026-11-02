@@ -689,7 +689,7 @@ const WRITE = [git, '-C', root, '--no-pager',
 | 数据 | argv（省略公共前缀） | 解析要点 |
 |---|---|---|
 | 仓库边界 | `rev-parse --is-inside-work-tree --show-toplevel --show-prefix --is-bare-repository --git-dir --git-common-dir` | 逐行输出；`git-common-dir ≠ git-dir` 即 linked worktree；Windows 返回 `C:/…` 正斜杠；非仓库 128 |
-| 工作区状态 | `status --porcelain=v2 -z --branch --show-stash --untracked-files=normal` | 轮询用 `-uno`（廉价版）；展开未跟踪时 `-uall`；`# stash N` 省一次 stash 进程 |
+| 工作区状态 | `status --porcelain=v2 -z --branch --show-stash --untracked-files=all` | 当前快照用 `-uall`，未跟踪目录逐文件列出（不折叠成 `dir/`）；未跟踪行 >2000 或输出被截断时回退 `-unormal` 折叠目录并在界面提示；轮询降级用 `-uno` 是后续优化；`# stash N` 省一次 stash 进程 |
 | 分支/标签/远端 | `for-each-ref --format='…' refs/heads refs/remotes refs/tags` | 字段 `%00` 分隔，记录按换行；`%(HEAD)` 为 `*` 或空格；`%(upstream:track)` 形如 `[ahead 1, behind 2]` / `[gone]` |
 | 上游计数（懒） | `rev-list --count --left-right '<branch>...<upstream>'` | 输出 `L\tR`；无上游 128 |
 | stash | `stash list -z --format='%gd%x1f%H%x1f%ct%x1f%s'` | 不要传 `--date`（会把 `%gd` 变成 ISO 时间） |
@@ -744,7 +744,7 @@ const WRITE = [git, '-C', root, '--no-pager',
 | `1` | `XY sub mH mI mW hH hI <path>` | `XY[0]`=暂存、`XY[1]`=工作区，`.` 为无变化；path 可含空格，**定长字段后取剩余，不能 split(' ')` |
 | `2` | 同 `1` + `X<score> <path>\0<origPath>` | `-z` 下两个路径各占一个 NUL 字段 |
 | `u` | `XY sub m1 m2 m3 mW h1 h2 h3 <path>` | 未合并；XY ∈ DD/AU/UD/UA/DU/AA/UU |
-| `?` | `<path>` | 未跟踪；`-u normal` 下目录折叠为 `dir/` |
+| `?` | `<path>` | 未跟踪；`-uall` 下逐文件给出，`-u normal` 下目录折叠为 `dir/`（解析器仍容忍该形态；行标签取不到 basename 时回退显示目录名，不留空行） |
 | `!` | `<path>` | 仅 `--ignored` 时出现 |
 
 **`log -z --format`**：字段用 `%x1f`、记录用 NUL；**不要用 `%x00` 作字段分隔**（与记录分隔冲突）。`%D` 形如 `HEAD -> main, tag: v1, side`，因分支名可含逗号**只用于展示、不可反解析**；「在 N 个分支中」用 `for-each-ref --contains`。空仓库 `log` 退出 128，先判 `(initial)` 跳过。
@@ -777,6 +777,7 @@ const WRITE = [git, '-C', root, '--no-pager',
 - **A 级刷新（轮询/事件后，≤3 个进程）**：缓存的仓库根 + `status -uno` +（refs 信号变化时）`for-each-ref`，约 120ms。
 - **B 级刷新（面板打开/写操作后，≤6 个进程）**：A 级 + 全量 `status` + `stash list` + `remote -v` + 操作标记，目标 <300ms。
 - **C 级（按需懒加载）**：日志页、提交详情、diff、上游计数；展开才拉，禁止每次轮询都跑 `log --all`、全量 diff、blame。
+- **当前实现**：尚未拆出 A/B 级，轮询每次跑完整 `status --untracked-files=all`（未跟踪目录逐文件列出，避免折叠成无法命名的 `dir/` 行）；未跟踪行超过 2000 条或 status 输出被截断时，回退 `--untracked-files=normal` 并给快照标 `untrackedCollapsed`，界面在「未版本控制」分组下提示已折叠，避免截断后展示半截数据；A/B 级拆分与展开时的 `-uall` 懒加载留作大仓库优化项。
 - 轮询：可见且聚焦 2s 一次 A 级；空闲 60s 后 10s；不可见停止；`visibilitychange` 回前台立即刷新。大仓库（status >1.5s 或跟踪文件 >50k）关闭自动全量，只保留手动/操作后刷新。
 - 监听：`<git-common-dir>` 非递归（`HEAD`/`index`/`packed-refs`/`FETCH_HEAD`/`ORIG_HEAD`/`refs/stash`）+ `refs/` 递归；工作区仅当文件数 <20k 且平台支持递归 watch 时启用，否则轮询。事件 150–300ms 防抖；Windows 上「临时文件+rename」可能漏事件，300ms 后再 stat 二次确认。
 - 并发：**每仓库一个写队列**（add/commit/switch/merge/rebase/reset/stash/push/pull 串行）；读操作同仓库 ≤4；网络操作独占仓库锁并在 UI 显示 busy；写期间允许 A 级读，C 级大读暂缓。

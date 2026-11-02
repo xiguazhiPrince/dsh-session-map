@@ -104,4 +104,27 @@ describe('CommitPane (right-column presentation)', () => {
     expect(markup).not.toContain('dgw-checkbox--button')
     expect(markup).toContain('提交并推送')
   })
+
+  it('names a collapsed `dir/` untracked row instead of leaving it blank', () => {
+    const withCollapsedDir: RepoSnapshot = {
+      ...SNAPSHOT,
+      changes: [
+        { path: 'content-system/assets/', xy: { index: '.', worktree: '?' }, kind: 'untracked', group: 'untracked', status: '?' },
+        { path: 'content-system/how-to-use.md', xy: { index: '.', worktree: '?' }, kind: 'untracked', group: 'untracked', status: '?' },
+      ],
+      counts: { staged: 0, unstaged: 0, untracked: 2, conflicted: 0 },
+    }
+    const markup = renderToStaticMarkup(React.createElement(CommitPane, { ...props, snapshot: withCollapsedDir }))
+    const names = [...markup.matchAll(/class="dgw-changePath">([^<]*)</g)].map(match => match[1])
+    expect(names).toEqual(['assets', 'how-to-use.md'])
+  })
+
+  it('warns when a huge untracked tree was collapsed to fit the cap', () => {
+    const collapsed: RepoSnapshot = { ...SNAPSHOT, untrackedCollapsed: true }
+    const markup = renderToStaticMarkup(React.createElement(CommitPane, { ...props, snapshot: collapsed }))
+    expect(markup).toContain('dgw-changeNote')
+    expect(markup).toContain('未跟踪文件过多')
+    const plain = renderToStaticMarkup(React.createElement(CommitPane, props))
+    expect(plain).not.toContain('dgw-changeNote')
+  })
 })

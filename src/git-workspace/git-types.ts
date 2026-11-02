@@ -81,6 +81,11 @@ export interface RepoSnapshot {
   readonly stale: boolean
   /** True when any sub-read hit its output cap. */
   readonly truncated: boolean
+  /**
+   * True when the untracked list was too large for the `-uall` snapshot and the
+   * Host retried with `-unormal`, so directories arrive as `dir/` rows.
+   */
+  readonly untrackedCollapsed?: boolean
   /** Cheap fingerprint of `.git` files; the client only uses it for change detection. */
   readonly version: string
   readonly repo: {

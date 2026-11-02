@@ -68,6 +68,9 @@ const OPERATION_MARKERS = [
 /** How long one snapshot is reused to collapse React double-fetches. */
 const SNAPSHOT_TTL_MS = 800
 
+/** Untracked rows above this fall back to `-unormal` so the snapshot stays usable. */
+const MAX_UNTRACKED_ROWS = 2_000
+
 /** Maximum commits one log page may return. */
 const MAX_LOG_LIMIT = 100
 
@@ -301,16 +304,35 @@ export function createGitWindowHandler(deps: GitWindowDeps): GitWindowRouteHandl
       return result
     }
 
-    const [statusRun, refsRun, markersRun, remotesRun] = await Promise.all([
-      run(statusArgs('normal'), 'status'),
+    const [fullStatusRun, refsRun, markersRun, remotesRun] = await Promise.all([
+      // `all` so an untracked directory arrives as its individual files, not
+      // as one collapsed `dir/` row the change tree can neither name nor stage.
+      run(statusArgs('all'), 'status'),
       run(forEachRefArgs(), 'refs'),
       run(gitPathArgs(OPERATION_MARKERS), 'paths'),
       run(remoteVerboseArgs(), 'remotes'),
     ])
-    for (const result of [statusRun, refsRun, markersRun, remotesRun]) {
+    for (const result of [fullStatusRun, refsRun, markersRun, remotesRun]) {
       if (result.exitCode !== 0) throw classifyFailure(result.stderr, result.exitCode)
     }
-    const status = parseStatusV2(statusRun.stdout)
+    let statusRun = fullStatusRun
+    let status = parseStatusV2(statusRun.stdout)
+    let untrackedCollapsed = false
+    let untrackedRows = 0
+    for (const change of status.changes) if (change.group === 'untracked') untrackedRows += 1
+    if (statusRun.truncated || untrackedRows > MAX_UNTRACKED_ROWS) {
+      // A huge untracked tree either overflows the status cap or makes the tree
+      // unusable. Collapse the directories so the tracked work stays visible.
+      const collapsed = await run(statusArgs('normal'), 'status')
+      if (collapsed.exitCode === 0) {
+        const collapsedStatus = parseStatusV2(collapsed.stdout)
+        if (!collapsedStatus.truncated) {
+          statusRun = collapsed
+          status = collapsedStatus
+          untrackedCollapsed = true
+        }
+      }
+    }
     const refs = parseForEachRef(refsRun.stdout)
     const markers = parseGitPathLines(markersRun.stdout)
     const operation = await readOperation(repo, markers)
@@ -345,6 +367,7 @@ export function createGitWindowHandler(deps: GitWindowDeps): GitWindowRouteHandl
       },
       changes: status.changes,
       counts,
+      ...(untrackedCollapsed ? { untrackedCollapsed: true } : {}),
       stashCount: status.head.stashCount,
       branches: refs.refs,
       remotes: parseRemoteVerbose(remotesRun.stdout),

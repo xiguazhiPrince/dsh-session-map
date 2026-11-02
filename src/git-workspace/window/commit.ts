@@ -59,6 +59,17 @@ function statusColour(entry: ChangedEntry): string {
   }
 }
 
+/**
+ * Row label for one change: the last path segment. Git reports an untracked
+ * directory collected with `--untracked-files=normal` as `dir/`, whose last
+ * segment is empty — taking it verbatim would render a nameless row.
+ */
+function changeName(path: string): string {
+  const trimmed = path.replace(/\/+$/, '')
+  const name = trimmed.split('/').pop() ?? ''
+  return name === '' ? path : name
+}
+
 /** How one row is presented and what a row click does. */
 interface ChangeRowOptions {
   /** Highlight this row as the previewed change. */
@@ -346,11 +357,19 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
     }
   }
 
-  const sections: Array<{ title: string; rows: ChangedEntry[]; checked: boolean; discardable: boolean }> = [
+  const sections: Array<{ title: string; rows: ChangedEntry[]; checked: boolean; discardable: boolean; note?: string }> = [
     { title: `冲突 (${conflicts.length})`, rows: conflicts, checked: false, discardable: false },
     { title: `暂存区 (${staged.length})`, rows: staged, checked: true, discardable: false },
     { title: `未暂存 (${unstaged.length})`, rows: unstaged, checked: false, discardable: true },
-    { title: `未版本控制 (${untracked.length})`, rows: untracked, checked: false, discardable: true },
+    {
+      title: `未版本控制 (${untracked.length})`,
+      rows: untracked,
+      checked: false,
+      discardable: true,
+      ...(snapshot.untrackedCollapsed === true
+        ? { note: '未跟踪文件过多，快照已改为折叠目录显示；逐个文件请在终端查看。' }
+        : {}),
+    },
   ]
 
   /** Render one section's rows, flat or as a nested directory tree. */
@@ -367,7 +386,7 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
           selected: props.selectedKey === `${entry.group}:${entry.path}`,
           ...(props.onSelect === undefined ? {} : { onSelect: () => { props.onSelect?.(entry) } }),
           depth,
-          label: entry.path.split('/').pop() ?? entry.path,
+          label: changeName(entry.path),
         },
       ))
     }
@@ -407,7 +426,7 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
   }
 
   /** Render one section header (collapsible when asked) plus its rows. */
-  const renderSection = (section: { title: string; rows: ChangedEntry[]; checked: boolean; discardable: boolean }): React.ReactElement => {
+  const renderSection = (section: { title: string; rows: ChangedEntry[]; checked: boolean; discardable: boolean; note?: string }): React.ReactElement => {
     const collapsible = props.collapsibleSections === true
     const open = !collapsible || collapsedSections[section.title] !== true
     return React.createElement(
@@ -428,6 +447,9 @@ export function CommitPane(props: CommitPaneProps): React.ReactElement {
         )
         : React.createElement('div', { className: 'dgw-changeHead' }, section.title),
       open ? renderRows(section.rows, section.checked, section.discardable) : null,
+      open && section.note !== undefined
+        ? React.createElement('div', { className: 'dgw-changeNote' }, section.note)
+        : null,
     )
   }
 

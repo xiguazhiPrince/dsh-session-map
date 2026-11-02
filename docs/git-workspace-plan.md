@@ -1,4 +1,4 @@
-﻿# DSH Git 工具窗口实施计划（测试夹具先行）
+# DSH Git 工具窗口实施计划（测试夹具先行）
 
 > 状态：**已完成**（2026-10-27）｜ 对应规格：[git-workspace-spec.md](git-workspace-spec.md)
 > 实现提交：`1c6f3d9`（只读/提交/分支）、`541a6ea`（fetch/update/push 作业）、`ffc5b44`（历史写操作/ stash / tag / 打磨）
@@ -125,7 +125,7 @@ pnpm build                                  # 重建 lib/
 
 ### 10.2 已实现与设计的偏差
 
-- **快照刷新**：v1 每次轮询跑完整 status（未拆 A/B 级 `-uno`）；大仓库可后续优化。
+- **快照刷新**：v1 每次轮询跑完整 `status --untracked-files=all`（未跟踪目录逐文件列出，未拆 A/B 级 `-uno`）；未跟踪行超过 2000 条或输出被截断时回退 `--untracked-files=normal` 折叠目录并在界面提示（`untrackedCollapsed`）；大仓库可后续优化为「轮询 `-uno` + 展开未跟踪时 `-uall`」的懒加载。
 - **stash 列表**：目前只提供 push/pop 最近一条与 stashCount，完整列表/逐条 drop UI 未做（后端 `stashDrop` 已实现）。
 - **标签删除**：仅本地 `tag -d`，未提供远程标签删除。
 - **冲突解决**：提供继续/中止，未做双栏/三窗格合并编辑器。

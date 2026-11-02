@@ -72,6 +72,31 @@ describeIntegration('git window integration', () => {
     expect(body.snapshot.branches.length).toBeGreaterThan(0)
   })
 
+  it('lists every file inside an untracked directory instead of collapsing it', async () => {
+    const { repo, harness } = await fixture()
+    await repo.write('content-system/assets/quotes.md', 'q\n')
+    await repo.write('content-system/assets/shots.md', 's\n')
+    await repo.write('content-system/how-to-use.md', 'h\n')
+    const response = await invokeRoute(harness.server, {
+      path: '/plugin-git-workspace/snapshot?workspaceId=workspace-1',
+    })
+    expect(response.status).toBe(200)
+    const body = response.json as {
+      snapshot: { changes: Array<{ path: string; group: string }>; counts: { untracked: number } }
+    }
+    const untracked = body.snapshot.changes
+      .filter(change => change.group === 'untracked')
+      .map(change => change.path)
+      .sort()
+    expect(untracked).toEqual([
+      'content-system/assets/quotes.md',
+      'content-system/assets/shots.md',
+      'content-system/how-to-use.md',
+    ])
+    expect(body.snapshot.counts.untracked).toBe(3)
+    for (const path of untracked) expect(path.endsWith('/')).toBe(false)
+  })
+
   it('refuses to discard without confirmation and leaves the file untouched', async () => {
     const { repo, harness } = await fixture()
     await repo.write('a.txt', 'changed\n')

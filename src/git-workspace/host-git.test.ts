@@ -122,6 +122,75 @@ describe('GET /snapshot', () => {
     expect(subprocess.spawns).toHaveLength(5)
   })
 
+  it('asks git for every untracked file rather than one collapsed directory row', async () => {
+    const workspace = await makeWorkspace()
+    const fake = new FakeSubprocess().queueOutcome(
+      { stdout: probeOutput(workspace) },
+      { stdout: STATUS_V2 },
+      { stdout: FOR_EACH_REF },
+      { stdout: MARKER_OUTPUT },
+      { stdout: '' },
+    )
+    const { server, subprocess } = harness(fake, workspace)
+    await invokeRoute(server, { path: '/plugin-git-workspace/snapshot?workspaceId=workspace-1' })
+    const statusArgv = subprocess.spawns.find(spec => spec.argv.includes('--porcelain=v2'))?.argv
+    expect(statusArgv).toContain('--untracked-files=all')
+    expect(statusArgv).not.toContain('--untracked-files=normal')
+  })
+
+  it('falls back to collapsed untracked directories when the full list overflows', async () => {
+    const workspace = await makeWorkspace()
+    const fake = new FakeSubprocess().queueOutcome(
+      { stdout: probeOutput(workspace) },
+      { stdout: STATUS_V2, truncated: true },
+      { stdout: FOR_EACH_REF },
+      { stdout: MARKER_OUTPUT },
+      { stdout: '' },
+      { stdout: STATUS_V2 },
+    )
+    const { server, subprocess } = harness(fake, workspace)
+    const response = await invokeRoute(server, {
+      path: '/plugin-git-workspace/snapshot?workspaceId=workspace-1',
+    })
+    expect(response.status).toBe(200)
+    const body = response.json as {
+      snapshot: { untrackedCollapsed?: boolean; truncated: boolean; counts: { untracked: number } }
+    }
+    expect(body.snapshot.untrackedCollapsed).toBe(true)
+    expect(body.snapshot.truncated).toBe(false)
+    expect(body.snapshot.counts.untracked).toBe(2)
+    const argvs = subprocess.spawns.map(spec => spec.argv)
+    expect(argvs.some(argv => argv.includes('--untracked-files=all'))).toBe(true)
+    expect(argvs.some(argv => argv.includes('--untracked-files=normal'))).toBe(true)
+  })
+
+  it('collapses untracked directories when the full list exceeds the row cap', async () => {
+    const workspace = await makeWorkspace()
+    const manyUntracked = [
+      '# branch.head main',
+      ...Array.from({ length: 2_001 }, (_, index) => `? tmp/f${index}.txt`),
+    ].join('\0') + '\0'
+    const fake = new FakeSubprocess().queueOutcome(
+      { stdout: probeOutput(workspace) },
+      { stdout: manyUntracked },
+      { stdout: FOR_EACH_REF },
+      { stdout: MARKER_OUTPUT },
+      { stdout: '' },
+      { stdout: STATUS_V2 },
+    )
+    const { server, subprocess } = harness(fake, workspace)
+    const response = await invokeRoute(server, {
+      path: '/plugin-git-workspace/snapshot?workspaceId=workspace-1',
+    })
+    expect(response.status).toBe(200)
+    const body = response.json as {
+      snapshot: { untrackedCollapsed?: boolean; counts: { untracked: number } }
+    }
+    expect(body.snapshot.untrackedCollapsed).toBe(true)
+    expect(body.snapshot.counts.untracked).toBe(2)
+    expect(subprocess.spawns.some(spec => spec.argv.includes('--untracked-files=normal'))).toBe(true)
+  })
+
   it('reuses the snapshot inside the short cache window', async () => {
     const workspace = await makeWorkspace()
     const fake = new FakeSubprocess().queueOutcome(
