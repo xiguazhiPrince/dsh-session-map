@@ -143,9 +143,14 @@ export type JsonBodyResult =
  * Read a bounded JSON request body. The web server has no body parser, so the
  * route owns the stream.
  * @param request - incoming request.
+ * @param maxBytes - largest accepted body; the command routes keep the 16 KiB
+ * default, while a route carrying file contents passes its own larger cap.
  * @returns the decoded value, or a rejection message.
  */
-export async function readJsonBody(request: RouteRequest): Promise<JsonBodyResult> {
+export async function readJsonBody(
+  request: RouteRequest,
+  maxBytes: number = MAX_BODY_BYTES,
+): Promise<JsonBodyResult> {
   return await new Promise<JsonBodyResult>((resolve) => {
     const chunks: Uint8Array[] = []
     let totalBytes = 0
@@ -158,7 +163,7 @@ export async function readJsonBody(request: RouteRequest): Promise<JsonBodyResul
     request.on('data', (chunk) => {
       if (settled) return
       totalBytes += chunk.byteLength
-      if (totalBytes > MAX_BODY_BYTES) {
+      if (totalBytes > maxBytes) {
         settle({ ok: false, status: 413, message: 'the request body is too large' })
         return
       }

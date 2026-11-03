@@ -1,16 +1,17 @@
 /**
  * Browser half: the Session map plugin.
  *
- * Contributes the Session map UI plus four smaller seats: a composer Git
- * branch badge, a Session skills tab, the Settings → Clone from Git page, and
- * the Settings → Skills page. The map itself is a plain
- * overview as a Conversation tab and as a right-column tab, a turn-tree canvas
- * as a Conversation tab, a right-column tab, and a Session header launcher; the
- * branch reading lives in `conversation.input.left`, the Session skills list is
- * another `conversation.view` tab (see `../skill-catalog/session-tab`), the
- * clone form is a `settings.section` page (see `../git-workspace/client`), and
- * the skills catalog is another `settings.section` page (see
- * `../skill-catalog/client`).
+ * Contributes the Session map UI plus five smaller seats: a composer Git
+ * branch badge, a Session skills tab, a Session instructions tab, the Settings
+ * → Clone from Git page, and the Settings → Skills page. The map itself is a
+ * plain overview as a Conversation tab and as a right-column tab, a turn-tree
+ * canvas as a Conversation tab, a right-column tab, and a Session header
+ * launcher; the branch reading lives in `conversation.input.left`, the Session
+ * skills list is another `conversation.view` tab (see
+ * `../skill-catalog/session-tab`), the AGENTS.md manager is a third
+ * `conversation.view` tab (see `../agent-instructions/client`), the clone form
+ * is a `settings.section` page (see `../git-workspace/client`), and the skills
+ * catalog is another `settings.section` page (see `../skill-catalog/client`).
  *
  * Services are read through `ctx.get` against local structural types rather
  * than the product's own browser packages: those are published at a prerelease
@@ -25,6 +26,7 @@ import { createGitBranchBadge, type GitBranchRuntime } from './branch'
 import { CSS } from './css'
 import { MAP_KIND, MAP_TYPE_ID, OVERVIEW_KIND, OVERVIEW_TYPE_ID } from './constants'
 import { createFlag } from './flags'
+import { createAgentInstructionsRuntime, createAgentInstructionsTab } from '../agent-instructions/client'
 import { createGitWorkspaceRuntime, createGitWorkspaceSettings } from '../git-workspace/client'
 import { installGitRightbarPage, installGitWindowPanel } from '../git-workspace/window'
 import { createSkillCatalogRuntime, createSkillCatalogSettings } from '../skill-catalog/client'
@@ -247,6 +249,18 @@ export function apply(ctx: Context): void {
       SessionSkillsTab,
     )), 'session-skills: conversation view entry')
   })
+
+  // The Session's instruction-file tab is registered by default: it answers
+  // "which AGENTS.md chain does this Session actually read, and what is in
+  // each layer", and the Host half owns discovery, reads, and writes. The tab
+  // talks to the Host's same-origin route, so it needs nothing beyond the slot
+  // registry; a composition without that route keeps every other seat and this
+  // tab simply reports the route failure.
+  const AgentInstructionsTab = createAgentInstructionsTab(createAgentInstructionsRuntime(ctx))
+  ctx.effect(() => slots.inject('conversation.view', () => slots.register(
+    { name: 'conversation.view', id: 'session-instructions', order: 50, label: '指令' },
+    AgentInstructionsTab,
+  )), 'session-instructions: conversation view entry')
 
   // The right column's type registry belongs to another package whose own
   // injections are wider, so its apply can land after this one. Reading the
