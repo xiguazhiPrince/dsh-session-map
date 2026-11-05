@@ -43,10 +43,10 @@ export interface SlotsService {
   /**
    * Register one entry into a declared slot.
    * @param options - the slot key plus the options its cardinality takes.
-   * @param component - the entry's body.
+   * @param component - the entry's body; `null` renders nothing for that occurrence.
    * @returns the registration's disposer.
    */
-  register<P>(options: SlotRegistrationOptions, component: (props: P) => ReactElement): () => void
+  register<P>(options: SlotRegistrationOptions, component: (props: P) => ReactElement | null): () => void
 }
 
 /** One guide-page capsule a tab type offers. */
