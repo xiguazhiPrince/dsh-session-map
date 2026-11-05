@@ -1,10 +1,12 @@
 /**
  * Browser half: the Session map plugin.
  *
- * Contributes the Session map UI plus six smaller seats: a composer Git
- * branch badge, a Session skills tab, a Session instructions tab, the Settings
- * → Clone from Git page, the Settings → Skills page, and the right column's
- * bulk-close tab-menu rows. The map itself is a plain overview as a Conversation
+ * Contributes the Session map UI plus seven smaller seats: a composer Git
+ * branch badge, a composer `BTW` button that forks the running Session at its
+ * exact progress into a read-only one (see `../btw`), a Session skills tab, a
+ * Session instructions tab, the Settings → Clone from Git page, the Settings →
+ * Skills page, and the right column's bulk-close tab-menu rows. The map itself
+ * is a plain overview as a Conversation
  * tab and as a right-column tab, a turn-tree canvas as a Conversation tab, a
  * right-column tab, and a Session header launcher; the branch reading lives in
  * `conversation.input.left`, the Session skills list is another
@@ -30,6 +32,7 @@ import { CSS } from './css'
 import { MAP_KIND, MAP_TYPE_ID, OVERVIEW_KIND, OVERVIEW_TYPE_ID } from './constants'
 import { createFlag } from './flags'
 import { createAgentInstructionsRuntime, createAgentInstructionsTab } from '../agent-instructions/client'
+import { installBtw } from '../btw'
 import { createGitWorkspaceRuntime, createGitWorkspaceSettings } from '../git-workspace/client'
 import { installGitRightbarPage, installGitWindowPanel } from '../git-workspace/window'
 import { installRightbarTabMenu } from '../rightbar-tab-menu/client'
@@ -130,6 +133,11 @@ export function apply(ctx: Context): void {
   // Every tab of the native right column gains three bulk-close rows in its
   // context menu; the row component decides per occurrence which of them apply.
   installRightbarTabMenu(ctx)
+
+  // `btw`: while a Session runs, one composer button forks it at its exact
+  // current progress into a read-only Session and switches the view there.
+  // The feature owns its own optional dependencies and stylesheet.
+  installBtw(ctx)
 
   // The product has no `styles` service outside the dynamic runtime, so the
   // sheet is a string this effect owns: one element, removed with the fiber.
