@@ -1,22 +1,19 @@
 /**
  * Browser half: the Session map plugin.
  *
- * Contributes the Session map UI plus seven smaller seats: a composer Git
+ * Contributes the Session map UI plus six smaller seats: a composer Git
  * branch badge, a composer `BTW` button that forks the running Session at its
  * exact progress into a read-only one (see `../btw`), a Session skills tab, a
- * Session instructions tab, the Settings → Clone from Git page, the Settings →
- * Skills page, and the right column's bulk-close tab-menu rows. The map itself
- * is a plain overview as a Conversation
+ * Session instructions tab, the Settings → Clone from Git page, and the
+ * Settings → Skills page. The map itself is a plain overview as a Conversation
  * tab and as a right-column tab, a turn-tree canvas as a Conversation tab, a
  * right-column tab, and a Session header launcher; the branch reading lives in
  * `conversation.input.left`, the Session skills list is another
  * `conversation.view` tab (see
  * `../skill-catalog/session-tab`), the AGENTS.md manager is a third
  * `conversation.view` tab (see `../agent-instructions/client`), the clone form
- * is a `settings.section` page (see `../git-workspace/client`), the skills
- * catalog is another `settings.section` page (see `../skill-catalog/client`),
- * and every right-column tab gains three bulk-close rows in its context menu
- * (see `../rightbar-tab-menu/client`).
+ * is a `settings.section` page (see `../git-workspace/client`), and the skills
+ * catalog is another `settings.section` page (see `../skill-catalog/client`).
  *
  * Services are read through `ctx.get` against local structural types rather
  * than the product's own browser packages: those are published at a prerelease
@@ -35,7 +32,6 @@ import { createAgentInstructionsRuntime, createAgentInstructionsTab } from '../a
 import { installBtw } from '../btw'
 import { createGitWorkspaceRuntime, createGitWorkspaceSettings } from '../git-workspace/client'
 import { installGitRightbarPage, installGitWindowPanel } from '../git-workspace/window'
-import { installRightbarTabMenu } from '../rightbar-tab-menu/client'
 import { createSkillCatalogRuntime, createSkillCatalogSettings } from '../skill-catalog/client'
 import { createSessionSkillRuntime, createSessionSkillsTab } from '../skill-catalog/session-tab'
 import {
@@ -129,10 +125,6 @@ export function apply(ctx: Context): void {
   // The one-page Git page for the native right column: Session-bound, follows
   // the Session's workspace, and usable without leaving the conversation.
   installGitRightbarPage(ctx)
-
-  // Every tab of the native right column gains three bulk-close rows in its
-  // context menu; the row component decides per occurrence which of them apply.
-  installRightbarTabMenu(ctx)
 
   // `btw`: while a Session runs, one composer button forks it at its exact
   // current progress into a read-only Session and switches the view there.

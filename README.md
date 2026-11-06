@@ -20,7 +20,6 @@ DSH 的会话会从某一轮 **fork** 出去，可左侧栏只是一张平铺列
 | 不知道当前会话到底能用哪些 `/` 技能 | 会话内「技能」标签页直接列出实际生效、可用的技能，不用先问 Agent |
 | 说不清这个项目的指令写在哪、为什么没生效 | 会话内「指令」标签页按用户级和项目每一层列出 AGENTS.md，直接编辑、新建，并标出生效顺序与去重 |
 | 想看一眼分支、提交、diff，却得切到终端敲 git | 左侧栏的 Git 工具窗口 + 会话头的一键 Git 页面，提交、日志、diff 都在 DSH 里完成 |
-| 右侧栏标签开太多，只能一个一个关 | 右键任意标签即可「关闭其他 / 关闭左侧 / 关闭右侧」，一次收起一片 |
 
 ## 功能亮点
 
@@ -79,12 +78,6 @@ DSH 的会话会从某一轮 **fork** 出去，可左侧栏只是一张平铺列
 ![Git 工具窗口：分支树、图线提交列表、提交详情与逐文件 diff](docs/example-git-window.png)
 
 ![右侧栏一页式 Git：提交面板与差异查看器在上，日志与提交详情在下](docs/example-git-rightbar.png)
-
-### 右侧栏标签：右键一次关掉一片
-
-- **右键任意右侧栏标签**，除了产品自带的「关闭」，菜单里还多出「关闭其他标签」「关闭左侧其他标签」「关闭右侧其他标签」；产品自己的标签页和插件注册的标签一视同仁。
-- **按你看到的顺序算**：左侧 / 右侧就是当前标签条里排在该标签前面 / 后面的那些；右侧栏分割成两个窗格时只看本窗格，不跨窗格关标签，也就不会留下空窗格。
-- **关不掉的标签会跳过**：关闭全部走 DSH 自己的关闭规则（例如唯一停靠的指南页），并且只有一个标签时这三项直接不出现，不给你一个点了没反应的菜单。
 
 ## 界面视觉规范
 
@@ -160,7 +153,7 @@ profile 名要**已经存在**于 `$DSH_HOME/profiles` 下；想新建就先用�
 pnpm install
 pnpm build        # 产出 lib/index.js 与 lib/client.js
 pnpm typecheck
-pnpm test         # 376 个用例（默认跳过 16 条真实 git 集成，GIT_WS_IT=1 时全跑）
+pnpm test         # 405 个用例（默认跳过 16 条真实 git 集成，GIT_WS_IT=1 时全跑）
 ```
 
 **改了 `src/` 务必先 `pnpm build` 再提交**——`lib/` 是仓库内容的一部分，安装方不会替你构建。更深入的功能规格、安全设计与实施状态见 [docs/git-workspace-spec.md](docs/git-workspace-spec.md)、[docs/git-workspace-plan.md](docs/git-workspace-plan.md) 与 [docs/agent-instructions-spec.md](docs/agent-instructions-spec.md)。
