@@ -1,7 +1,7 @@
 {
   "name": "@xiguazhiprince/dsh-session-map",
-  "version": "0.3.0",
-  "description": "Session map: a turn-tree canvas over every DSH session — users' turns are nodes, sessions are coloured lines and tags, and forks leave from the exact inherited turn — as a Conversation tab and two right-sidebar tabs. Also adds Settings → Clone from Git, which clones a repository and registers the directory as a workspace, Settings → Skills, which lists user-level and project-level skills, a Conversation → Skills tab that lists the skills effective in the current session, and a Conversation → Instructions tab that lists, injects-order-labels, creates, edits, and deletes the AGENTS.md instruction files at the user roots and at every project directory level down to the session working directory, and a composer `BTW` button that forks the running session at its exact current progress into a read-only session (named `… · BTW` and marked with a bubble in its sidebar row) and switches the view to it",
+  "version": "0.4.0",
+  "description": "Session map, BTW forks, skills and AGENTS.md panels, and an IntelliJ-style Git tool window for DeepSeek Harness: draw each session's turn-fork tree, fork the running session at its exact progress into a read-only copy, see the skills and instruction files a session really uses, and stage, commit, push, update or clone a repository without leaving the GUI.",
   "type": "module",
   "license": "MIT",
   "main": "lib/index.js",
