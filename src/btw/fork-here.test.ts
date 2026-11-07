@@ -160,6 +160,7 @@ describe('composeBtwTitle', () => {
 describe('forkHere', () => {
   it('forks at the last durable seq, applies read-only, then navigates', async () => {
     const opened: string[] = []
+    const forked: [string, string, number | undefined][] = []
     const { sessions, calls, forkOptions, commandLines } = fakeSessions({
       entries: [event(3), transient(8), event(5)],
     })
@@ -167,6 +168,7 @@ describe('forkHere', () => {
     const result = await forkHere({
       sessions,
       openSession: sessionId => { opened.push(sessionId) },
+      onForked: (childId, parentId, atSeq) => { forked.push([childId, parentId, atSeq]) },
     }, 'parent')
 
     expect(result).toEqual({ ok: true, childId: 'child', atSeq: 5, readOnly: true })
@@ -177,6 +179,8 @@ describe('forkHere', () => {
     expect(calls.indexOf('fork')).toBeLessThan(calls.indexOf('retain:child'))
     expect(calls.indexOf('retain:child')).toBeLessThan(calls.indexOf('command:child'))
     expect(opened).toHaveLength(1)
+    // The exact fork edge is reported as soon as the child exists.
+    expect(forked).toEqual([['child', 'parent', 5]])
   })
 
   it('falls back to the completed-turn boundary when the live window is empty', async () => {
@@ -267,6 +271,7 @@ describe('forkHere', () => {
 
   it('surfaces a fork failure and never navigates', async () => {
     const opened: string[] = []
+    const forked: unknown[] = []
     const { sessions } = fakeSessions({
       entries: [event(2)],
       forkFailure: new Error('session/fork-unavailable: event 2 does not exist'),
@@ -275,9 +280,11 @@ describe('forkHere', () => {
     const result = await forkHere({
       sessions,
       openSession: sessionId => { opened.push(sessionId) },
+      onForked: (...edge) => { forked.push(edge) },
     }, 'parent')
 
     expect(result.ok).toBe(false)
+    expect(forked).toEqual([])
     expect(result.ok ? '' : result.message).toContain('分叉失败')
     expect(result.ok ? '' : result.message).toContain('session/fork-unavailable')
     expect(opened).toEqual([])

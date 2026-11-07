@@ -64,6 +64,8 @@ function build(
     readonly scopeSessionId?: string
     readonly direction?: TreeDirection
     readonly messages?: Readonly<Record<string, readonly TurnMessage[]>>
+    readonly createdAt?: Readonly<Record<string, number>>
+    readonly forkParents?: Readonly<Record<string, string>>
   } = {},
 ): Graph {
   const { ids, byId } = listing(summaries)
@@ -77,6 +79,8 @@ function build(
     options.scopeSessionId,
     options.direction ?? 'vertical',
     options.messages ?? {},
+    options.createdAt ?? {},
+    options.forkParents ?? {},
   )
 }
 
@@ -466,6 +470,97 @@ describe('fork lineage recovered from the copied prefix', () => {
     expect(graph.treeCount).toBe(1)
     expect(sessionOf(graph, 'fork').inheritedCount).toBe(3)
     expect(sessionOf(graph, 'fork').parentSessionId).toBe('parent')
+  })
+
+  it('takes a plugin-observed fork edge as the exact parent', () => {
+    const original = summary('original', [copied(1, 8, 'q1'), copied(2, 30, 'q2')])
+    const fork = summary('fork', [copied(1, 8, 'q1'), copied(2, 30, 'q2'), copied(3, 60, 'own', '')])
+    const graph = build([original, fork], {
+      foldRuns: false,
+      forkParents: { fork: 'original' },
+    })
+
+    // Direction comes from the observation, not from which outline is longest.
+    expect(graph.treeCount).toBe(1)
+    expect(sessionOf(graph, 'original').ownCount).toBe(2)
+    expect(sessionOf(graph, 'fork').parentSessionId).toBe('original')
+    expect(sessionOf(graph, 'fork').inheritedCount).toBe(2)
+    expect(sessionOf(graph, 'fork').ownCount).toBe(1)
+  })
+
+  it('prefers an observed edge over the creation-time choice', () => {
+    const source = summary('source', [copied(1, 8, 'q1'), copied(2, 20, 'q2')])
+    const older = summary('older', [copied(1, 8, 'q1'), copied(2, 20, 'q2'), copied(3, 30, 'older-own', '')])
+    const child = summary('child', [copied(1, 8, 'q1'), copied(2, 20, 'q2'), copied(3, 40, 'child-own', '')])
+    const graph = build([source, older, child], {
+      foldRuns: false,
+      createdAt: { source: 100, older: 200, child: 300 },
+      forkParents: { child: 'source' },
+    })
+
+    // Creation time alone would hang the child off the nearest older fork.
+    expect(graph.treeCount).toBe(1)
+    expect(sessionOf(graph, 'child').parentSessionId).toBe('source')
+    expect(sessionOf(graph, 'child').inheritedCount).toBe(2)
+  })
+
+  it('ignores an observed edge whose parent is not listed', () => {
+    const fork = summary('fork', [copied(1, 8, 'q1'), copied(2, 20, 'q2')])
+    const graph = build([fork], { forkParents: { fork: 'ghost' } })
+
+    expect(graph.treeCount).toBe(1)
+    expect(sessionOf(graph, 'fork').parentSessionId).toBeUndefined()
+    expect(sessionOf(graph, 'fork').inheritedCount).toBe(0)
+  })
+
+  it('keeps identical copies on one tree under an observed edge', () => {
+    const first = summary('first', [copied(1, 8, 'q1'), copied(2, 30, 'q2')])
+    const second = summary('second', [copied(1, 8, 'q1'), copied(2, 30, 'q2')])
+    const graph = build([first, second], {
+      foldRuns: false,
+      forkParents: { second: 'first' },
+    })
+
+    expect(graph.treeCount).toBe(1)
+    expect(sessionOf(graph, 'first').ownCount).toBe(2)
+    expect(sessionOf(graph, 'second').parentSessionId).toBe('first')
+    expect(sessionOf(graph, 'second').inheritedCount).toBe(2)
+    expect(sessionOf(graph, 'second').ownCount).toBe(0)
+  })
+
+  it('lets the earliest Session keep the trunk when creation times exist', () => {
+    const original = summary('original', [copied(1, 8, 'q1'), copied(2, 30, 'q2')])
+    const forkA = summary('forkA', [copied(1, 8, 'q1'), copied(2, 30, 'q2'), copied(3, 60, 'a', '')])
+    const forkB = summary('forkB', [copied(1, 8, 'q1'), copied(2, 30, 'q2'), copied(3, 70, 'b', '')])
+    const graph = build([original, forkA, forkB], {
+      foldRuns: false,
+      createdAt: { original: 100, forkA: 200, forkB: 300 },
+    })
+
+    expect(graph.treeCount).toBe(1)
+    // The source continues the trunk instead of hanging under a longer fork.
+    expect(sessionOf(graph, 'original').inheritedCount).toBe(0)
+    expect(sessionOf(graph, 'original').ownCount).toBe(2)
+    expect(sessionOf(graph, 'forkA').parentSessionId).toBe('original')
+    expect(sessionOf(graph, 'forkA').inheritedCount).toBe(2)
+    expect(sessionOf(graph, 'forkB').parentSessionId).toBe('forkA')
+    expect(sessionOf(graph, 'forkB').inheritedCount).toBe(2)
+    expect(turnNodeOf(graph, 'original', 2)?.forkCount).toBe(2)
+  })
+
+  it('never hangs a Session from a later copy of the same outline', () => {
+    const first = summary('first', [copied(1, 8, 'q1'), copied(2, 30, 'q2')])
+    const second = summary('second', [copied(1, 8, 'q1'), copied(2, 30, 'q2')])
+    const graph = build([first, second], {
+      foldRuns: false,
+      createdAt: { first: 100, second: 200 },
+    })
+
+    expect(graph.treeCount).toBe(1)
+    // The older copy is the source; the newer identical copy is a head chip.
+    expect(sessionOf(graph, 'first').ownCount).toBe(2)
+    expect(sessionOf(graph, 'second').inheritedCount).toBe(2)
+    expect(sessionOf(graph, 'second').ownCount).toBe(0)
   })
 
   it('keeps identical copies on one tree without a parent cycle', () => {

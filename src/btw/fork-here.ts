@@ -102,6 +102,11 @@ export interface ForkHereDependencies {
    * 记住这个子会话是 btw 分叉（驱动侧栏行标记）。只读切换成功后才调用。
    */
   readonly mark?: (sessionId: string) => void
+  /**
+   * 分叉成功后报告精确的父子关系（插件账本用）。只读切换成败与此无关，
+   * 所以紧接着 fork 调用；省略时只依赖通用的 `sessions.fork` 观测层。
+   */
+  readonly onForked?: (childId: string, parentId: string, atSeq: number | undefined) => void
   /** 只读预设名；省略时用 Host 默认的 `read-only`。 */
   readonly readOnlyPreset?: string
 }
@@ -317,6 +322,7 @@ export async function forkHere(deps: ForkHereDependencies, sessionId: string): P
   } catch (error) {
     return { ok: false, message: `分叉失败：${describeFailure(error)}` }
   }
+  deps.onForked?.(childId, sessionId, atSeq)
 
   const readOnly = await prepareChild(
     deps.sessions,

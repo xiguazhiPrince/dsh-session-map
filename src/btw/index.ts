@@ -18,6 +18,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { createBtwButton } from './button'
 import { BTW_CSS } from './css'
+import { recordFork } from '../session-map/forks'
 import { forkHere, type BtwSessionsFace } from './fork-here'
 import { btwMarkerStorage, createBtwMarkers } from './markers'
 import { createBtwRowMark } from './row-mark'
@@ -52,6 +53,11 @@ export function installBtw(ctx: Context): void {
         openSession: id => openSession(scope, id),
         discard: id => archiveSession(scope, id),
         mark: id => markers.add(id),
+        onForked: (childId, parentId, atSeq) => recordFork({
+          childId,
+          parentId,
+          ...(atSeq === undefined ? {} : { atSeq }),
+        }),
       }, sessionId),
     })
 

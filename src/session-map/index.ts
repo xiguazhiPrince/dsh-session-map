@@ -27,6 +27,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { createGitBranchBadge, type GitBranchRuntime } from './branch'
 import { CSS } from './css'
 import { MAP_KIND, MAP_TYPE_ID, OVERVIEW_KIND, OVERVIEW_TYPE_ID } from './constants'
+import { installForkRecorder } from './fork-recorder'
 import { createFlag } from './flags'
 import { createAgentInstructionsRuntime, createAgentInstructionsTab } from '../agent-instructions/client'
 import { installBtw } from '../btw'
@@ -269,6 +270,12 @@ export function apply(ctx: Context): void {
     { name: 'conversation.view', id: 'session-instructions', order: 50, label: '指令' },
     AgentInstructionsTab,
   )), 'session-instructions: conversation view entry')
+
+  // Every shipped fork entry point goes through the public client
+  // `sessions.fork`, and the Host records no source id of its own. Observe that
+  // call so the map can draw exact fork edges; deduction still covers forks
+  // this page never saw.
+  ctx.inject(['sessions'], (scope) => { installForkRecorder(scope) })
 
   // The right column's type registry belongs to another package whose own
   // injections are wider, so its apply can land after this one. Reading the

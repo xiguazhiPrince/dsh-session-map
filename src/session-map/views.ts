@@ -41,6 +41,8 @@ import {
 } from './graph'
 import { useFlag, withMember, type Flag } from './flags'
 import { clampNumber, errorText, formatCount, formatMs } from './format'
+import { currentForkParents, refreshSessionForks, subscribeSessionForks } from './forks'
+import { loadSessionCreatedAt } from './lineage'
 
 // The toolbar's keyboard glyph. A dynamic package carries no icon library, so
 // the shape is drawn inline.
@@ -879,6 +881,49 @@ function sessionTagLabel(title: string, ordinal: number): string {
   return text.slice(0, 7) + '…' + text.slice(-4)
 }
 
+/** Stable empty creation-time map: one identity keeps the graph memo from moving. */
+const EMPTY_CREATED_AT: Readonly<Record<string, number>> = {}
+
+/**
+ * Read the Host's per-Session creation times once per page.
+ *
+ * A fork's source is older than the fork, so these times let the canvas orient
+ * a family instead of choosing its longest chain as the trunk. The read is
+ * optional: an old Host, a composition without the route, or a failed request
+ * leaves the direction-free choice in place (see `./graph`).
+ * @returns creation times by Session id, or an empty map while unavailable.
+ */
+function useSessionCreatedAt(): Readonly<Record<string, number>> {
+  const [createdAt, setCreatedAt] = React.useState(EMPTY_CREATED_AT)
+  React.useEffect(() => {
+    let cancelled = false
+    void loadSessionCreatedAt().then((next) => {
+      // An empty answer is the "no direction data" state; keep the stable
+      // identity so the graph memo does not rebuild for nothing.
+      if (!cancelled && Object.keys(next).length > 0) setCreatedAt(next)
+    })
+    return () => { cancelled = true }
+  }, [])
+  return createdAt
+}
+
+/**
+ * Read the plugin's observed fork edges, refreshed when the Session list moves.
+ *
+ * The ledger is exact where it has an edge and silent elsewhere; the graph keeps
+ * inferring the rest. A list change can mean another page recorded an edge, so
+ * the joined id list drives a re-read and local observations wake the view
+ * immediately.
+ * @param idsKey - joined listed Session ids, the list-change signal.
+ * @returns parent id by child id.
+ */
+function useSessionForks(idsKey: string): Readonly<Record<string, string>> {
+  const [forkParents, setForkParents] = React.useState(currentForkParents)
+  React.useEffect(() => subscribeSessionForks(() => setForkParents(currentForkParents())), [])
+  React.useEffect(() => { void refreshSessionForks() }, [idsKey])
+  return forkParents
+}
+
 /**
  * Build one canvas body. One implementation, two seats; `showRightbarButton`
  * only hides the explicit "在右侧栏打开" control where the View already IS the
@@ -896,9 +941,12 @@ export function createMapView(
   function SessionMapView(props: SessionViewProps): React.ReactElement {
     const byId = props.useSessions(state => state.byId)
     const ids = props.useSessions(state => state.ids)
+    const idsKey = ids.join('\u0000')
     const current = props.useSessions(state => foregroundSessionId(state, props.sessionId))
     const projectionsBySession = props.useSessions(state => state.projectionsBySession)
     const workspaces = props.useWorkspaces(state => state.items)
+    const createdAtById = useSessionCreatedAt()
+    const forkParents = useSessionForks(idsKey)
 
     const [scope, setScope] = useFlag(flags.scope)
     const [direction, setDirection] = useFlag(flags.direction)
@@ -1006,7 +1054,9 @@ export function createMapView(
       scopeSessionId,
       direction,
       turnMessages,
-    ), [ids, byId, workspaces, hideSubagents, foldRuns, expandedRuns, scopeSessionId, direction, turnMessages])
+      createdAtById,
+      forkParents,
+    ), [ids, byId, workspaces, hideSubagents, foldRuns, expandedRuns, scopeSessionId, direction, turnMessages, createdAtById, forkParents])
 
     // The projection read is an optional controller capability. Current builds
     // publish the Session list as a summary that omits `turnOutline` (the unit
