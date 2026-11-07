@@ -57,6 +57,19 @@ const KEYBOARD_GLYPH = React.createElement(
   }),
 )
 
+/** One Session's shared projection read as the Session list publishes it. */
+export interface SessionProjectionSnapshot {
+  /**
+   * Current wire values. For an opened Session this is every projected value;
+   * for the rows of a listed cold Session it is the summary key set, which
+   * excludes `turnOutline` — see {@link outlineReadStateOf}.
+   */
+  readonly values: Readonly<Record<string, unknown>>
+  /** The projection read's own state, as the Session Controller reports it. */
+  readonly state?: string | undefined
+  readonly error?: unknown
+}
+
 /** Session list state, narrowed to the fields the canvas reads. */
 export interface SessionListState {
   readonly ids: readonly string[]
@@ -67,6 +80,16 @@ export interface SessionListState {
    * {@link mainSessionId} instead; see {@link foregroundSessionId}.
    */
   readonly current?: string | undefined
+  /**
+   * Shared projection reads by Session. The list's summary carries only the
+   * keys whose projection units do not opt out of summaries, and `turnOutline`
+   * does opt out, so the canvas cannot read every listed Session's outline
+   * from {@link SessionSummary.projectionValues}; it reads the controller's
+   * shared store instead, which a projection read fills. Absent in older
+   * snapshots, where the rows already carried the outline and no read is
+   * needed.
+   */
+  readonly projectionsBySession?: Readonly<Record<string, SessionProjectionSnapshot>> | undefined
 }
 
 /** The seat's own Session lifecycle state, narrowed to the fields the overview reads. */
@@ -171,6 +194,16 @@ export interface SessionEventsFace {
     readonly binding: { readonly eventSource: SessionEventSourceFace }
     release(): void
   }
+  /**
+   * Read one Session's complete projections, including the summary-excluded
+   * keys such as `turnOutline`, without opening its conversation.
+   *
+   * Optional: builds whose list rows still carry the outline need no read, and
+   * a composition without the controller keeps the outline-only canvas.
+   * @param sessionId - the Session to read.
+   * @returns completion of the shared read.
+   */
+  refreshProjections?(sessionId: string): Promise<void>
 }
 
 /**
@@ -288,6 +321,99 @@ export interface MapFlags {
 function foregroundSessionId(state: SessionListState, sessionId: string): string | undefined {
   return state.current ?? mainSessionId(state.byId) ?? sessionId
 }
+
+/**
+ * Where one drawn Session stands in its turn-outline read.
+ *
+ * `loaded` means the outline is present; the other states say why the canvas
+ * cannot draw turns for that Session yet. `absent` is the terminal "this build
+ * serves no `turnOutline` for this Session" answer — the projection unit is not
+ * composed, the row needs migration, or the read came back without the key.
+ */
+export type OutlineReadState = 'loaded' | 'loading' | 'failed' | 'absent'
+
+/**
+ * Classify one drawn Session's outline.
+ *
+ * The Session list of the current builds is a summary and deliberately omits
+ * `turnOutline` (the projection unit marks it summary-excluded), so a listed
+ * cold Session's row cannot answer it. The canvas therefore reads the
+ * controller's shared projection store, which `refreshProjections` fills; this
+ * classifier keeps "no key yet, a read is running" apart from "no key, the read
+ * finished without one", so the bar can say "reading" instead of "missing".
+ * @param missing - whether the graph built without an outline for this Session.
+ * @param snapshot - the shared projection read, when the list publishes one.
+ * @param canRefresh - whether the host exposes a projection read at all.
+ * @returns the outline's read state.
+ */
+export function outlineReadStateOf(
+  missing: boolean,
+  snapshot: SessionProjectionSnapshot | undefined,
+  canRefresh: boolean,
+): OutlineReadState {
+  if (!missing) return 'loaded'
+  if (Array.isArray(snapshot?.values.turnOutline)) return 'loaded'
+  if (snapshot?.state === 'error') return 'failed'
+  // `ready`/`migration-required` are answered reads: the store finished loading
+  // and still has no key, so another request would not change the answer.
+  if (snapshot?.state === 'ready' || snapshot?.state === 'migration-required') return 'absent'
+  return canRefresh ? 'loading' : 'absent'
+}
+
+/**
+ * The drawn Sessions whose outline the canvas should ask for next.
+ *
+ * A Session already asked for is left alone even while its key stays absent, so
+ * a read that cannot produce a key never becomes a loop; the retry control
+ * re-arms those explicitly. A read the controller already reports as running or
+ * failed is skipped for the same reason.
+ * @param sessions - the graph's drawn Sessions.
+ * @param projections - the list's shared projection reads.
+ * @param requested - Session ids already asked for in this mount.
+ * @param retry - whether to re-read Sessions whose last read failed.
+ * @returns the Session ids to read, in canvas order.
+ */
+export function outlineRefreshQueue(
+  sessions: readonly { readonly id: string; readonly outlineMissing: boolean }[],
+  projections: Readonly<Record<string, SessionProjectionSnapshot>> | undefined,
+  requested: ReadonlySet<string>,
+  retry = false,
+): readonly string[] {
+  const queue: string[] = []
+  for (const session of sessions) {
+    if (!session.outlineMissing || requested.has(session.id)) continue
+    const state = projections?.[session.id]?.state
+    if (state === 'loading') continue
+    if (state === 'error' && !retry) continue
+    queue.push(session.id)
+  }
+  return queue
+}
+
+/**
+ * Forget reads whose projection store a reconnect discarded.
+ *
+ * A new Host generation clears every shared projection store and its load
+ * state. A Session asked for before the reconnect then comes back as an idle
+ * store without the outline, so the canvas re-arms it instead of leaving it
+ * blank forever.
+ * @param requested - Session ids already asked for in this mount; mutated.
+ * @param projections - the list's shared projection reads.
+ */
+export function rearmDiscardedOutlines(
+  requested: Set<string>,
+  projections: Readonly<Record<string, SessionProjectionSnapshot>> | undefined,
+): void {
+  for (const id of [...requested]) {
+    const snapshot = projections?.[id]
+    if (snapshot !== undefined && snapshot.state === 'idle' && snapshot.values.turnOutline === undefined) {
+      requested.delete(id)
+    }
+  }
+}
+
+/** How many outline reads the canvas runs at once; waves keep the bar responsive. */
+const OUTLINE_READ_CONCURRENCY = 4
 
 /**
  * One overview card.
@@ -700,6 +826,7 @@ export function createMapView(
     const byId = props.useSessions(state => state.byId)
     const ids = props.useSessions(state => state.ids)
     const current = props.useSessions(state => foregroundSessionId(state, props.sessionId))
+    const projectionsBySession = props.useSessions(state => state.projectionsBySession)
     const workspaces = props.useWorkspaces(state => state.items)
 
     const [scope, setScope] = useFlag(flags.scope)
@@ -714,7 +841,13 @@ export function createMapView(
     const [helpOpen, setHelpOpen] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
     const [turnMessages, setTurnMessages] = React.useState<Readonly<Record<string, readonly TurnMessage[]>>>({})
+    const [outlineRetry, setOutlineRetry] = React.useState(0)
     const panelRef = React.useRef<HTMLDivElement | null>(null)
+    // Session ids whose outline read this mount already asked for, so a read
+    // that cannot produce the key is not retried on every render.
+    const outlineRequested = React.useRef(new Set<string>())
+    // Set by the retry control: the next effect pass re-reads failed rows too.
+    const outlineForceRetry = React.useRef(false)
 
     // The outline gives one prompt per turn; steering messages live only in the
     // loaded event window. Read that window for the current Session and its
@@ -803,6 +936,59 @@ export function createMapView(
       direction,
       turnMessages,
     ), [ids, byId, workspaces, hideSubagents, foldRuns, expandedRuns, scopeSessionId, direction, turnMessages])
+
+    // The projection read is an optional controller capability. Current builds
+    // publish the Session list as a summary that omits `turnOutline` (the unit
+    // marks that key summary-excluded), so a drawn cold Session's row cannot
+    // answer its outline and the canvas reads it on its own. An older host
+    // carries the outline on every row and exposes no read, so this simply
+    // stays undefined there.
+    const refreshOutlines = React.useMemo(() => {
+      const sessions = runtime.sessions?.()
+      if (sessions === undefined || typeof sessions.refreshProjections !== 'function') return undefined
+      return sessions.refreshProjections.bind(sessions)
+    }, [runtime])
+    const canRefreshOutlines = refreshOutlines !== undefined
+
+    // Request the outlines the graph is missing. A read seeds the controller's
+    // shared projection store, whose update flows back through `useSessions`
+    // and rebuilds the graph, so the canvas fills in as reads land. Reads run
+    // in bounded waves: one per drawn Session at once would fire a burst the
+    // width of the whole map.
+    React.useEffect(() => {
+      if (refreshOutlines === undefined) return undefined
+      rearmDiscardedOutlines(outlineRequested.current, projectionsBySession)
+      const retry = outlineForceRetry.current
+      outlineForceRetry.current = false
+      const queue = [...outlineRefreshQueue(graph.sessions, projectionsBySession, outlineRequested.current, retry)]
+      if (queue.length === 0) return undefined
+      let cancelled = false
+      let cursor = 0
+      const started = new Set<string>()
+      const worker = async (): Promise<void> => {
+        while (!cancelled) {
+          const id = queue[cursor]
+          if (id === undefined) return
+          cursor += 1
+          outlineRequested.current.add(id)
+          started.add(id)
+          try {
+            await refreshOutlines(id)
+          } catch {
+            // The bar reports the failure; the id stays requested so the next
+            // render does not immediately retry it.
+          }
+        }
+      }
+      const width = Math.min(OUTLINE_READ_CONCURRENCY, queue.length)
+      void Promise.all(Array.from({ length: width }, () => worker()))
+      return () => {
+        cancelled = true
+        // Ids the wave never reached go back to the pool rather than staying
+        // "requested" with no read behind them.
+        for (const id of queue) if (!started.has(id)) outlineRequested.current.delete(id)
+      }
+    }, [graph, projectionsBySession, refreshOutlines, outlineRetry])
 
     const currentSession = current === undefined ? undefined : graph.sessionsById[current]
     const currentPath = React.useMemo(
@@ -1123,7 +1309,55 @@ export function createMapView(
     // says which of the two the canvas is actually showing. An empty list is
     // left to the empty state instead of being reported as a fallback.
     const scopeFallback = scope === 'current' && graph.nodes.length > 0 && graph.scopeSessionId === undefined
-    const missingOutlineCount = graph.sessions.filter(session => session.outlineMissing).length
+
+    // How each drawn Session stands in its outline read. The canvas starts the
+    // reads itself (see the projection effect above); this only describes them,
+    // so a read in flight reads as "loading" rather than as a missing outline.
+    const outlineStates = graph.sessions.map(session => outlineReadStateOf(
+      session.outlineMissing,
+      projectionsBySession?.[session.id],
+      canRefreshOutlines,
+    ))
+    const loadingOutlineCount = outlineStates.filter(state => state === 'loading').length
+    const failedOutlineCount = outlineStates.filter(state => state === 'failed').length
+    const absentOutlineCount = outlineStates.filter(state => state === 'absent').length
+    const missingOutlineCount = loadingOutlineCount + failedOutlineCount + absentOutlineCount
+
+    const retryOutlines = (): void => {
+      outlineRequested.current.clear()
+      outlineForceRetry.current = true
+      setOutlineRetry(outlineRetry + 1)
+    }
+
+    const outlineNotice = failedOutlineCount > 0
+      ? React.createElement(
+        'span',
+        { className: 'dsm__error' },
+        String(failedOutlineCount) + ' 个会话的轮次投影读取失败',
+        canRefreshOutlines
+          ? React.createElement('button', {
+            type: 'button',
+            className: 'dsm__retry',
+            title: '重新读取失败的轮次投影',
+            onClick: retryOutlines,
+          }, '重试')
+          : null,
+      )
+      : loadingOutlineCount > 0
+        ? React.createElement(
+          'span',
+          { className: 'dsm__note' },
+          '正在读取 ' + String(loadingOutlineCount) + ' 个会话的轮次投影…',
+        )
+        : missingOutlineCount > 0
+          ? React.createElement(
+            'span',
+            { className: absentOutlineCount === graph.sessionCount ? 'dsm__error' : 'dsm__note' },
+            absentOutlineCount === graph.sessionCount
+              ? '列表里没有 turnOutline 投影，只能显示会话头'
+              : String(absentOutlineCount) + ' 个会话没有轮次投影，只显示会话头',
+          )
+          : null
 
     const bar = React.createElement(
       'div',
@@ -1201,15 +1435,7 @@ export function createMapView(
         onClick: () => { zoomBy(BASE_ZOOM / view.zoom) },
       }, '100%'),
       help,
-      missingOutlineCount > 0
-        ? React.createElement(
-          'span',
-          { className: missingOutlineCount === graph.sessionCount ? 'dsm__error' : 'dsm__note' },
-          missingOutlineCount === graph.sessionCount
-            ? '列表里没有 turnOutline 投影，只能显示会话头'
-            : String(missingOutlineCount) + ' 个会话没有轮次投影，只显示会话头',
-        )
-        : null,
+      outlineNotice,
       error === null ? null : React.createElement('span', { className: 'dsm__error' }, error),
     )
 

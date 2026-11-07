@@ -13,12 +13,17 @@ import { MAP_KIND, OVERVIEW_KIND } from './constants'
 import {
   createMapView,
   DEFAULT_FOLD_RUNS,
+  outlineReadStateOf,
+  outlineRefreshQueue,
+  rearmDiscardedOutlines,
   toggleMapRightbar,
   userMessagesOf,
   type MapFlags,
   type SessionEventEntryFace,
+  type SessionEventsFace,
   type SessionListState,
   type SessionMapRuntime,
+  type SessionProjectionSnapshot,
   type SessionState,
   type SessionViewProps,
   type SidebarRightFace,
@@ -49,14 +54,22 @@ function summary(id: string, turns: readonly unknown[], parentId?: string): Sess
 /** Render the canvas View with a fixed list and fresh plugin flags. */
 function renderCanvas(
   summaries: readonly SessionSummary[],
-  options: { readonly foldRuns?: boolean } = {},
+  options: {
+    readonly foldRuns?: boolean
+    readonly projectionsBySession?: Readonly<Record<string, SessionProjectionSnapshot>>
+    readonly sessions?: () => SessionEventsFace | undefined
+  } = {},
 ): string {
   const ids = summaries.map(item => item.id)
   const byId = Object.fromEntries(summaries.map(item => [item.id, item]))
   const props: SessionViewProps = {
     sessionId: 'root',
     useSessions: <Selected,>(select: (state: SessionListState) => Selected): Selected => (
-      select({ ids, byId })
+      select({
+        ids,
+        byId,
+        ...(options.projectionsBySession === undefined ? {} : { projectionsBySession: options.projectionsBySession }),
+      })
     ),
     useWorkspaces: <Selected,>(select: (state: WorkspaceListState) => Selected): Selected => (
       select({ items: [] })
@@ -78,6 +91,7 @@ function renderCanvas(
   const runtime: SessionMapRuntime = {
     sidebarRight: () => { throw new Error('right column is not part of this render') },
     openSession: () => {},
+    ...(options.sessions === undefined ? {} : { sessions: options.sessions }),
   }
   const View = createMapView(runtime, flags, true)
   return renderToStaticMarkup(React.createElement(View, props))
@@ -143,6 +157,97 @@ describe('canvas rendering', () => {
 
     expect(html).toContain('dsm__tagText">会话图谱默认显… (1)</span>')
     expect(html).toContain('title="会话1 · ' + title + '"')
+  })
+})
+
+/** A controller face that answers projection reads and opens no history. */
+function projectionOnlySessions(): SessionEventsFace {
+  return {
+    retain: () => { throw new Error('this render opens no event window') },
+    refreshProjections: async () => {},
+  }
+}
+
+describe('outline projection reads', () => {
+  it('classifies one Session outline read', () => {
+    expect(outlineReadStateOf(false, undefined, true)).toBe('loaded')
+    expect(outlineReadStateOf(true, { values: { turnOutline: [] }, state: 'ready' }, true)).toBe('loaded')
+    expect(outlineReadStateOf(true, undefined, true)).toBe('loading')
+    expect(outlineReadStateOf(true, { values: {}, state: 'loading' }, true)).toBe('loading')
+    expect(outlineReadStateOf(true, { values: {}, state: 'error' }, true)).toBe('failed')
+    expect(outlineReadStateOf(true, { values: {}, state: 'ready' }, true)).toBe('absent')
+    expect(outlineReadStateOf(true, { values: {}, state: 'migration-required' }, true)).toBe('absent')
+    // A host with no projection read keeps the old "the list carries no
+    // outline" reading instead of pretending a read is running.
+    expect(outlineReadStateOf(true, undefined, false)).toBe('absent')
+  })
+
+  it('queues only missing, unrequested, readable outlines', () => {
+    const sessions = [
+      { id: 'root', outlineMissing: false },
+      { id: 'cold', outlineMissing: true },
+      { id: 'asked', outlineMissing: true },
+      { id: 'running', outlineMissing: true },
+      { id: 'failed', outlineMissing: true },
+    ]
+    const projections = {
+      root: { values: { turnOutline: [] }, state: 'ready' },
+      asked: { values: {}, state: 'loading' },
+      running: { values: {}, state: 'loading' },
+      failed: { values: {}, state: 'error' },
+    }
+
+    expect(outlineRefreshQueue(sessions, projections, new Set(['asked']))).toEqual(['cold'])
+    expect(outlineRefreshQueue(sessions, projections, new Set(['asked']), true)).toEqual(['cold', 'failed'])
+    expect(outlineRefreshQueue(sessions, projections, new Set(['cold', 'asked', 'running', 'failed']))).toEqual([])
+  })
+
+  it('re-arms reads a reconnect discarded', () => {
+    const requested = new Set(['kept', 'reset'])
+    rearmDiscardedOutlines(requested, {
+      kept: { values: { turnOutline: [] }, state: 'ready' },
+      reset: { values: {}, state: 'idle' },
+    })
+    expect([...requested]).toEqual(['kept'])
+  })
+
+  it('reads as loading while the projection read is in flight', () => {
+    const html = renderCanvas([{ id: 'cold', displayTitle: 'cold' }], {
+      projectionsBySession: { cold: { values: {}, state: 'loading' } },
+      sessions: projectionOnlySessions,
+    })
+
+    expect(cardCount(html)).toBe(1)
+    expect(html).toContain('正在读取 1 个会话的轮次投影')
+    expect(html).not.toContain('没有轮次投影')
+  })
+
+  it('offers a retry when an outline read failed', () => {
+    const html = renderCanvas([{ id: 'cold', displayTitle: 'cold' }], {
+      projectionsBySession: { cold: { values: {}, state: 'error' } },
+      sessions: projectionOnlySessions,
+    })
+
+    expect(html).toContain('1 个会话的轮次投影读取失败')
+    expect(html).toContain('dsm__retry')
+  })
+
+  it('keeps the missing-outline note on a host without a projection read', () => {
+    const html = renderCanvas([{ id: 'cold', displayTitle: 'cold' }])
+
+    expect(html).toContain('列表里没有 turnOutline 投影，只能显示会话头')
+  })
+
+  it('leaves an older host whose rows already carry the outline untouched', () => {
+    // Pre-0.2.2 list snapshots carried every cached projection on each row and
+    // exposed no `projectionsBySession` on the state this View reads; the new
+    // read path must stay inert there, with no loading note or missing note.
+    const html = renderCanvas([summary('root', [turn(1, 'r1')])], {
+      sessions: projectionOnlySessions,
+    })
+
+    expect(cardCount(html)).toBe(1)
+    expect(html).not.toContain('轮次投影')
   })
 })
 

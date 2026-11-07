@@ -178,6 +178,22 @@ export const CSS = `
 }
 /* A neutral explanation in the toolbar, next to the error text it is not. */
 .dsm__note { color: var(--dsw-alias-label-secondary); font-size: 11px; }
+/* The retry control sits inside the failure note, so it stays inline and keeps
+   the note's height instead of adding another toolbar button. */
+.dsm__retry {
+  appearance: none;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.dsm__retry:hover { color: var(--dsw-alias-brand-primary); }
 /* The keyboard affordance keeps the shortcut list out of the toolbar until it
    is asked for: one glyph, and a panel anchored under it. */
 .dsm__help { position: relative; display: inline-flex; }
