@@ -9,6 +9,12 @@
  * the parent's outline and drawn ONCE, on the ancestor's chain; the child's head
  * hangs from the turn the fork actually happened at.
  *
+ * A fork created by a current Harness records no parent Session at all: the
+ * child is an independent seeded Session and only the copied event prefix ties
+ * it to its source. Sessions without a recorded parent therefore recover their
+ * lineage from that prefix ({@link inferLineageParents}); the recorded parent
+ * stays authoritative wherever an older Harness wrote one.
+ *
  * Everything here is a pure function of the listed Sessions, the Workspace
  * membership, and the fold switches, so equal inputs always produce an equal
  * layout and the Views can rebuild it on every render.
@@ -44,6 +50,12 @@ export interface SessionSummary {
   readonly completed?: boolean | undefined
   readonly updatedAt?: number | undefined
   /**
+   * Working directory recorded by the row. A fork inherits the source
+   * Session's directory, so a copied turn prefix never crosses it; see
+   * {@link inferLineageParents}.
+   */
+  readonly cwd?: string | undefined
+  /**
    * Retention counts by holder, as the Session controller publishes them. The
    * foreground Session is the one the main view retains; see
    * {@link mainSessionId}.
@@ -72,13 +84,12 @@ export function mainSessionId(byId: Readonly<Record<string, SessionSummary>>): s
 }
 
 /**
- * The root of one listed Session's fork tree: the last ancestor the row map
- * still lists.
+ * The root of one listed Session's recorded fork chain: the last ancestor the
+ * row map still lists.
  *
- * A tree on this canvas is the connected component of the parent links, so its
- * root is the node whose own parent is absent or unlisted. The walk stops at an
- * already-visited id as well, so a Session whose ancestry loops answers with
- * itself rather than never returning.
+ * This reads recorded `parentId` links only. The canvas itself also follows the
+ * lineage inferred from copied turn prefixes for Sessions whose header names no
+ * parent; see {@link buildGraph}.
  * @param id - the Session to resolve.
  * @param byId - listed Session summaries.
  * @returns the root ancestor's id, which is `id` itself for a root.
@@ -246,6 +257,8 @@ interface SessionPlan {
   readonly outline: readonly TurnEntry[]
   readonly outlineMissing: boolean
   readonly directParentId: string | undefined
+  /** Whether {@link directParentId} was inferred from a copied prefix. */
+  readonly lineageInferred: boolean
   hostedParent: SessionPlan | undefined
   inheritedCount: number
   hiddenInherited: number
@@ -360,6 +373,191 @@ function commonPrefix(left: readonly TurnEntry[], right: readonly TurnEntry[]): 
   let shared = 0
   while (shared < left.length && shared < right.length && sameTurn(left[shared], right[shared])) shared += 1
   return shared
+}
+
+/**
+ * Whether two outline entries are the same inherited turn.
+ *
+ * A fork child's log begins with a verbatim copy of the source events, so a
+ * copied turn keeps the source's host-assigned turn number, its `turn/start`
+ * seq, and both bounded previews. Requiring the seq tells that copied prefix
+ * apart from two unrelated Sessions that merely open with the same prompt.
+ * @param left - one entry.
+ * @param right - the other entry.
+ * @returns true when the entries can only be one copied turn.
+ */
+function sameInheritedTurn(left: TurnEntry | undefined, right: TurnEntry | undefined): boolean {
+  if (!sameTurn(left, right) || left === undefined || right === undefined) return false
+  if (left.seq === undefined || right.seq === undefined) return true
+  return left.seq === right.seq
+}
+
+/** Collapse a preview and drop its clipped-tail marker, for prefix comparison. */
+function previewText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().replace(/…$/, '')
+}
+
+/**
+ * Whether two response previews can describe one turn at a fork cut taken
+ * mid-turn: the child copied the text written so far and the source kept
+ * writing, so one preview is a prefix of the other. An unsettled preview is
+ * empty and therefore a prefix of anything.
+ * @param left - the child's preview.
+ * @param right - the source's preview.
+ * @returns true when neither preview contradicts the other.
+ */
+function previewsAgree(left: string, right: string): boolean {
+  const a = previewText(left)
+  const b = previewText(right)
+  return a === b || a.startsWith(b) || b.startsWith(a)
+}
+
+/**
+ * Whether two entries can be the fork cut turn itself: same host-assigned turn
+ * number, same seq, same prompt, and a response preview that agrees as a
+ * mid-turn copy. Only the cut turn may disagree this way; see
+ * {@link inheritedPrefix}.
+ * @param left - the child's entry at the cut.
+ * @param right - the source's entry at the cut.
+ * @returns true when the entries can be that one turn.
+ */
+function sameForkBoundaryTurn(left: TurnEntry | undefined, right: TurnEntry | undefined): boolean {
+  if (left === undefined || right === undefined) return false
+  if (left.turn !== right.turn || left.prompt !== right.prompt) return false
+  if (left.seq !== undefined && right.seq !== undefined && left.seq !== right.seq) return false
+  return previewsAgree(left.response, right.response)
+}
+
+/**
+ * Longest prefix two outlines share as fork-inherited turns.
+ *
+ * The strict match covers whole copied turns; the final comparison covers the
+ * turn a fork cut open — the child copied the assistant text written so far,
+ * while the source's preview grew after the fork, so that one turn may carry a
+ * longer preview on the source side.
+ * @param left - one outline.
+ * @param right - the other outline.
+ * @returns the inherited turn count.
+ */
+function inheritedPrefix(left: readonly TurnEntry[], right: readonly TurnEntry[]): number {
+  let shared = 0
+  while (shared < left.length && shared < right.length && sameInheritedTurn(left[shared], right[shared])) shared += 1
+  if (shared < left.length && shared < right.length && sameForkBoundaryTurn(left[shared], right[shared])) shared += 1
+  return shared
+}
+
+/**
+ * Infer the fork parent a listed Session's record no longer names.
+ *
+ * Current Harness builds fork each child as an independent Session: its header
+ * is marked seeded but records no `parentSession`, and no event carries the
+ * source id either. The child log still begins with a verbatim copy of the
+ * source events — the same host-assigned turn numbers, the same `turn/start`
+ * seqs, the same previews — which is exactly what the canvas draws, so the
+ * lineage is recoverable from the turn outlines.
+ *
+ * A shared prefix is symmetric, so this pass recovers a parent rather than a
+ * direction the Host stopped storing: within one working directory, each
+ * parentless Session hangs from the shortest Session that covers its longest
+ * shared prefix, ties falling to the first id. A fork family therefore lands on
+ * one tree, and every child branches from the turn its copied prefix ends at.
+ * Sessions whose recorded parent is merely unlisted are left alone: their
+ * header does name a parent, and guessing past it would misdraw pre-0.2 forks.
+ * @param ids - listed Session ids.
+ * @param byId - listed Session rows.
+ * @param outlineOf - cached outline reader.
+ * @returns inferred child -> parent edges; sessions with a recorded parent are absent.
+ */
+function inferLineageParents(
+  ids: readonly string[],
+  byId: Readonly<Record<string, SessionSummary>>,
+  outlineOf: (id: string | undefined) => Outline,
+): Map<string, string> {
+  const inferred = new Map<string, string>()
+  const children: string[] = []
+  const candidates: string[] = []
+  for (const id of ids) {
+    const summary = byId[id]
+    if (summary === undefined || summary.origin === 'subagent') continue
+    const outline = outlineOf(id)
+    if (outline.missing || outline.entries.length === 0) continue
+    candidates.push(id)
+    if (summary.parentId === undefined) children.push(id)
+  }
+  if (children.length === 0 || candidates.length < 2) return inferred
+
+  // A copied prefix cannot cross the recorded directory: a fork inherits the
+  // source Session's cwd, so a pair with two different cwds is not lineage.
+  const sameDirectory = (left: string, right: string): boolean => {
+    const leftCwd = byId[left]?.cwd
+    const rightCwd = byId[right]?.cwd
+    return leftCwd === undefined || rightCwd === undefined || leftCwd === rightCwd
+  }
+  const prefixTo = (left: string, right: string): number => (
+    inheritedPrefix(outlineOf(left).entries, outlineOf(right).entries)
+  )
+
+  // The inherited prefix ends where the child's outline stops matching any
+  // sibling candidate; that shared length is the turn the fork left from.
+  const cutOf = new Map<string, number>()
+  for (const id of children) {
+    let cut = 0
+    for (const candidateId of candidates) {
+      if (candidateId === id || !sameDirectory(id, candidateId)) continue
+      const shared = prefixTo(id, candidateId)
+      if (shared > cut) cut = shared
+    }
+    cutOf.set(id, cut)
+  }
+
+  // Edges already in the graph (recorded parents) take part in cycle checks.
+  const edgeOf = new Map<string, string>()
+  for (const id of ids) {
+    const parentId = byId[id]?.parentId
+    if (parentId !== undefined) edgeOf.set(id, parentId)
+  }
+  const reaches = (from: string, target: string): boolean => {
+    const seen = new Set<string>()
+    let current: string | undefined = from
+    while (current !== undefined && !seen.has(current)) {
+      if (current === target) return true
+      seen.add(current)
+      current = edgeOf.get(current)
+    }
+    return false
+  }
+
+  // Deepest cut first: a Session whose prefix extends another Session is
+  // already placed when that shorter Session looks for a covering parent.
+  const ordered = [...children].sort((left, right) => (
+    (cutOf.get(right) ?? 0) - (cutOf.get(left) ?? 0) || (left < right ? -1 : 1)
+  ))
+  for (const id of ordered) {
+    const cut = cutOf.get(id) ?? 0
+    if (cut === 0) continue
+    const covering: string[] = []
+    for (const candidateId of candidates) {
+      if (candidateId === id || !sameDirectory(id, candidateId)) continue
+      if (prefixTo(id, candidateId) !== cut) continue
+      covering.push(candidateId)
+    }
+    // Prefer a candidate that continues past the cut (it covers the child's
+    // whole inherited chain), then the nearest one, then a stable id.
+    covering.sort((left, right) => {
+      const leftLength = outlineOf(left).entries.length
+      const rightLength = outlineOf(right).entries.length
+      const leftExtends = leftLength > cut ? 1 : 0
+      const rightExtends = rightLength > cut ? 1 : 0
+      return (rightExtends - leftExtends) || (leftLength - rightLength) || (left < right ? -1 : 1)
+    })
+    for (const parentId of covering) {
+      if (reaches(parentId, id)) continue
+      inferred.set(id, parentId)
+      edgeOf.set(id, parentId)
+      break
+    }
+  }
+  return inferred
 }
 
 /**
@@ -629,16 +827,49 @@ export function buildGraph(
   direction: TreeDirection,
   messagesBySession: Readonly<Record<string, readonly TurnMessage[]>> = {},
 ): Graph {
+  // Outline reads are shared by the lineage inference (which needs the whole
+  // list) and the canvas (which draws the scoped part of it).
+  const outlineCache = new Map<string, Outline>()
+  const outlineOfSession = (id: string | undefined): Outline => {
+    if (id === undefined) return { entries: [], missing: true }
+    const cached = outlineCache.get(id)
+    if (cached !== undefined) return cached
+    const value = outlineFor(byId[id])
+    outlineCache.set(id, value)
+    return value
+  }
+
+  // Current Harness forks record no parent Session, so a parentless row
+  // recovers its lineage from the turn prefix it inherited. A recorded parent
+  // stays authoritative: pre-0.2 forks still carry one.
+  const inferredParents = inferLineageParents(ids, byId, outlineOfSession)
+  const lineageParentIdOf = (id: string): string | undefined => {
+    const parentId = byId[id]?.parentId
+    return parentId ?? inferredParents.get(id)
+  }
+  const lineageRootOf = (id: string): string => {
+    const seen = new Set<string>()
+    seen.add(id)
+    let current = id
+    let parentId = lineageParentIdOf(current)
+    while (parentId !== undefined && byId[parentId] !== undefined && !seen.has(parentId)) {
+      seen.add(parentId)
+      current = parentId
+      parentId = lineageParentIdOf(current)
+    }
+    return current
+  }
+
   // The canvas draws either every listed Session or one Session's whole tree.
-  // The tree is the connected component of the parent links, so the Session
+  // The tree is the connected component of the lineage links, so the Session
   // being read keeps its ancestors, every branch forked off beside it, and all
   // of their descendants. A scope the list cannot satisfy falls back to
   // everything rather than to an empty canvas.
   let drawnIds = ids
   let scopeId: string | undefined
   if (scopeSessionId !== undefined && byId[scopeSessionId] !== undefined) {
-    const root = treeRootId(scopeSessionId, byId)
-    const members = ids.filter(id => treeRootId(id, byId) === root)
+    const root = lineageRootOf(scopeSessionId)
+    const members = ids.filter(id => lineageRootOf(id) === root)
     if (members.length > 0) {
       drawnIds = members
       scopeId = scopeSessionId
@@ -658,27 +889,22 @@ export function buildGraph(
   // the inherited prefix is matched against, even when that row is filtered.
   const plans = new Map<string, SessionPlan>()
   const planOrder: SessionPlan[] = []
-  const outlineCache = new Map<string, Outline>()
-  const outlineOfSession = (id: string | undefined): Outline => {
-    if (id === undefined) return { entries: [], missing: true }
-    const cached = outlineCache.get(id)
-    if (cached !== undefined) return cached
-    const value = outlineFor(byId[id])
-    outlineCache.set(id, value)
-    return value
-  }
 
   for (const id of candidateIds) {
     const summary = byId[id]
     if (summary === undefined) continue
     const outline = outlineOfSession(id)
+    // A recorded parent is authoritative (pre-0.2 forks carry one); only a
+    // parentless row falls back to the prefix-inferred lineage.
+    const inferredParentId = summary.parentId === undefined ? inferredParents.get(id) : undefined
     const plan: SessionPlan = {
       id,
       summary,
       title: sessionLabel(summary, id),
       outline: outline.entries,
       outlineMissing: outline.missing,
-      directParentId: summary.parentId,
+      directParentId: summary.parentId ?? inferredParentId,
+      lineageInferred: inferredParentId !== undefined,
       hostedParent: undefined,
       inheritedCount: 0,
       hiddenInherited: 0,
@@ -702,14 +928,14 @@ export function buildGraph(
   const hostedParentIdFor = (id: string): string | undefined => {
     const seen = new Set<string>()
     seen.add(id)
-    let parentId = byId[id]?.parentId
+    let parentId = lineageParentIdOf(id)
     while (parentId !== undefined) {
       if (seen.has(parentId)) return undefined
       seen.add(parentId)
       if (plans.has(parentId)) return parentId
       const parent = byId[parentId]
       if (parent === undefined) return undefined
-      parentId = parent.parentId
+      parentId = lineageParentIdOf(parentId)
     }
     return undefined
   }
@@ -794,7 +1020,12 @@ export function buildGraph(
     let inheritedCount = 0
     if (plan.directParentId !== undefined && plan.directParentId !== plan.id && directParentReady) {
       const parentOutline = outlineOfSession(plan.directParentId)
-      inheritedCount = commonPrefix(plan.outline, parentOutline.entries)
+      // An inferred link is a copied event prefix, so its cut is the strict
+      // inherited prefix (seq included, mid-turn cut allowed); a recorded
+      // parent keeps the older turn-only comparison a renumbered seed needs.
+      inheritedCount = plan.lineageInferred
+        ? inheritedPrefix(plan.outline, parentOutline.entries)
+        : commonPrefix(plan.outline, parentOutline.entries)
     }
     plan.inheritedCount = inheritedCount
     plan.ownCount = plan.outline.length - inheritedCount

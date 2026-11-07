@@ -368,3 +368,115 @@ describe('buildGraph turn tree', () => {
     expect(second.nodes.map(node => node.id)).toEqual(ids)
   })
 })
+
+/** One copied outline entry with an explicit host-assigned turn/start seq. */
+function copied(turnNumber: number, seq: number, prompt: string, response = ''): {
+  readonly turn: number
+  readonly seq: number
+  readonly prompt: string
+  readonly response: string
+} {
+  return { turn: turnNumber, seq, prompt, response }
+}
+
+describe('fork lineage recovered from the copied prefix', () => {
+  it('joins parentless forks that copied the same turn prefix', () => {
+    const original = summary('original', [copied(1, 8, 'q1', 'a1'), copied(2, 30, 'q2', 'a2'), copied(3, 60, 'q3', 'a3')])
+    const forkA = summary('forkA', [
+      copied(1, 8, 'q1', 'a1'), copied(2, 30, 'q2', 'a2'), copied(3, 60, 'q3', 'a3'), copied(4, 90, 'qa4', 'aa4'),
+    ])
+    const forkB = summary('forkB', [
+      copied(1, 8, 'q1', 'a1'), copied(2, 30, 'q2', 'a2'), copied(3, 60, 'q3', 'a3'), copied(4, 91, 'qb4', 'ab4'),
+    ])
+    const graph = build([original, forkA, forkB], { foldRuns: false })
+
+    // One family, one tree: the recorded-parent model would have drawn three.
+    expect(graph.treeCount).toBe(1)
+    expect(graph.sessionCount).toBe(3)
+    // The copied prefix ends at turn 3, so both forks leave from that turn.
+    expect(sessionOf(graph, 'original').inheritedCount).toBe(0)
+    expect(sessionOf(graph, 'forkB').inheritedCount).toBe(3)
+    expect(sessionOf(graph, 'forkA').inheritedCount).toBe(3)
+    expect(sessionOf(graph, 'forkA').ownCount).toBe(1)
+    expect(sessionOf(graph, 'forkB').ownCount).toBe(1)
+    const forkTurn = turnNodeOf(graph, 'original', 3)
+    expect(forkTurn).toBeDefined()
+    expect(forkTurn?.forkCount).toBe(2)
+    expect(headNodeOf(graph, 'forkA').parentId).toBe(forkTurn?.id)
+    expect(headNodeOf(graph, 'forkB').parentId).toBe(forkTurn?.id)
+    // Every copied turn is drawn once, on the trunk.
+    expect(graph.nodes.filter(node => node.kind === 'turn' && node.turn === 1)).toHaveLength(1)
+    expect(graph.nodes.filter(node => node.kind === 'turn' && node.turn === 2)).toHaveLength(1)
+    expect(graph.nodes.filter(node => node.kind === 'turn' && node.turn === 3)).toHaveLength(1)
+  })
+
+  it('does not treat a renumbered seq as the same inherited turn', () => {
+    const first = summary('first', [copied(1, 8, 'same prompt', 'same answer')])
+    const second = summary('second', [copied(1, 9, 'same prompt', 'same answer')])
+    const graph = build([first, second])
+
+    expect(graph.treeCount).toBe(2)
+  })
+
+  it('does not join identical openings from different directories', () => {
+    const first = summary('first', [copied(1, 8, 'same prompt', 'same answer')], undefined, { cwd: '/one' })
+    const second = summary('second', [copied(1, 8, 'same prompt', 'same answer')], undefined, { cwd: '/two' })
+    const graph = build([first, second])
+
+    expect(graph.treeCount).toBe(2)
+  })
+
+  it('recovers a fork cut inside an open turn from the shorter preview', () => {
+    const source = summary('source', [copied(1, 8, 'question', 'the full answer the source kept writing')])
+    const fork = summary('fork', [copied(1, 8, 'question', 'the full answer'), copied(2, 40, 'next', 'done')])
+    const graph = build([source, fork], { foldRuns: false })
+
+    expect(graph.treeCount).toBe(1)
+    expect(sessionOf(graph, 'fork').inheritedCount).toBe(1)
+    expect(sessionOf(graph, 'fork').ownCount).toBe(1)
+    expect(turnNodeOf(graph, 'source', 1)?.forkCount).toBe(1)
+  })
+
+  it('keeps a recorded parent authoritative and still joins the family', () => {
+    const root = summary('root', [turn(1, 'r1'), turn(2, 'r2'), turn(3, 'r3')])
+    const recorded = summary('recorded', [turn(1, 'r1'), turn(2, 'r2')], 'root')
+    const parentless = summary('parentless', [
+      copied(1, 1, 'r1'), copied(2, 2, 'r2'), copied(3, 3, 'r3'), copied(4, 4, 'own', ''),
+    ])
+    const graph = build([root, recorded, parentless], { foldRuns: false })
+
+    expect(graph.treeCount).toBe(1)
+    expect(sessionOf(graph, 'recorded').inheritedCount).toBe(2)
+    expect(sessionOf(graph, 'recorded').parentSessionId).toBe('root')
+    expect(sessionOf(graph, 'parentless').inheritedCount).toBe(3)
+  })
+
+  it('links one parentless fork even when every other row records a parent', () => {
+    // The grandparent's own parent is unlisted, so it stays a recorded line;
+    // only the fresh fork is parentless and the recovered edge must exist.
+    const grandparent = summary('grandparent', [copied(1, 8, 'q1'), copied(2, 20, 'q2'), copied(3, 30, 'q3')], 'gone')
+    const parent = summary('parent', [
+      copied(1, 8, 'q1'), copied(2, 20, 'q2'), copied(3, 30, 'q3'), copied(4, 40, 'parent-own', ''),
+    ], 'grandparent')
+    const fork = summary('fork', [
+      copied(1, 8, 'q1'), copied(2, 20, 'q2'), copied(3, 30, 'q3'), copied(4, 41, 'fork-own', ''),
+    ])
+    const graph = build([grandparent, parent, fork], { foldRuns: false })
+
+    expect(graph.treeCount).toBe(1)
+    expect(sessionOf(graph, 'fork').inheritedCount).toBe(3)
+    expect(sessionOf(graph, 'fork').parentSessionId).toBe('parent')
+  })
+
+  it('keeps identical copies on one tree without a parent cycle', () => {
+    const first = summary('first', [copied(1, 8, 'q1', 'a1'), copied(2, 30, 'q2', 'a2')])
+    const second = summary('second', [copied(1, 8, 'q1', 'a1'), copied(2, 30, 'q2', 'a2')])
+    const graph = build([first, second], { foldRuns: false })
+
+    expect(graph.treeCount).toBe(1)
+    expect(graph.sessionCount).toBe(2)
+    // The copied outline is the whole outline, so one of them is a head chip.
+    expect(sessionOf(graph, 'first').ownCount + sessionOf(graph, 'first').inheritedCount).toBe(2)
+    expect(graph.nodes.filter(node => node.kind === 'turn')).toHaveLength(2)
+  })
+})

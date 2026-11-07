@@ -415,6 +415,77 @@ export function rearmDiscardedOutlines(
 /** How many outline reads the canvas runs at once; waves keep the bar responsive. */
 const OUTLINE_READ_CONCURRENCY = 4
 
+/** Whether a listed row already carries the turn outline the canvas draws from. */
+function hasRowOutline(summary: SessionSummary | undefined): boolean {
+  return Array.isArray(summary?.projectionValues?.turnOutline)
+}
+
+/**
+ * Session ids whose outlines the canvas reads to recover the trees.
+ *
+ * A fork no longer records the Session it was cut from, so lineage is recovered
+ * by comparing copied turn prefixes across Sessions (see `graph.ts`). That
+ * comparison needs the outline of every Session that can be a relative, not
+ * only of the Sessions already drawn: reading the drawn set alone would keep a
+ * parentless fork a tree of its own. A fork inherits the source directory and
+ * Workspace, so the current Session's tree is recoverable from its Workspace's
+ * rows; the whole-list scope reads every listed Session.
+ * @param scope - which Sessions the canvas draws.
+ * @param currentSessionId - the Session the canvas is opened on.
+ * @param ids - listed Session ids.
+ * @param byId - listed Session rows.
+ * @param workspaces - Workspace membership.
+ * @param hideSubagents - whether subagent-origin rows are filtered from the canvas.
+ * @returns the ids to load outlines for.
+ */
+export function lineageScanSessionIds(
+  scope: MapScope,
+  currentSessionId: string | undefined,
+  ids: readonly string[],
+  byId: Readonly<Record<string, SessionSummary>>,
+  workspaces: readonly WorkspaceGroup[],
+  hideSubagents: boolean,
+): readonly string[] {
+  if (scope === 'all' || currentSessionId === undefined) {
+    return hideSubagents ? ids.filter(id => byId[id]?.origin !== 'subagent') : ids
+  }
+  const known = new Set(ids)
+  const scoped: string[] = []
+  const seen = new Set<string>()
+  const add = (id: string): void => {
+    if (!known.has(id) || seen.has(id)) return
+    seen.add(id)
+    scoped.push(id)
+  }
+  const workspace = workspaces.find(group => group.sessionIds.includes(currentSessionId))
+  if (workspace === undefined) {
+    // No Workspace accounts for the current Session: its recorded ancestry is
+    // the smallest safe read. An unlisted current id has neither, so the whole
+    // list is the only honest answer.
+    for (const id of ancestorSessionIds(currentSessionId, byId)) add(id)
+    if (scoped.length > 0) return scoped
+    return hideSubagents ? ids.filter(id => byId[id]?.origin !== 'subagent') : ids
+  }
+  for (const id of workspace.sessionIds) add(id)
+  // A subagent row is synthesized from its parent's catalog rather than listed
+  // by the Workspace; follow recorded children so an unhidden subagent still
+  // gets its outline, and so a recorded ordinary child outside the Workspace
+  // list keeps its inherited turns.
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const id of ids) {
+      if (seen.has(id)) continue
+      if (hideSubagents && byId[id]?.origin === 'subagent') continue
+      const parentId = byId[id]?.parentId
+      if (parentId === undefined || !seen.has(parentId)) continue
+      add(id)
+      grew = true
+    }
+  }
+  return scoped
+}
+
 /**
  * One overview card.
  * @param key - React key.
@@ -950,17 +1021,35 @@ export function createMapView(
     }, [runtime])
     const canRefreshOutlines = refreshOutlines !== undefined
 
-    // Request the outlines the graph is missing. A read seeds the controller's
+    // The canvas recovers fork lineage from copied turn prefixes, so it reads
+    // outlines for every Session that can be a relative — the whole Workspace
+    // in the current-tree scope, the whole list in the all-Sessions scope — and
+    // the drawn graph catches up as the writes land.
+    const scanIds = lineageScanSessionIds(
+      scope,
+      current ?? props.sessionId,
+      ids,
+      byId,
+      workspaces,
+      hideSubagents,
+    )
+    const scanKey = scanIds.join('\u0000')
+    const scanSessions = React.useMemo(
+      () => scanIds.map(id => ({ id, outlineMissing: !hasRowOutline(byId[id]) })),
+      [scanKey, byId],
+    )
+
+    // Request the outlines the scan is missing. A read seeds the controller's
     // shared projection store, whose update flows back through `useSessions`
     // and rebuilds the graph, so the canvas fills in as reads land. Reads run
-    // in bounded waves: one per drawn Session at once would fire a burst the
+    // in bounded waves: one per scanned Session at once would fire a burst the
     // width of the whole map.
     React.useEffect(() => {
       if (refreshOutlines === undefined) return undefined
       rearmDiscardedOutlines(outlineRequested.current, projectionsBySession)
       const retry = outlineForceRetry.current
       outlineForceRetry.current = false
-      const queue = [...outlineRefreshQueue(graph.sessions, projectionsBySession, outlineRequested.current, retry)]
+      const queue = [...outlineRefreshQueue(scanSessions, projectionsBySession, outlineRequested.current, retry)]
       if (queue.length === 0) return undefined
       let cancelled = false
       let cursor = 0
@@ -988,7 +1077,7 @@ export function createMapView(
         // "requested" with no read behind them.
         for (const id of queue) if (!started.has(id)) outlineRequested.current.delete(id)
       }
-    }, [graph, projectionsBySession, refreshOutlines, outlineRetry])
+    }, [scanKey, scanSessions, projectionsBySession, refreshOutlines, outlineRetry])
 
     const currentSession = current === undefined ? undefined : graph.sessionsById[current]
     const currentPath = React.useMemo(
@@ -1310,18 +1399,19 @@ export function createMapView(
     // left to the empty state instead of being reported as a fallback.
     const scopeFallback = scope === 'current' && graph.nodes.length > 0 && graph.scopeSessionId === undefined
 
-    // How each drawn Session stands in its outline read. The canvas starts the
-    // reads itself (see the projection effect above); this only describes them,
-    // so a read in flight reads as "loading" rather than as a missing outline.
-    const outlineStates = graph.sessions.map(session => outlineReadStateOf(
+    // How the scan stands in its outline reads. The canvas starts the reads
+    // itself (see the projection effect above); this only describes them, so a
+    // read in flight reads as "loading" rather than as a missing outline.
+    const scanStates = scanSessions.map(session => outlineReadStateOf(
       session.outlineMissing,
       projectionsBySession?.[session.id],
       canRefreshOutlines,
     ))
-    const loadingOutlineCount = outlineStates.filter(state => state === 'loading').length
-    const failedOutlineCount = outlineStates.filter(state => state === 'failed').length
-    const absentOutlineCount = outlineStates.filter(state => state === 'absent').length
-    const missingOutlineCount = loadingOutlineCount + failedOutlineCount + absentOutlineCount
+    const loadingOutlineCount = scanStates.filter(state => state === 'loading').length
+    const failedOutlineCount = scanStates.filter(state => state === 'failed').length
+    // The drawn set is what a missing outline actually costs the reader: a
+    // scanned Session outside the current tree is not drawn and earns no note.
+    const missingOutlineCount = graph.sessions.filter(session => session.outlineMissing).length
 
     const retryOutlines = (): void => {
       outlineRequested.current.clear()
@@ -1352,10 +1442,10 @@ export function createMapView(
         : missingOutlineCount > 0
           ? React.createElement(
             'span',
-            { className: absentOutlineCount === graph.sessionCount ? 'dsm__error' : 'dsm__note' },
-            absentOutlineCount === graph.sessionCount
+            { className: missingOutlineCount === graph.sessionCount ? 'dsm__error' : 'dsm__note' },
+            missingOutlineCount === graph.sessionCount
               ? '列表里没有 turnOutline 投影，只能显示会话头'
-              : String(absentOutlineCount) + ' 个会话没有轮次投影，只显示会话头',
+              : String(missingOutlineCount) + ' 个会话没有轮次投影，只显示会话头',
           )
           : null
 

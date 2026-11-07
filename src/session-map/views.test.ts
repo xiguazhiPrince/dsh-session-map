@@ -13,6 +13,7 @@ import { MAP_KIND, OVERVIEW_KIND } from './constants'
 import {
   createMapView,
   DEFAULT_FOLD_RUNS,
+  lineageScanSessionIds,
   outlineReadStateOf,
   outlineRefreshQueue,
   rearmDiscardedOutlines,
@@ -157,6 +158,19 @@ describe('canvas rendering', () => {
 
     expect(html).toContain('dsm__tagText">会话图谱默认显… (1)</span>')
     expect(html).toContain('title="会话1 · ' + title + '"')
+  })
+
+  it('joins parentless forks that copied the same turn prefix into one tree', () => {
+    const html = renderCanvas([
+      summary('root', [turn(1, 'q1'), turn(2, 'q2')]),
+      summary('fork', [turn(1, 'q1'), turn(2, 'q2'), turn(3, 'own')]),
+    ], { foldRuns: false })
+
+    expect(html).toContain('2 个会话')
+    expect(html).toContain('1 棵树')
+    expect(html).toContain('dsm__tagText">root</span>')
+    expect(html).toContain('dsm__tagText">fork</span>')
+    expect(cardCount(html)).toBe(3)
   })
 })
 
@@ -353,5 +367,44 @@ describe('loaded event window', () => {
       { seq: 3, text: 'hi' },
       { seq: 5, text: 'also there' },
     ])
+  })
+})
+
+describe('lineage scan', () => {
+  const row = (id: string, extra: Partial<SessionSummary> = {}): SessionSummary => ({
+    id,
+    displayTitle: id,
+    ...extra,
+  })
+
+  it('reads every listed Session for the all-Sessions scope, minus hidden subagents', () => {
+    const byId = {
+      a: row('a'),
+      b: row('b'),
+      sub: row('sub', { origin: 'subagent' }),
+    }
+    const ids = ['a', 'b', 'sub']
+
+    expect(lineageScanSessionIds('all', 'a', ids, byId, [], false)).toEqual(['a', 'b', 'sub'])
+    expect(lineageScanSessionIds('all', 'a', ids, byId, [], true)).toEqual(['a', 'b'])
+  })
+
+  it('stays inside the current Workspace and follows recorded children', () => {
+    const byId = {
+      a: row('a'),
+      b: row('b'),
+      elsewhere: row('elsewhere'),
+      child: row('child', { parentId: 'a' }),
+    }
+    const ids = ['a', 'b', 'elsewhere', 'child']
+    const workspaces = [{ sessionIds: ['a', 'b'] }]
+
+    expect(lineageScanSessionIds('current', 'a', ids, byId, workspaces, false)).toEqual(['a', 'b', 'child'])
+  })
+
+  it('falls back to the whole list when no Workspace owns the current Session', () => {
+    const byId = { a: row('a'), b: row('b') }
+
+    expect(lineageScanSessionIds('current', 'ghost', ['a', 'b'], byId, [], false)).toEqual(['a', 'b'])
   })
 })
