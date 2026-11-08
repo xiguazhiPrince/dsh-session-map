@@ -1,7 +1,7 @@
 {
   "name": "@xiguazhiprince/dsh-session-map",
-  "version": "0.4.0",
-  "description": "Session map, BTW forks, skills and AGENTS.md panels, and an IntelliJ-style Git tool window for DeepSeek Harness: draw each session's turn-fork tree, fork the running session at its exact progress into a read-only copy, see the skills and instruction files a session really uses, and stage, commit, push, update or clone a repository without leaving the GUI.",
+  "version": "0.5.0",
+  "description": "Session map, BTW forks, skills and AGENTS.md panels, an IntelliJ-style Git tool window, and quote-to-chat from file previews for DeepSeek Harness: draw each session's turn-fork tree, fork the running session at its exact progress into a read-only copy, see the skills and instruction files a session really uses, quote a right-sidebar file selection (absolute path + line range + source excerpt) into the composer, and stage, commit, push, update or clone a repository without leaving the GUI.",
   "type": "module",
   "license": "MIT",
   "main": "lib/index.js",
@@ -47,7 +47,10 @@
     "session",
     "fork-tree",
     "visualization",
-    "git"
+    "git",
+    "quote",
+    "selection",
+    "source-reference"
   ],
   "repository": {
     "type": "git",

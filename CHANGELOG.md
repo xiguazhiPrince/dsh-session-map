@@ -2,6 +2,18 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.5.0] — 2026-11-08
+
+### 新增
+
+- **引用文件预览里的选中文本到对话**：右侧栏文件 tab（Markdown / 代码 / 纯文本）里选中文本后浮出「引用到对话」，点击把 **宿主机绝对路径 + 起止行号 + 源码原文** 插进当前会话输入框。首行是来源坐标 `绝对路径:起止行`：代码用围栏（信息行即来源坐标），Markdown / 纯文本用引用块并保留源码原格式。Markdown 预览的行号由「源码投影 → 选区匹配」得到（预览渲染的是 HTML）；内容上限 100 字：超出时在行边界截断、行号范围同步收窄到实际引用的行，并注明原文总字数；插入块以空行 + `---` 分割线 + 空行收尾，光标停在分割线下面隔一行处，接着写问题。规格见 [docs/quote-to-chat-spec.md](docs/quote-to-chat-spec.md)。
+
+### 内部
+
+- 新增源码目录 `src/quote-to-chat/`：`format.ts`（纯文本规则）、`project.ts`（DOM 可见文本投影）、`dom.ts`（行号解析）、`action.ts`（浮层组件）、`css.ts`、`index.ts`。
+- 客户端 bundle 把 `react-dom` 声明为外置依赖（浮层用 `createPortal` portal 到 `document.body`），不内联第二份 React。
+- `pnpm typecheck`、`pnpm test`、`pnpm build` 均通过：494 个用例通过，另有 16 个 Git 安全集成用例默认跳过。
+
 ## [0.4.0] — 2026-11-07
 
 0.3.0 只有会话图谱、分支徽章与「从 Git 克隆」。这一版把插件扩成「会话 + 能力 + 代码状态」三合一的界面。
