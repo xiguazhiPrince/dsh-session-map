@@ -33,6 +33,7 @@ import { createAgentInstructionsRuntime, createAgentInstructionsTab } from '../a
 import { installBtw } from '../btw'
 import { createGitWorkspaceRuntime, createGitWorkspaceSettings } from '../git-workspace/client'
 import { installGitRightbarPage, installGitWindowPanel } from '../git-workspace/window'
+import { installQuoteToChat } from '../quote-to-chat'
 import { createSkillCatalogRuntime, createSkillCatalogSettings } from '../skill-catalog/client'
 import { createSessionSkillRuntime, createSessionSkillsTab } from '../skill-catalog/session-tab'
 import {
@@ -131,6 +132,11 @@ export function apply(ctx: Context): void {
   // current progress into a read-only Session and switches the view there.
   // The feature owns its own optional dependencies and stylesheet.
   installBtw(ctx)
+
+  // 引用到对话：在右侧栏文件预览的选中文本上浮出「引用到对话」，点击后把
+  // 引用块 / 围栏代码插入当前会话输入框。它挂在文档预览的工具栏插槽上，
+  // 自己负责样式与选区浮层。
+  installQuoteToChat(ctx)
 
   // The product has no `styles` service outside the dynamic runtime, so the
   // sheet is a string this effect owns: one element, removed with the fiber.

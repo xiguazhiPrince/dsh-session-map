@@ -46,10 +46,10 @@ export default (): UserConfig[] => [
     dts: false,
     sourcemap: true,
     // Shared baseline the kernel answers through the injected `require`. This
-    // plugin currently imports only `react` (it builds elements with
-    // `createElement`, not JSX), but a future JSX import that fell through to
-    // the bundler would inline a second React and break hooks in the shell.
-    deps: { neverBundle: ['react', 'react/jsx-runtime'] },
+    // plugin builds elements with `createElement`, not JSX; the quote bubble is
+    // the one portal consumer, so `react-dom` must stay external too — an
+    // inlined copy would drag in its own `react` and break hooks in the shell.
+    deps: { neverBundle: ['react', 'react-dom', 'react/jsx-runtime'] },
     outputOptions: {
       entryFileNames: 'client.js',
       banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(ID)}, factory: (require) => {`,
