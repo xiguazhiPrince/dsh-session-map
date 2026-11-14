@@ -97,7 +97,7 @@ dsh plugin --profile web add github:xiguazhiPrince/dsh-session-map
 
 装完**重启该 profile 的进程并刷新页面**，插件才会加载（profile 的 bundle 列表在启动时读取）。profile 名要已经存在于 `$DSH_HOME/profiles` 下；想新建可以先用模板派生：`dsh myweb --from-default-profile web`。
 
-> **版本提醒**：npm 上最新是 **0.5.0**——引用文件预览选中文本、Git 工具窗口、技能页、指令页与 BTW 都已上架。GitHub main 可能比 npm 领先若干提交，想第一时间试新功能再从 GitHub 装。
+> **版本提醒**：npm 上最新是 **0.6.0**——用量统计、引用文件预览选中文本、Git 工具窗口、技能页、指令页与 BTW 都已上架。GitHub main 可能比 npm 领先若干提交，想第一时间试新功能再从 GitHub 装。
 
 ## 本地开发
 

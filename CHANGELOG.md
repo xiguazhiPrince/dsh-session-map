@@ -2,7 +2,7 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.6.0] — 2026-11-14
 
 ### 新增
 
@@ -16,6 +16,7 @@
 
 - 新增源码目录 `src/usage-stats/`：`model.ts`（日志折叠、行级 diff、聚合与热力图计算）、`scan.ts`（多帧 zstd 日志读取）、`cache.ts`（按文件的折叠缓存）、`host.ts`（后台扫描与 `/plugin-usage-stats/state` 路由）、`client.ts`、`view.ts`、`css.ts`。
 - 会话日志是多帧 zstd：Node 的一次性解压只返回第一帧，流式解压又会报 `prefix_unknown`。所以读取器先按帧格式切分，再逐帧解压，并且每 12 ms 让出一次事件循环。
+- `pnpm typecheck`、`pnpm test`、`pnpm build` 均通过：576 个用例通过，另有 16 个 Git 安全集成用例默认跳过。
 
 ## [0.5.0] — 2026-11-08
 
