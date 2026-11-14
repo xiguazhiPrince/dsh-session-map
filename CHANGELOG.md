@@ -2,6 +2,21 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 新增
+
+- **用量统计**（Settings →「用量统计」）：从本机会话日志汇总出 GitHub 风格的贡献热力图，可切换指标（AI 改动行数 / Token / 对话轮次 / Agent 运行时长）和来源（全部 / 主会话 / 子代理），并给出最活跃月份、最活跃的一天、最长连续和当前连续天数。概览页有会话、轮次、运行时长、Token、缓存命中、工具调用六项汇总，以及一天中的活跃时段；明细页按项目、模型、工具、文件类型分别列表，附统计口径说明。时间范围可选近一年 / 半年 / 90 天 / 30 天 / 全部，日期按浏览器时区切分。规格见 [docs/usage-stats-spec.md](docs/usage-stats-spec.md)。
+
+### 变更
+
+- 左侧栏的「Git」入口默认隐藏。Git 工具窗口的面板仍然注册着，会话头的「Git」按钮（右侧栏一页式 Git）、输入框左侧的分支徽章和 Settings →「从 Git 克隆」都不受影响。想恢复的话，把 `src/git-workspace/window/index.ts` 里的 `SHOW_SIDEBAR_ENTRY` 改成 `true`。
+
+### 内部
+
+- 新增源码目录 `src/usage-stats/`：`model.ts`（日志折叠、行级 diff、聚合与热力图计算）、`scan.ts`（多帧 zstd 日志读取）、`cache.ts`（按文件的折叠缓存）、`host.ts`（后台扫描与 `/plugin-usage-stats/state` 路由）、`client.ts`、`view.ts`、`css.ts`。
+- 会话日志是多帧 zstd：Node 的一次性解压只返回第一帧，流式解压又会报 `prefix_unknown`。所以读取器先按帧格式切分，再逐帧解压，并且每 12 ms 让出一次事件循环。
+
 ## [0.5.0] — 2026-11-08
 
 ### 新增

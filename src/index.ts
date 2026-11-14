@@ -17,6 +17,9 @@
  *   query and working-directory services stay optional and are read per
  *   request, so a composition without them reports that plainly instead of
  *   failing at apply time.
+ * - Settings → Usage statistics: one read-only route that folds every Session
+ *   log under `$DSH_HOME/sessions` into daily usage, scanning in the
+ *   background and caching each log's fold so later reads are incremental.
  * - Conversation → Session map: one read-only route over the Session headers,
  *   answering each listed Session's creation time so the canvas can tell a fork
  *   source from its children, plus the fork ledger routes the browser half
@@ -31,6 +34,7 @@ import { installGitWorkspaceHost } from './git-workspace/host'
 import { installSessionForkHost } from './session-map/host-forks'
 import { installSessionLineageHost } from './session-map/host-lineage'
 import { installSkillCatalogHost } from './skill-catalog/host'
+import { installUsageStatsHost } from './usage-stats/host'
 
 /** Host plugin body: expose the settings and instruction routes. */
 export function apply(ctx: Context): void {
@@ -47,5 +51,6 @@ export function apply(ctx: Context): void {
     installAgentInstructionsHost(scope)
     installSessionLineageHost(scope)
     installSessionForkHost(scope)
+    installUsageStatsHost(scope)
   })
 }

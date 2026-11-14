@@ -1,11 +1,12 @@
 /**
  * Browser half: the Session map plugin.
  *
- * Contributes the Session map UI plus six smaller seats: a composer Git
+ * Contributes the Session map UI plus seven smaller seats: a composer Git
  * branch badge, a composer `BTW` button that forks the running Session at its
  * exact progress into a read-only one (see `../btw`), a Session skills tab, a
- * Session instructions tab, the Settings → Clone from Git page, and the
- * Settings → Skills page. The map itself is a plain overview as a Conversation
+ * Session instructions tab, the Settings → Clone from Git page, the
+ * Settings → Skills page, and the Settings → Usage statistics page (see
+ * `../usage-stats/client`). The map itself is a plain overview as a Conversation
  * tab and as a right-column tab, a turn-tree canvas as a Conversation tab, a
  * right-column tab, and a Session header launcher; the branch reading lives in
  * `conversation.input.left`, the Session skills list is another
@@ -36,6 +37,7 @@ import { installGitRightbarPage, installGitWindowPanel } from '../git-workspace/
 import { installQuoteToChat } from '../quote-to-chat'
 import { createSkillCatalogRuntime, createSkillCatalogSettings } from '../skill-catalog/client'
 import { createSessionSkillRuntime, createSessionSkillsTab } from '../skill-catalog/session-tab'
+import { createUsageStatsRuntime, createUsageStatsSettings } from '../usage-stats/client'
 import {
   createTypeClaimer,
   lookup,
@@ -218,6 +220,15 @@ export function apply(ctx: Context): void {
     { name: 'settings.section', id: 'skills', order: 30, label: '技能' },
     SkillCatalogSettings,
   )), 'skill-catalog: settings section')
+
+  // Usage statistics read every Session log on this machine, so they are a
+  // Settings page rather than conversation chrome. Order 40 places them right
+  // after the skills page.
+  const UsageStatsSettings = createUsageStatsSettings(createUsageStatsRuntime(ctx))
+  ctx.effect(() => slots.inject('settings.section', () => slots.register(
+    { name: 'settings.section', id: 'usage-stats', order: 40, label: '用量统计' },
+    UsageStatsSettings,
+  )), 'usage-stats: settings section')
 
   // The branch badge reads `.git/HEAD` through the Host's file Remote. That
   // Remote belongs to another package, so it is an optional capability: a

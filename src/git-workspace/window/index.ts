@@ -16,6 +16,13 @@ import { createGitWindowRuntime } from './runtime'
 /** Sidebar entry id, also the `main` key the panel registers under. */
 const PANEL_ID = 'git-workspace'
 
+/**
+ * Whether the left sidebar shows the Git entry. Hidden by choice: Git work
+ * happens in the right-column Git tab and Settings → 从 Git 克隆. The panel body
+ * stays registered, so turning this back on is the only change needed.
+ */
+export const SHOW_SIDEBAR_ENTRY = false
+
 /** One entry's registration options. */
 interface SlotRegistrationOptions {
   readonly name: string
@@ -65,10 +72,12 @@ export function installGitWindowPanel(ctx: Context): void {
   if (slots === undefined) return
   const layout = lookup<LayoutService>(ctx, 'layout')
 
-  ctx.effect(() => slots.inject('sidebar.panellist', () => slots.register(
-    { name: 'sidebar.panellist', id: PANEL_ID, order: 30, label: 'Git' },
-    GitPanelIcon,
-  )), 'git-window: panel icon')
+  if (SHOW_SIDEBAR_ENTRY) {
+    ctx.effect(() => slots.inject('sidebar.panellist', () => slots.register(
+      { name: 'sidebar.panellist', id: PANEL_ID, order: 30, label: 'Git' },
+      GitPanelIcon,
+    )), 'git-window: panel icon')
+  }
 
   const Panel = createGitPanel(createGitWindowRuntime())
   ctx.effect(() => slots.inject('main', () => slots.register(
@@ -80,7 +89,9 @@ export function installGitWindowPanel(ctx: Context): void {
   // Conversation. Restore only after the registration fiber has mounted, and
   // never let a missing layout service break the rest of the bundle.
   ctx.effect(() => {
-    if (!panelWasOpen() || layout === undefined) return () => undefined
+    // Without its entry the panel cannot be left the usual way, so a reload
+    // never reopens it.
+    if (!SHOW_SIDEBAR_ENTRY || !panelWasOpen() || layout === undefined) return () => undefined
     const timer = setTimeout(() => {
       try {
         layout.selectPanel(PANEL_ID)
