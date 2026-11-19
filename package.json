@@ -1,7 +1,7 @@
 {
   "name": "@xiguazhiprince/dsh-session-map",
   "version": "0.6.0",
-  "description": "Session map, BTW forks, skills and AGENTS.md panels, an IntelliJ-style Git tool window, quote-to-chat from file previews, and a GitHub-style usage heat map for DeepSeek Harness: draw each session's turn-fork tree, fork the running session at its exact progress into a read-only copy, see the skills and instruction files a session really uses, quote a right-sidebar file selection (absolute path + line range + source excerpt) into the composer, chart AI line edits, tokens, turns and agent time from local session logs, and stage, commit, push, update or clone a repository without leaving the GUI.",
+  "description": "Session map, BTW forks, skills and AGENTS.md panels, a Conversation → MCP manager for native dsh-mcp-client rows, an IntelliJ-style Git tool window, quote-to-chat from file previews, and a GitHub-style usage heat map for DeepSeek Harness: draw each session's turn-fork tree, fork the running session at its exact progress into a read-only copy, see the skills and instruction files a session really uses, manage profile MCP servers (stdio / HTTP, OAuth, import/export, diagnose), quote a right-sidebar file selection (absolute path + line range + source excerpt) into the composer, chart AI line edits, tokens, turns and agent time from local session logs, and stage, commit, push, update or clone a repository without leaving the GUI.",
   "type": "module",
   "license": "MIT",
   "main": "lib/index.js",
@@ -64,5 +64,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
   }
 }

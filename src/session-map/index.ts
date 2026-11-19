@@ -1,19 +1,20 @@
 /**
  * Browser half: the Session map plugin.
  *
- * Contributes the Session map UI plus seven smaller seats: a composer Git
+ * Contributes the Session map UI plus eight smaller seats: a composer Git
  * branch badge, a composer `BTW` button that forks the running Session at its
  * exact progress into a read-only one (see `../btw`), a Session skills tab, a
- * Session instructions tab, the Settings → Clone from Git page, the
- * Settings → Skills page, and the Settings → Usage statistics page (see
- * `../usage-stats/client`). The map itself is a plain overview as a Conversation
- * tab and as a right-column tab, a turn-tree canvas as a Conversation tab, a
- * right-column tab, and a Session header launcher; the branch reading lives in
- * `conversation.input.left`, the Session skills list is another
- * `conversation.view` tab (see
- * `../skill-catalog/session-tab`), the AGENTS.md manager is a third
- * `conversation.view` tab (see `../agent-instructions/client`), the clone form
- * is a `settings.section` page (see `../git-workspace/client`), and the skills
+ * Session instructions tab, a Conversation → MCP tab, the Settings → Clone from
+ * Git page, the Settings → Skills page, and the Settings → Usage statistics page
+ * (see `../usage-stats/client`). The map itself is a plain overview as a
+ * Conversation tab and as a right-column tab, a turn-tree canvas as a
+ * Conversation tab, a right-column tab, and a Session header launcher; the
+ * branch reading lives in `conversation.input.left`, the Session skills list is
+ * another `conversation.view` tab (see `../skill-catalog/session-tab`), the
+ * AGENTS.md manager is a third `conversation.view` tab (see
+ * `../agent-instructions/client`), the MCP manager is a fourth
+ * `conversation.view` tab (see `../mcp-manager/client`), the clone form is a
+ * `settings.section` page (see `../git-workspace/client`), and the skills
  * catalog is another `settings.section` page (see `../skill-catalog/client`).
  *
  * Services are read through `ctx.get` against local structural types rather
@@ -31,6 +32,7 @@ import { MAP_KIND, MAP_TYPE_ID, OVERVIEW_KIND, OVERVIEW_TYPE_ID } from './consta
 import { installForkRecorder } from './fork-recorder'
 import { createFlag } from './flags'
 import { createAgentInstructionsRuntime, createAgentInstructionsTab } from '../agent-instructions/client'
+import { createMcpManagerRuntime, createMcpManagerTab } from '../mcp-manager/client'
 import { installBtw } from '../btw'
 import { createGitWorkspaceRuntime, createGitWorkspaceSettings } from '../git-workspace/client'
 import { installGitRightbarPage, installGitWindowPanel } from '../git-workspace/window'
@@ -287,6 +289,16 @@ export function apply(ctx: Context): void {
     { name: 'conversation.view', id: 'session-instructions', order: 50, label: '指令' },
     AgentInstructionsTab,
   )), 'session-instructions: conversation view entry')
+
+  // The MCP manager tab is registered by default: it owns profile-scoped
+  // dsh-mcp-client rows in cordis.patch.yml through the Host's same-origin
+  // route family. A composition without that route keeps every other seat and
+  // this tab simply reports the route failure.
+  const McpManagerTab = createMcpManagerTab(createMcpManagerRuntime(ctx))
+  ctx.effect(() => slots.inject('conversation.view', () => slots.register(
+    { name: 'conversation.view', id: 'session-mcp', order: 60, label: 'MCP' },
+    McpManagerTab,
+  )), 'session-mcp: conversation view entry')
 
   // Every shipped fork entry point goes through the public client
   // `sessions.fork`, and the Host records no source id of its own. Observe that

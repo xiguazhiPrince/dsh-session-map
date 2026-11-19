@@ -31,6 +31,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { installAgentInstructionsHost } from './agent-instructions/host'
 import { installGitWorkspaceHost } from './git-workspace/host'
+import { installMcpManagerHost } from './mcp-manager/host'
 import { installSessionForkHost } from './session-map/host-forks'
 import { installSessionLineageHost } from './session-map/host-lineage'
 import { installSkillCatalogHost } from './skill-catalog/host'
@@ -42,15 +43,16 @@ export function apply(ctx: Context): void {
     installGitWorkspaceHost(scope)
   })
 
-  // The Skills, Instructions, and Session-map seed routes need only the web
-  // server: the registries and Session services they read are optional
-  // capabilities resolved on each request, so this registration stays valid in a
-  // composition that mounts none.
+  // The Skills, Instructions, Session-map seed, and MCP manager routes need only
+  // the web server: the registries and Session/loader services they read are
+  // optional capabilities resolved on each request, so this registration stays
+  // valid in a composition that mounts none.
   ctx.inject(['webServer'], (scope) => {
     installSkillCatalogHost(scope)
     installAgentInstructionsHost(scope)
     installSessionLineageHost(scope)
     installSessionForkHost(scope)
     installUsageStatsHost(scope)
+    installMcpManagerHost(scope)
   })
 }
