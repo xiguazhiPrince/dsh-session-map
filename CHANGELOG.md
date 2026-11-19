@@ -2,6 +2,23 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.7.0] — 2026-11-19
+
+### 新增
+
+- **Conversation → MCP**：在会话标签栏新增「MCP」页，管理当前 profile 的原生 `@deepseek-ai/dsh-mcp-client` 服务器。支持 stdio / streamable-http 的增删改、启停、HTTP Authorization / OAuth 2.1（PKCE）、Claude / Codex `mcpServers` JSON 导入导出、诊断 transcript，以及可搜索的工具列表（名称、描述、参数摘要，可展开完整 JSON Schema）。配置写入 profile 的 `cordis.patch.yml`，带 `# >>> dsh-session-map:mcp` 标记块。
+
+### 改进
+
+- 主按钮 / 选中分段按钮在深色主题下保持「浅色底 + 深色字」，悬停时不再被通用 hover 背景冲掉对比度。
+- 工具详情优先读 `tools.schemas()`，带回参数 schema；数量已知但明细未到时给出明确的重启提示，不再误显示「需登录」空态。
+
+### 内部
+
+- 新增源码目录 `src/mcp-manager/`：`model.ts`、`host.ts`、`oauth.ts`、`client.ts` 与对应测试。
+- 依赖增加 `yaml`，用于读写 patch 标记块。
+- `pnpm typecheck`、`pnpm test`、`pnpm build` 均通过：596 个用例通过，另有 16 个 Git 安全集成用例默认跳过。
+
 ## [0.6.0] — 2026-11-14
 
 ### 新增

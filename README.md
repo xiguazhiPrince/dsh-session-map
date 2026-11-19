@@ -1,6 +1,6 @@
 # dsh-session-map
 
-> **会话图谱 · BTW 分叉 · 技能与指令面板 · Git 工具窗口 · 用量统计** —— 把 DSH 里的分叉、能力和代码状态收进同一个界面。
+> **会话图谱 · BTW 分叉 · 技能与指令面板 · MCP 管理 · Git 工具窗口 · 用量统计** —— 把 DSH 里的分叉、能力和代码状态收进同一个界面。
 
 DSH 的会话会从某一轮分叉出去，可左侧栏只是一张平铺列表。这个插件把「从哪一句话分出来」画成一张图，也把日常最费手的技能查看、AGENTS.md 管理和 Git 操作搬进同一套界面。
 
@@ -68,6 +68,12 @@ DSH 的会话会从某一轮分叉出去，可左侧栏只是一张平铺列表�
 
 > 入口：右侧栏文件预览里拖选文本。规格见 [引用到对话规格](docs/quote-to-chat-spec.md)。
 
+## MCP 管理
+
+会话标签栏「MCP」页管理当前 profile 的原生 `dsh-mcp-client` 服务器：stdio / HTTP 增删改与启停、Authorization / OAuth 登录、导入导出、诊断，以及可搜索的工具列表（含参数摘要）。写入 `cordis.patch.yml`。
+
+> 入口：会话 →「MCP」标签。装完或改配置后需重启该 profile 并刷新页面。
+
 ## 用量统计
 
 Settings →「用量统计」把本机全部会话日志汇总成一张 GitHub 风格的贡献热力图，外加几张汇总表。数据只在本机计算，不上传。
@@ -97,7 +103,7 @@ dsh plugin --profile web add github:xiguazhiPrince/dsh-session-map
 
 装完**重启该 profile 的进程并刷新页面**，插件才会加载（profile 的 bundle 列表在启动时读取）。profile 名要已经存在于 `$DSH_HOME/profiles` 下；想新建可以先用模板派生：`dsh myweb --from-default-profile web`。
 
-> **版本提醒**：npm 上最新是 **0.6.0**——用量统计、引用文件预览选中文本、Git 工具窗口、技能页、指令页与 BTW 都已上架。GitHub main 可能比 npm 领先若干提交，想第一时间试新功能再从 GitHub 装。
+> **版本提醒**：npm 上最新是 **0.7.0**——Conversation → MCP 管理、用量统计、引用文件预览选中文本、Git 工具窗口、技能页、指令页与 BTW 都已上架。GitHub main 可能比 npm 领先若干提交，想第一时间试新功能再从 GitHub 装。
 
 ## 本地开发
 
