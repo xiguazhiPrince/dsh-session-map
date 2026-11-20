@@ -652,6 +652,16 @@ function ServerRow(props: {
   )
 }
 
+/**
+ * Bottom reserve for the measured tool list, in px. The session composer and
+ * the page's own bottom padding sit below the list; without this the last row
+ * ends up flush against the edge or under the composer.
+ */
+const TOOL_LIST_BOTTOM_GAP = 56
+
+/** Floor for the measured tool list, so it stays usable on a short window. */
+const TOOL_LIST_MIN_HEIGHT = 160
+
 /** Detail pane for the selected server. */
 function ServerDetail(props: {
   readonly server: McpServerView | null
@@ -683,9 +693,11 @@ function ServerDetail(props: {
     const element = listRef.current
     if (element === null || typeof window === 'undefined') return
     const top = element.getBoundingClientRect().top
-    // Leave a little breathing room under the list instead of touching the edge.
-    const available = Math.floor(window.innerHeight - top - 20)
-    setListCap(Math.max(160, available))
+    // Keep the last tool clear of whatever sits at the bottom of the window
+    // (the session composer, the page's own padding): a list that ends flush
+    // against the edge hides its final row.
+    const available = Math.floor(window.innerHeight - top - TOOL_LIST_BOTTOM_GAP)
+    setListCap(Math.max(TOOL_LIST_MIN_HEIGHT, available))
   }, [])
 
   React.useEffect(() => {
@@ -2507,12 +2519,19 @@ export const MCP_MANAGER_CSS = `
 .mcp-toolSearch { width: 100%; height: 34px; padding: 0 12px; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; }
 .mcp-toolSearch:focus-visible { outline: none; border-color: var(--dsw-alias-brand-primary); }
 /* Grows with the window instead of sitting at a fixed 360px, and scrolls on its
- * own; the search box above it stays put. 520px is the chrome this page spends
- * above the list (tab strip, page header, field card, tool heading + search). */
+ * own; the search box above it stays put. */
 .mcp-toolList { max-height: clamp(220px, calc(100vh - 520px), 880px); overflow: auto; overscroll-behavior: contain; }
+/*
+ * Tail gap after the last tool. A pseudo-element rather than padding: the page
+ * is border-box, so padding would shorten the visible list by the same amount
+ * all the time, while this only extends how far the list scrolls.
+ */
+.mcp-toolList::after { content: ''; display: block; flex: 0 0 100px; }
 .mcp-toolsNoMatch { padding: 18px 14px; border: 0.5px dashed var(--dsw-alias-border-l2); border-radius: 12px; color: var(--dsw-alias-label-secondary); font-size: 12.5px; text-align: center; background: var(--dsw-alias-bg-layer-2); }
 .mcp-tool { display: flex; flex-direction: column; gap: 4px; padding: 11px 14px; border-bottom: 0.5px solid var(--dsw-alias-border-l2); }
 .mcp-tool--soft { background: var(--dsw-alias-bg-layer-2); }
+/* The tail gap would otherwise expose the last row's own rule. */
+.mcp-tool:last-child { border-bottom: none; }
 .mcp-toolName { font-size: 13px; font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .mcp-toolDesc { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.45; }
 .mcp-toolParams { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
