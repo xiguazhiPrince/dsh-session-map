@@ -1179,12 +1179,17 @@ export async function buildManagerState(
     }
 
     const policyEntry = gatePolicy.servers[base.name]
-    const permissioned = policyEntry === undefined
-      ? toolList
-      : toolList.map((item) => ({ ...item, permission: policyEntry.tools[item.name] ?? policyEntry.fallback }))
+    // A server without a policy still renders the controls: its tools are all
+    // unnamed and fall back to "allow", and the first click creates the entry.
+    const fallback = policyEntry?.fallback ?? 'allow'
+    const permissioned = toolList.map((item) => ({
+      ...item,
+      permission: policyEntry?.tools[item.name] ?? fallback,
+    }))
     const policyView = policyEntry === undefined
-      ? undefined
-      : { fallback: policyEntry.fallback, ...summarize(toolList.map((item) => item.name), policyEntry) }
+      ? { fallback, allow: 0, ask: 0, deny: 0, unnamed: toolList.length }
+      : { fallback, ...summarize(toolList.map((item) => item.name), policyEntry) }
+    const showPolicy = policyEntry !== undefined || toolList.length > 0
 
     servers.push(maskView({
       ...base,
@@ -1194,7 +1199,7 @@ export async function buildManagerState(
       toolList: permissioned,
       live,
       oauth,
-      ...(policyView === undefined ? {} : { policy: policyView }),
+      ...(showPolicy ? { policy: policyView } : {}),
     }))
   }
 

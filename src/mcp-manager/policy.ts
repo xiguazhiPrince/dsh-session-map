@@ -122,7 +122,10 @@ export async function updateServerPolicy(
   mutate: (current: ServerPolicy) => ServerPolicy,
 ): Promise<PolicyFile> {
   const current = await readPolicy(profileDir)
-  const previous = current.servers[server] ?? { fallback: 'deny' as const, tools: {} }
+  // A server that had no policy starts open: touching one tool must never
+  // silently hide the other twenty-nine. Locking a server down is an explicit
+  // "全部禁止", which writes the deny fallback and clears this default.
+  const previous = current.servers[server] ?? { fallback: 'allow' as const, tools: {} }
   const next: PolicyFile = {
     version: POLICY_VERSION,
     servers: { ...current.servers, [server]: mutate(previous) },

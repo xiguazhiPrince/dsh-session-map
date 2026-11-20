@@ -365,6 +365,8 @@ describe('routes', () => {
         name: 'list_sessions',
         description: 'List Motty sessions',
         parameters: { type: 'object', properties: {} },
+        // A server with no policy still renders the controls, open by default.
+        permission: 'allow',
       },
       {
         name: 'terminal_exec',
@@ -377,8 +379,16 @@ describe('routes', () => {
           },
           required: ['command'],
         },
+        permission: 'allow',
       },
     ])
+    expect(state.servers[0]?.policy).toEqual({
+      fallback: 'allow',
+      allow: 0,
+      ask: 0,
+      deny: 0,
+      unnamed: 2,
+    })
   })
 })
 

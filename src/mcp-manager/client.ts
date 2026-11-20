@@ -108,6 +108,10 @@ const COPY = {
   permDefaultDeny: '新工具默认禁止',
   permDefaultBody: '以后新增的工具自动藏起来，不会自己变成可用。',
   permDefaultPrefix: '默认 · ',
+  permDefaultTitlePrefix: '新工具默认',
+  permDefaultDenyBody: '以后新增的工具自动藏起来，不会自己变成可用。',
+  permDefaultAllowBody: '以后新增的工具直接可用。要收紧就点「全部禁止」。',
+  permDefaultAskBody: '以后新增的工具，每次调用都要你确认一次。',
   permUnnamedPrefix: '未点名 ',
   permCountsMid: ' · ',
   permAllowPrefix: '放行 ',
@@ -749,6 +753,13 @@ function PermissionControl(props: {
   )
 }
 
+/** Localized explanation of what a server's fallback does to future tools. */
+function defaultBody(fallback: ToolPermission): string {
+  if (fallback === 'deny') return COPY.permDefaultDenyBody
+  if (fallback === 'ask') return COPY.permDefaultAskBody
+  return COPY.permDefaultAllowBody
+}
+
 /** Detail pane for the selected server. */
 function ServerDetail(props: {
   readonly server: McpServerView | null
@@ -970,12 +981,16 @@ function ServerDetail(props: {
         React.createElement(
           'div',
           { className: 'mcp-defaultText' },
-          React.createElement('span', { className: 'mcp-defaultTitle' }, COPY.permDefaultDeny),
-          React.createElement('span', { className: 'mcp-defaultBody' }, COPY.permDefaultBody),
+          React.createElement(
+            'span',
+            { className: 'mcp-defaultTitle' },
+            `${COPY.permDefaultTitlePrefix}${permissionLabel(policy.fallback)}`,
+          ),
+          React.createElement('span', { className: 'mcp-defaultBody' }, defaultBody(policy.fallback)),
         ),
         React.createElement(
           'span',
-          { className: 'mcp-defaultPill' },
+          { className: 'mcp-defaultPill', 'data-fallback': policy.fallback },
           `${COPY.permDefaultPrefix}${permissionLabel(policy.fallback)}`,
         ),
       ),
@@ -2787,7 +2802,10 @@ export const MCP_MANAGER_CSS = `
 .mcp-defaultText { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .mcp-defaultTitle { font-size: 13px; font-weight: 600; }
 .mcp-defaultBody { font-size: 12px; color: var(--dsw-alias-label-secondary); }
-.mcp-defaultPill { flex: none; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 16%, transparent); color: var(--dsw-alias-state-error-primary); }
+.mcp-defaultPill { flex: none; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); }
+.mcp-defaultPill[data-fallback="deny"] { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 16%, transparent); color: var(--dsw-alias-state-error-primary); }
+.mcp-defaultPill[data-fallback="ask"] { background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 18%, transparent); color: var(--dsw-alias-state-warn-primary); }
+.mcp-defaultPill[data-fallback="allow"] { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 16%, transparent); color: var(--dsw-alias-state-success-primary); }
 .mcp-toolDesc { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.45; }
 .mcp-toolParams { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .mcp-toolParamsSummary { min-width: 0; color: var(--dsw-alias-label-secondary); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.45; overflow-wrap: anywhere; }

@@ -108,14 +108,15 @@ describe('policy storage', () => {
     }
   })
 
-  it('creates a server entry from nothing with a deny fallback', async () => {
+  it('creates a server entry from nothing without hiding its other tools', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'dsh-mcp-policy-'))
     try {
       const next = await updateServerPolicy(dir, 'fresh', current => ({
         fallback: current.fallback,
         tools: { ...current.tools, one: 'ask' },
       }))
-      expect(next.servers.fresh).toEqual({ fallback: 'deny', tools: { one: 'ask' } })
+      // Open by default: touching one tool must not silently deny the rest.
+      expect(next.servers.fresh).toEqual({ fallback: 'allow', tools: { one: 'ask' } })
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
