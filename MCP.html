@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
   <meta charset="utf-8">
-  <title>MCP 收编</title>
+  <title>MCP 页 · 设计稿</title>
   <meta name="design-schema" content="3.0">
   <style>*,*::before,*::after{box-sizing:border-box}
 *{margin:0}
@@ -16,18 +16,12 @@ svg:not([data-fill]) > :not([fill]):not([stroke]){fill:none;stroke:currentColor;
     <div data-id="banner__root" data-type="frame" style="display:flex;flex-direction:column;width:100%;height:100%">
       
     <div data-id="banner__shell" data-type="frame" data-name="页面骨架" style="display:flex;flex-direction:column;width:100%;height:100%;background-color:var(--color-base);font-family:var(--font-body);font-size:13px;color:var(--color-ink)">
-  <div data-id="banner__header" data-type="frame" data-name="页头" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px 24px 14px 24px;background-color:var(--color-layer1);border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
+  <div data-id="banner__header" data-type="frame" data-name="页头" style="display:flex;flex-direction:column;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:4px;padding:18px 24px 14px 24px;background-color:var(--color-layer1);border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
     <div data-id="banner__head" data-type="frame" style="display:flex;flex-direction:column;gap:4px">
       <h1 data-id="banner__title" data-type="text" style="font-size:16px;font-weight:600;line-height:1.4">MCP</h1>
       <p data-id="banner__desc" data-type="text" style="font-size:12.5px;line-height:1.5;color:var(--color-muted)">管理当前 profile 的原生 dsh-mcp-client 服务器，配置写入 cordis.patch.yml。</p>
     </div>
-    <div data-id="banner__toolbar" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:8px">
-      
-      <span data-id="banner__btn-import" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px">导入</span>
-      <span data-id="banner__btn-export" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px">导出</span><span data-id="banner__btn-add" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-brand);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;font-weight:600;line-height:32px;color:var(--color-base)">添加服务器</span>
-      
-      
-    </div>
+    
   </div><div data-id="banner__unmanaged" data-type="frame" data-name="未纳管提示卡" style="display:flex;flex-direction:column;gap:10px;padding:14px;margin:16px 24px 0 24px;background-color:#f0a92e14;border:1px dashed #f0a92e80;border-radius:12px">
         <div data-id="banner__un-head" data-type="frame" style="display:flex;flex-direction:row;align-items:flex-start;justify-content:space-between;gap:10px">
           <div data-id="banner__un-titlebox" data-type="frame" style="display:flex;flex-direction:column;gap:3px">
@@ -74,13 +68,7 @@ svg:not([data-fill]) > :not([fill]):not([stroke]){fill:none;stroke:currentColor;
         <h1 data-id="confirm__title" data-type="text" style="font-size:16px;font-weight:600;line-height:1.4">MCP</h1>
         <p data-id="confirm__desc" data-type="text" style="font-size:12.5px;line-height:1.5;color:var(--color-muted)">管理当前 profile 的原生 dsh-mcp-client 服务器，配置写入 cordis.patch.yml。</p>
       </div>
-      <div data-id="confirm__toolbar" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:8px">
-        
-        <span data-id="confirm__btn-import" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px">导入</span>
-        <span data-id="confirm__btn-export" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px">导出</span><span data-id="confirm__btn-add" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-brand);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;font-weight:600;line-height:32px;color:var(--color-base)">添加服务器</span>
-        
-        
-      </div>
+      
     </div><div data-id="confirm__card" data-type="frame" style="display:flex;flex-direction:column;gap:12px;padding:16px;margin:16px 24px 0 24px;background-color:var(--color-layer1);border:1px solid #f0a92e80;border-radius:12px">
           <div data-id="confirm__card-head" data-type="frame" style="display:flex;flex-direction:column;gap:3px">
             <p data-id="confirm__card-crumb" data-type="text" style="font-size:11px;font-weight:600;color:var(--color-warn)">收编未纳管服务器</p>
@@ -116,36 +104,35 @@ svg:not([data-fill]) > :not([fill]):not([stroke]){fill:none;stroke:currentColor;
   </div>
 </section><section data-id="done" data-type="page" data-canvas="2160,0" data-name="③ 收编 · 完成" style="width:1000px;height:640px;background-color:var(--color-base);overflow:hidden">
   <div data-id="done__shell" data-type="frame" data-name="页面骨架" style="display:flex;flex-direction:column;width:100%;height:100%;font-family:var(--font-body);font-size:13px;color:var(--color-ink)">
-    <div data-id="done__header" data-type="frame" data-name="页头" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px 24px 0 24px;background-color:var(--color-layer1);border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
+    <div data-id="done__header" data-type="frame" data-name="页头" style="display:flex;flex-direction:column;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:4px;padding:18px 24px 14px 24px;background-color:var(--color-layer1);border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
       <div data-id="done__head" data-type="frame" style="display:flex;flex-direction:column;gap:4px">
         <h1 data-id="done__title" data-type="text" style="font-size:16px;font-weight:600;line-height:1.4">MCP</h1>
         <p data-id="done__desc" data-type="text" style="font-size:12.5px;line-height:1.5;color:var(--color-muted)">管理当前 profile 的原生 dsh-mcp-client 服务器，配置写入 cordis.patch.yml。</p>
       </div>
-      <div data-id="done__toolbar" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:8px">
-        
-        <span data-id="done__btn-import" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px">导入</span>
-        <span data-id="done__btn-export" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px">导出</span><span data-id="done__btn-add" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-brand);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;font-weight:600;line-height:32px;color:var(--color-base)">添加服务器</span>
-        
-        
-      </div>
-    </div><div data-id="done__toolbar-row" data-type="frame" data-name="搜索与筛选" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px;padding:0 24px 14px 24px;background-color:var(--color-layer1);border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
-  <div data-id="done__search" data-type="frame" style="display:flex;flex-direction:row;align-items:center;padding:0 12px;height:34px;min-width:140px;flex:1 1 180px;background-color:var(--color-layer2);border:1px solid var(--color-line);border-radius:8px">
-    <span data-id="done__search-text" data-type="text" style="font-size:12.5px;color:var(--color-muted)">搜索名称、命令或 URL</span>
-  </div>
-  <div data-id="done__chips" data-type="frame" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px">
-    <span data-id="done__chip-all" data-type="text" style="padding:0 10px;height:28px;background-color:#6e8ef726;border-radius:999px;font-size:12px;font-weight:600;line-height:28px;color:var(--color-brand)">全部 2</span>
-    <span data-id="done__chip-online" data-type="text" style="padding:0 10px;height:28px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:12px;line-height:28px;color:var(--color-muted)">已连接 2</span>
-    <span data-id="done__chip-auth" data-type="text" style="padding:0 10px;height:28px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:12px;line-height:28px;color:var(--color-muted)">需鉴权 0</span>
-    <span data-id="done__chip-off" data-type="text" style="padding:0 10px;height:28px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:12px;line-height:28px;color:var(--color-muted)">已禁用 0</span>
-  </div>
-  <div data-id="done__refresh-group" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:8px">
-    <span data-id="done__btn-refresh-row" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px;color:var(--color-ink)">刷新</span>
-    <span data-id="done__updated-row" data-type="text" style="font-size:11px;color:var(--color-muted);white-space:nowrap">更新于 10:20</span>
-  </div>
-</div>
+      
+    </div>
     <div data-id="done__split" data-type="frame" style="display:flex;flex-direction:row;min-height:0;flex:1 1 0%">
       <div data-id="done__master" data-type="frame" data-name="服务器列表" style="display:flex;flex-direction:column;gap:10px;padding:14px;width:400px;flex:0 0 auto;background-color:var(--color-layer2);border-width:0 1px 0 0;border-style:solid;border-color:var(--color-line);overflow:auto">
-        <div data-id="done__ok-strip" data-type="frame" data-name="成功提示条" style="display:flex;flex-direction:row;align-items:center;gap:8px;padding:10px 12px;background-color:#4cc38a1a;border:1px solid #4cc38a55;border-radius:10px">
+        <div data-id="done__controls" data-type="frame" data-name="列表控件区" style="display:flex;flex-direction:column;gap:9px;padding:0 0 11px 0;border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
+  <div data-id="done__actions" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:7px">
+    <span data-id="done__btn-add" data-type="text" style="padding:0 11px;height:30px;background-color:var(--color-brand);border-radius:8px;font-size:12.5px;font-weight:600;line-height:30px;color:var(--color-base);white-space:nowrap">添加服务器</span>
+    <span data-id="done__btn-import" data-type="text" style="padding:0 10px;height:30px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:30px;color:var(--color-ink)">导入</span>
+    <span data-id="done__btn-export" data-type="text" style="padding:0 10px;height:30px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:30px;color:var(--color-ink)">导出</span>
+    <span data-id="done__updated" data-type="text" style="min-width:0;flex:1 1 auto;font-size:11px;color:var(--color-muted);text-align:right;white-space:nowrap">更新于 10:20</span>
+  </div>
+  <div data-id="done__searchrow" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:7px">
+    <div data-id="done__search" data-type="frame" style="display:flex;flex-direction:row;align-items:center;padding:0 11px;height:32px;min-width:0;flex:1 1 0%;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px">
+      <span data-id="done__search-text" data-type="text" style="font-size:12.5px;color:var(--color-muted)">搜索名称、命令或 URL</span>
+    </div>
+    <span data-id="done__btn-refresh" data-type="text" style="padding:0 10px;height:30px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:30px;color:var(--color-ink)">刷新</span>
+  </div>
+  <div data-id="done__chips" data-type="frame" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px">
+    <span data-id="done__chip-all" data-type="text" style="padding:0 9px;height:26px;background-color:#6e8ef72e;border-radius:999px;font-size:11.5px;font-weight:600;line-height:26px;color:#a9bdff">全部 2</span>
+    <span data-id="done__chip-online" data-type="text" style="padding:0 9px;height:26px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:11.5px;line-height:26px;color:var(--color-muted)">已连接 2</span>
+    <span data-id="done__chip-auth" data-type="text" style="padding:0 9px;height:26px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:11.5px;line-height:26px;color:var(--color-muted)">需鉴权 0</span>
+    <span data-id="done__chip-off" data-type="text" style="padding:0 9px;height:26px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:11.5px;line-height:26px;color:var(--color-muted)">已禁用 0</span>
+  </div>
+</div><div data-id="done__ok-strip" data-type="frame" data-name="成功提示条" style="display:flex;flex-direction:row;align-items:center;gap:8px;padding:10px 12px;background-color:#4cc38a1a;border:1px solid #4cc38a55;border-radius:10px">
           <div data-id="done__ok-dot" data-type="shape" data-kind="rect" style="width:8px;height:8px;flex:0 0 auto;background-color:var(--color-success);border-radius:999px"></div>
           <p data-id="done__ok-text" data-type="text" style="min-width:0;flex:1 1 auto;font-size:12.5px;line-height:1.45;color:var(--color-ink)">已收编 2 台：xterminal、yunxiao 现在由本页管理</p>
         </div>
@@ -236,36 +223,35 @@ svg:not([data-fill]) > :not([fill]):not([stroke]){fill:none;stroke:currentColor;
   </div>
 </section><section data-id="conflict" data-type="page" data-canvas="3240,0" data-name="④ 收编 · 重名冲突" style="width:1000px;height:640px;background-color:var(--color-base);overflow:hidden">
   <div data-id="conflict__shell" data-type="frame" data-name="页面骨架" style="display:flex;flex-direction:column;width:100%;height:100%;font-family:var(--font-body);font-size:13px;color:var(--color-ink)">
-    <div data-id="conflict__header" data-type="frame" data-name="页头" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px 24px 0 24px;background-color:var(--color-layer1);border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
+    <div data-id="conflict__header" data-type="frame" data-name="页头" style="display:flex;flex-direction:column;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:4px;padding:18px 24px 14px 24px;background-color:var(--color-layer1);border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
       <div data-id="conflict__head" data-type="frame" style="display:flex;flex-direction:column;gap:4px">
         <h1 data-id="conflict__title" data-type="text" style="font-size:16px;font-weight:600;line-height:1.4">MCP</h1>
         <p data-id="conflict__desc" data-type="text" style="font-size:12.5px;line-height:1.5;color:var(--color-muted)">管理当前 profile 的原生 dsh-mcp-client 服务器，配置写入 cordis.patch.yml。</p>
       </div>
-      <div data-id="conflict__toolbar" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:8px">
-        
-        <span data-id="conflict__btn-import" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px">导入</span>
-        <span data-id="conflict__btn-export" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px">导出</span><span data-id="conflict__btn-add" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-brand);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;font-weight:600;line-height:32px;color:var(--color-base)">添加服务器</span>
-        
-        
-      </div>
-    </div><div data-id="conflict__toolbar-row" data-type="frame" data-name="搜索与筛选" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px;padding:0 24px 14px 24px;background-color:var(--color-layer1);border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
-  <div data-id="conflict__search" data-type="frame" style="display:flex;flex-direction:row;align-items:center;padding:0 12px;height:34px;min-width:140px;flex:1 1 180px;background-color:var(--color-layer2);border:1px solid var(--color-line);border-radius:8px">
-    <span data-id="conflict__search-text" data-type="text" style="font-size:12.5px;color:var(--color-muted)">搜索名称、命令或 URL</span>
-  </div>
-  <div data-id="conflict__chips" data-type="frame" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px">
-    <span data-id="conflict__chip-all" data-type="text" style="padding:0 10px;height:28px;background-color:#6e8ef726;border-radius:999px;font-size:12px;font-weight:600;line-height:28px;color:var(--color-brand)">全部 2</span>
-    <span data-id="conflict__chip-online" data-type="text" style="padding:0 10px;height:28px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:12px;line-height:28px;color:var(--color-muted)">已连接 2</span>
-    <span data-id="conflict__chip-auth" data-type="text" style="padding:0 10px;height:28px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:12px;line-height:28px;color:var(--color-muted)">需鉴权 0</span>
-    <span data-id="conflict__chip-off" data-type="text" style="padding:0 10px;height:28px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:12px;line-height:28px;color:var(--color-muted)">已禁用 0</span>
-  </div>
-  <div data-id="conflict__refresh-group" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:8px">
-    <span data-id="conflict__btn-refresh-row" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px;color:var(--color-ink)">刷新</span>
-    <span data-id="conflict__updated-row" data-type="text" style="font-size:11px;color:var(--color-muted);white-space:nowrap">更新于 10:22</span>
-  </div>
-</div>
+      
+    </div>
     <div data-id="conflict__split" data-type="frame" style="display:flex;flex-direction:row;min-height:0;flex:1 1 0%">
       <div data-id="conflict__master" data-type="frame" data-name="服务器列表" style="display:flex;flex-direction:column;gap:10px;padding:14px;width:400px;flex:0 0 auto;background-color:var(--color-layer2);border-width:0 1px 0 0;border-style:solid;border-color:var(--color-line);overflow:auto">
-        <div data-id="conflict__warn-strip" data-type="frame" data-name="部分成功提示条" style="display:flex;flex-direction:row;align-items:center;gap:8px;padding:10px 12px;background-color:#f0a92e1a;border:1px solid #f0a92e80;border-radius:10px">
+        <div data-id="conflict__controls" data-type="frame" data-name="列表控件区" style="display:flex;flex-direction:column;gap:9px;padding:0 0 11px 0;border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
+  <div data-id="conflict__actions" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:7px">
+    <span data-id="conflict__btn-add" data-type="text" style="padding:0 11px;height:30px;background-color:var(--color-brand);border-radius:8px;font-size:12.5px;font-weight:600;line-height:30px;color:var(--color-base);white-space:nowrap">添加服务器</span>
+    <span data-id="conflict__btn-import" data-type="text" style="padding:0 10px;height:30px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:30px;color:var(--color-ink)">导入</span>
+    <span data-id="conflict__btn-export" data-type="text" style="padding:0 10px;height:30px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:30px;color:var(--color-ink)">导出</span>
+    <span data-id="conflict__updated" data-type="text" style="min-width:0;flex:1 1 auto;font-size:11px;color:var(--color-muted);text-align:right;white-space:nowrap">更新于 10:22</span>
+  </div>
+  <div data-id="conflict__searchrow" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:7px">
+    <div data-id="conflict__search" data-type="frame" style="display:flex;flex-direction:row;align-items:center;padding:0 11px;height:32px;min-width:0;flex:1 1 0%;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px">
+      <span data-id="conflict__search-text" data-type="text" style="font-size:12.5px;color:var(--color-muted)">搜索名称、命令或 URL</span>
+    </div>
+    <span data-id="conflict__btn-refresh" data-type="text" style="padding:0 10px;height:30px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:30px;color:var(--color-ink)">刷新</span>
+  </div>
+  <div data-id="conflict__chips" data-type="frame" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px">
+    <span data-id="conflict__chip-all" data-type="text" style="padding:0 9px;height:26px;background-color:#6e8ef72e;border-radius:999px;font-size:11.5px;font-weight:600;line-height:26px;color:#a9bdff">全部 2</span>
+    <span data-id="conflict__chip-online" data-type="text" style="padding:0 9px;height:26px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:11.5px;line-height:26px;color:var(--color-muted)">已连接 2</span>
+    <span data-id="conflict__chip-auth" data-type="text" style="padding:0 9px;height:26px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:11.5px;line-height:26px;color:var(--color-muted)">需鉴权 0</span>
+    <span data-id="conflict__chip-off" data-type="text" style="padding:0 9px;height:26px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:11.5px;line-height:26px;color:var(--color-muted)">已禁用 0</span>
+  </div>
+</div><div data-id="conflict__warn-strip" data-type="frame" data-name="部分成功提示条" style="display:flex;flex-direction:row;align-items:center;gap:8px;padding:10px 12px;background-color:#f0a92e1a;border:1px solid #f0a92e80;border-radius:10px">
           <div data-id="conflict__warn-dot" data-type="shape" data-kind="rect" style="width:8px;height:8px;flex:0 0 auto;background-color:var(--color-warn);border-radius:999px"></div>
           <p data-id="conflict__warn-text" data-type="text" style="min-width:0;flex:1 1 auto;font-size:12.5px;line-height:1.45;color:var(--color-ink)">已收编 xterminal；yunxiao 与已纳管服务器重名，已跳过</p>
         </div>
@@ -323,18 +309,11 @@ svg:not([data-fill]) > :not([fill]):not([stroke]){fill:none;stroke:currentColor;
   </div>
 </section><section data-id="list-empty" data-type="page" data-canvas="1080,700" data-name="⑥ 列表 · 空态" style="width:1000px;height:640px;background-color:var(--color-base);overflow:hidden">
   <div data-id="list-empty__shell" data-type="frame" data-name="页面骨架" style="display:flex;flex-direction:column;width:100%;height:100%;font-family:var(--font-body);font-size:13px;color:var(--color-ink)">
-    <div data-id="list-empty__header" data-type="frame" data-name="页头" style="display:flex;flex-direction:column;gap:12px;padding:20px 24px 14px 24px;background-color:var(--color-layer1);border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
-      <div data-id="list-empty__headrow" data-type="frame" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px">
-        <div data-id="list-empty__head" data-type="frame" style="display:flex;flex-direction:column;gap:4px">
+    <div data-id="list-empty__header" data-type="frame" data-name="页头" style="display:flex;flex-direction:column;gap:4px;padding:18px 24px 14px 24px;background-color:var(--color-layer1);border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
+      <div data-id="list-empty__head" data-type="frame" style="display:flex;flex-direction:column;gap:4px">
           <h1 data-id="list-empty__title" data-type="text" style="font-size:16px;font-weight:600;line-height:1.4">MCP</h1>
           <p data-id="list-empty__desc" data-type="text" style="font-size:12.5px;line-height:1.5;color:var(--color-muted)">管理当前 profile 的原生 dsh-mcp-client 服务器：增删改、启停、HTTP 鉴权；写入 cordis.patch.yml。</p>
         </div>
-        <div data-id="list-empty__toolbar" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:8px">
-          <span data-id="list-empty__btn-import" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px;color:var(--color-ink)">导入</span>
-          <span data-id="list-empty__btn-export" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px;color:var(--color-ink)">导出</span>
-          <span data-id="list-empty__btn-add" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-brand);border-radius:8px;font-size:12.5px;font-weight:600;line-height:32px;color:var(--color-base)">添加服务器</span>
-        </div>
-      </div>
     </div>
     <div data-id="list-empty__empty" data-type="frame" data-name="空态" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px;flex:1 1 auto">
       <div data-id="list-empty__empty-card" data-type="frame" style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:32px 24px;width:520px;max-width:100%;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:16px">
@@ -352,18 +331,11 @@ svg:not([data-fill]) > :not([fill]):not([stroke]){fill:none;stroke:currentColor;
   </div>
 </section><section data-id="list-loading" data-type="page" data-canvas="2160,700" data-name="⑦ 列表 · 加载中" style="width:1000px;height:640px;background-color:var(--color-base);overflow:hidden">
   <div data-id="list-loading__shell" data-type="frame" data-name="页面骨架" style="display:flex;flex-direction:column;width:100%;height:100%;font-family:var(--font-body);font-size:13px;color:var(--color-ink)">
-    <div data-id="list-loading__header" data-type="frame" data-name="页头" style="display:flex;flex-direction:column;gap:12px;padding:20px 24px 14px 24px;background-color:var(--color-layer1);border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
-      <div data-id="list-loading__headrow" data-type="frame" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px">
-        <div data-id="list-loading__head" data-type="frame" style="display:flex;flex-direction:column;gap:4px">
+    <div data-id="list-loading__header" data-type="frame" data-name="页头" style="display:flex;flex-direction:column;gap:4px;padding:18px 24px 14px 24px;background-color:var(--color-layer1);border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
+      <div data-id="list-loading__head" data-type="frame" style="display:flex;flex-direction:column;gap:4px">
           <h1 data-id="list-loading__title" data-type="text" style="font-size:16px;font-weight:600;line-height:1.4">MCP</h1>
           <p data-id="list-loading__desc" data-type="text" style="font-size:12.5px;line-height:1.5;color:var(--color-muted)">管理当前 profile 的原生 dsh-mcp-client 服务器：增删改、启停、HTTP 鉴权；写入 cordis.patch.yml。</p>
         </div>
-        <div data-id="list-loading__toolbar" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:8px">
-          <span data-id="list-loading__btn-import" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;opacity:0.5;font-size:12.5px;line-height:32px;color:var(--color-ink)">导入</span>
-          <span data-id="list-loading__btn-export" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;opacity:0.5;font-size:12.5px;line-height:32px;color:var(--color-ink)">导出</span>
-          <span data-id="list-loading__btn-add" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-brand);border-radius:8px;opacity:0.5;font-size:12.5px;font-weight:600;line-height:32px;color:var(--color-base)">添加服务器</span>
-        </div>
-      </div>
     </div>
     <div data-id="list-loading__body" data-type="frame" data-name="加载态" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:32px 20px;flex:1 1 auto">
       <p data-id="list-loading__text" data-type="text" style="font-size:12.5px;line-height:1.6;color:var(--color-muted)">正在读取 MCP 服务器…</p>
@@ -567,37 +539,35 @@ svg:not([data-fill]) > :not([fill]):not([stroke]){fill:none;stroke:currentColor;
   </div>
 </section><section data-id="detail-auth" data-type="page" data-canvas="3240,1400" data-name="⑫ 详情 · 需要登录" style="width:1000px;height:640px;background-color:var(--color-base);overflow:hidden">
   <div data-id="detail-auth__shell" data-type="frame" data-name="页面骨架" style="display:flex;flex-direction:column;width:100%;height:100%;font-family:var(--font-body);font-size:13px;color:var(--color-ink)">
-    <div data-id="detail-auth__header" data-type="frame" data-name="页头" style="display:flex;flex-direction:column;gap:12px;padding:20px 24px 14px 24px;background-color:var(--color-layer1);border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
-      <div data-id="detail-auth__headrow" data-type="frame" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px">
-        <div data-id="detail-auth__head" data-type="frame" style="display:flex;flex-direction:column;gap:4px">
+    <div data-id="detail-auth__header" data-type="frame" data-name="页头" style="display:flex;flex-direction:column;gap:4px;padding:18px 24px 14px 24px;background-color:var(--color-layer1);border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
+      <div data-id="detail-auth__head" data-type="frame" style="display:flex;flex-direction:column;gap:4px">
           <h1 data-id="detail-auth__title" data-type="text" style="font-size:16px;font-weight:600;line-height:1.4">MCP</h1>
           <p data-id="detail-auth__desc" data-type="text" style="font-size:12.5px;line-height:1.5;color:var(--color-muted)">管理当前 profile 的原生 dsh-mcp-client 服务器：增删改、启停、HTTP 鉴权；写入 cordis.patch.yml。</p>
         </div>
-        <div data-id="detail-auth__toolbar" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:8px">
-          <span data-id="detail-auth__btn-import" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px;color:var(--color-ink)">导入</span>
-          <span data-id="detail-auth__btn-export" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px;color:var(--color-ink)">导出</span>
-          <span data-id="detail-auth__btn-add" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-brand);border-radius:8px;font-size:12.5px;font-weight:600;line-height:32px;color:var(--color-base)">添加服务器</span>
-        </div>
-      </div>
-      <div data-id="detail-auth__toolbar-row" data-type="frame" data-name="搜索与筛选" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px">
-        <div data-id="detail-auth__search" data-type="frame" style="display:flex;flex-direction:row;align-items:center;padding:0 12px;height:34px;min-width:140px;flex:1 1 180px;background-color:var(--color-layer2);border:1px solid var(--color-line);border-radius:8px">
-          <span data-id="detail-auth__search-text" data-type="text" style="font-size:12.5px;color:var(--color-muted)">搜索名称、命令或 URL</span>
-        </div>
-        <div data-id="detail-auth__chips" data-type="frame" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px">
-          <span data-id="detail-auth__chip-all" data-type="text" style="padding:0 10px;height:28px;background-color:#6e8ef726;border-radius:999px;font-size:12px;font-weight:600;line-height:28px;color:var(--color-brand)">全部 2</span>
-          <span data-id="detail-auth__chip-online" data-type="text" style="padding:0 10px;height:28px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:12px;line-height:28px;color:var(--color-muted)">已连接 1</span>
-          <span data-id="detail-auth__chip-auth" data-type="text" style="padding:0 10px;height:28px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:12px;line-height:28px;color:var(--color-muted)">需鉴权 1</span>
-          <span data-id="detail-auth__chip-off" data-type="text" style="padding:0 10px;height:28px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:12px;line-height:28px;color:var(--color-muted)">已禁用 0</span>
-        </div>
-        <div data-id="detail-auth__refresh-group" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:8px">
-          <span data-id="detail-auth__btn-refresh" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px;color:var(--color-ink)">刷新</span>
-          <span data-id="detail-auth__updated" data-type="text" style="font-size:11px;color:var(--color-muted);white-space:nowrap">更新于 10:26</span>
-        </div>
-      </div>
+      
     </div>
     <div data-id="detail-auth__split" data-type="frame" style="display:flex;flex-direction:row;min-height:0;flex:1 1 0%">
       <div data-id="detail-auth__master" data-type="frame" data-name="服务器列表" style="display:flex;flex-direction:column;gap:10px;padding:14px;width:400px;flex:0 0 auto;background-color:var(--color-layer2);border-width:0 1px 0 0;border-style:solid;border-color:var(--color-line);overflow:auto">
-        <div data-id="detail-auth__row-x" data-type="frame" data-name="xterminal 行" style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:12px">
+        <div data-id="detail-auth__controls" data-type="frame" data-name="列表控件区" style="display:flex;flex-direction:column;gap:9px;padding:0 0 11px 0;border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
+  <div data-id="detail-auth__actions" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:7px">
+    <span data-id="detail-auth__btn-add" data-type="text" style="padding:0 11px;height:30px;background-color:var(--color-brand);border-radius:8px;font-size:12.5px;font-weight:600;line-height:30px;color:var(--color-base);white-space:nowrap">添加服务器</span>
+    <span data-id="detail-auth__btn-import" data-type="text" style="padding:0 10px;height:30px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:30px;color:var(--color-ink)">导入</span>
+    <span data-id="detail-auth__btn-export" data-type="text" style="padding:0 10px;height:30px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:30px;color:var(--color-ink)">导出</span>
+    <span data-id="detail-auth__updated" data-type="text" style="min-width:0;flex:1 1 auto;font-size:11px;color:var(--color-muted);text-align:right;white-space:nowrap">更新于 10:26</span>
+  </div>
+  <div data-id="detail-auth__searchrow" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:7px">
+    <div data-id="detail-auth__search" data-type="frame" style="display:flex;flex-direction:row;align-items:center;padding:0 11px;height:32px;min-width:0;flex:1 1 0%;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px">
+      <span data-id="detail-auth__search-text" data-type="text" style="font-size:12.5px;color:var(--color-muted)">搜索名称、命令或 URL</span>
+    </div>
+    <span data-id="detail-auth__btn-refresh" data-type="text" style="padding:0 10px;height:30px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:30px;color:var(--color-ink)">刷新</span>
+  </div>
+  <div data-id="detail-auth__chips" data-type="frame" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px">
+    <span data-id="detail-auth__chip-all" data-type="text" style="padding:0 9px;height:26px;background-color:#6e8ef72e;border-radius:999px;font-size:11.5px;font-weight:600;line-height:26px;color:#a9bdff">全部 2</span>
+    <span data-id="detail-auth__chip-online" data-type="text" style="padding:0 9px;height:26px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:11.5px;line-height:26px;color:var(--color-muted)">已连接 1</span>
+    <span data-id="detail-auth__chip-auth" data-type="text" style="padding:0 9px;height:26px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:11.5px;line-height:26px;color:var(--color-muted)">需鉴权 1</span>
+    <span data-id="detail-auth__chip-off" data-type="text" style="padding:0 9px;height:26px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:11.5px;line-height:26px;color:var(--color-muted)">已禁用 0</span>
+  </div>
+</div><div data-id="detail-auth__row-x" data-type="frame" data-name="xterminal 行" style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:12px">
           <div data-id="detail-auth__row-x-top" data-type="frame" style="display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:10px">
             <div data-id="detail-auth__row-x-id" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:8px;min-width:0">
               <div data-id="detail-auth__dot-x" data-type="shape" data-kind="rect" style="width:8px;height:8px;flex:0 0 auto;background-color:var(--color-success);border-radius:999px"></div>
@@ -675,33 +645,12 @@ svg:not([data-fill]) > :not([fill]):not([stroke]){fill:none;stroke:currentColor;
   </div>
 </section><section data-id="banner-listed" data-type="page" data-canvas="4320,0" data-name="①b 列表 · 已有服务器 + 未纳管" style="width:1000px;height:640px;background-color:var(--color-base);overflow:hidden">
   <div data-id="banner-listed__shell" data-type="frame" data-name="页面骨架" style="display:flex;flex-direction:column;width:100%;height:100%;font-family:var(--font-body);font-size:13px;color:var(--color-ink)">
-    <div data-id="banner-listed__header" data-type="frame" data-name="页头" style="display:flex;flex-direction:column;gap:12px;padding:20px 24px 14px 24px;background-color:var(--color-layer1);border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
-      <div data-id="banner-listed__headrow" data-type="frame" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px">
-        <div data-id="banner-listed__head" data-type="frame" style="display:flex;flex-direction:column;gap:4px">
+    <div data-id="banner-listed__header" data-type="frame" data-name="页头" style="display:flex;flex-direction:column;gap:4px;padding:18px 24px 14px 24px;background-color:var(--color-layer1);border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
+      <div data-id="banner-listed__head" data-type="frame" style="display:flex;flex-direction:column;gap:4px">
           <h1 data-id="banner-listed__title" data-type="text" style="font-size:16px;font-weight:600;line-height:1.4">MCP</h1>
           <p data-id="banner-listed__desc" data-type="text" style="font-size:12.5px;line-height:1.5;color:var(--color-muted)">管理当前 profile 的原生 dsh-mcp-client 服务器：增删改、启停、HTTP 鉴权；写入 cordis.patch.yml。</p>
         </div>
-        <div data-id="banner-listed__toolbar" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:8px">
-          <span data-id="banner-listed__btn-import" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px;color:var(--color-ink)">导入</span>
-          <span data-id="banner-listed__btn-export" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px;color:var(--color-ink)">导出</span>
-          <span data-id="banner-listed__btn-add" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-brand);border-radius:8px;font-size:12.5px;font-weight:600;line-height:32px;color:var(--color-base)">添加服务器</span>
-        </div>
-      </div>
-      <div data-id="banner-listed__toolbar-row" data-type="frame" data-name="搜索与筛选" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px">
-        <div data-id="banner-listed__search" data-type="frame" style="display:flex;flex-direction:row;align-items:center;padding:0 12px;height:34px;min-width:140px;flex:1 1 180px;background-color:var(--color-layer2);border:1px solid var(--color-line);border-radius:8px">
-          <span data-id="banner-listed__search-text" data-type="text" style="font-size:12.5px;color:var(--color-muted)">搜索名称、命令或 URL</span>
-        </div>
-        <div data-id="banner-listed__chips" data-type="frame" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px">
-          <span data-id="banner-listed__chip-all" data-type="text" style="padding:0 10px;height:28px;background-color:#6e8ef726;border-radius:999px;font-size:12px;font-weight:600;line-height:28px;color:var(--color-brand)">全部 2</span>
-          <span data-id="banner-listed__chip-online" data-type="text" style="padding:0 10px;height:28px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:12px;line-height:28px;color:var(--color-muted)">已连接 1</span>
-          <span data-id="banner-listed__chip-auth" data-type="text" style="padding:0 10px;height:28px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:12px;line-height:28px;color:var(--color-muted)">需鉴权 0</span>
-          <span data-id="banner-listed__chip-off" data-type="text" style="padding:0 10px;height:28px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:12px;line-height:28px;color:var(--color-muted)">已禁用 1</span>
-        </div>
-        <div data-id="banner-listed__refresh-group" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:8px">
-          <span data-id="banner-listed__btn-refresh" data-type="text" style="padding:0 12px;height:32px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:32px;color:var(--color-ink)">刷新</span>
-          <span data-id="banner-listed__updated" data-type="text" style="font-size:11px;color:var(--color-muted);white-space:nowrap">更新于 10:24</span>
-        </div>
-      </div>
+      
     </div>
     <div data-id="banner-listed__unmanaged" data-type="frame" data-name="未纳管提示卡" style="display:flex;flex-direction:column;gap:10px;padding:14px;margin:12px 24px 0 24px;background-color:#f0a92e14;border:1px dashed #f0a92e80;border-radius:12px">
       <div data-id="banner-listed__un-head" data-type="frame" style="display:flex;flex-direction:row;align-items:flex-start;justify-content:space-between;gap:10px">
@@ -729,7 +678,26 @@ svg:not([data-fill]) > :not([fill]):not([stroke]){fill:none;stroke:currentColor;
     </div>
     <div data-id="banner-listed__split" data-type="frame" style="display:flex;flex-direction:row;min-height:0;flex:1 1 0%">
       <div data-id="banner-listed__master" data-type="frame" data-name="服务器列表" style="display:flex;flex-direction:column;gap:10px;padding:14px;width:400px;flex:0 0 auto;background-color:var(--color-layer2);border-width:0 1px 0 0;border-style:solid;border-color:var(--color-line);overflow:auto">
-        <div data-id="banner-listed__row-gh" data-type="frame" data-name="github 行" style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;background-color:var(--color-layer1);border:1px solid var(--color-brand);border-radius:12px;box-shadow:0 0 0 1px var(--color-brand)">
+        <div data-id="banner-listed__controls" data-type="frame" data-name="列表控件区" style="display:flex;flex-direction:column;gap:9px;padding:0 0 11px 0;border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
+  <div data-id="banner-listed__actions" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:7px">
+    <span data-id="banner-listed__btn-add" data-type="text" style="padding:0 11px;height:30px;background-color:var(--color-brand);border-radius:8px;font-size:12.5px;font-weight:600;line-height:30px;color:var(--color-base);white-space:nowrap">添加服务器</span>
+    <span data-id="banner-listed__btn-import" data-type="text" style="padding:0 10px;height:30px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:30px;color:var(--color-ink)">导入</span>
+    <span data-id="banner-listed__btn-export" data-type="text" style="padding:0 10px;height:30px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:30px;color:var(--color-ink)">导出</span>
+    <span data-id="banner-listed__updated" data-type="text" style="min-width:0;flex:1 1 auto;font-size:11px;color:var(--color-muted);text-align:right;white-space:nowrap">更新于 10:24</span>
+  </div>
+  <div data-id="banner-listed__searchrow" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:7px">
+    <div data-id="banner-listed__search" data-type="frame" style="display:flex;flex-direction:row;align-items:center;padding:0 11px;height:32px;min-width:0;flex:1 1 0%;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px">
+      <span data-id="banner-listed__search-text" data-type="text" style="font-size:12.5px;color:var(--color-muted)">搜索名称、命令或 URL</span>
+    </div>
+    <span data-id="banner-listed__btn-refresh" data-type="text" style="padding:0 10px;height:30px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:30px;color:var(--color-ink)">刷新</span>
+  </div>
+  <div data-id="banner-listed__chips" data-type="frame" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px">
+    <span data-id="banner-listed__chip-all" data-type="text" style="padding:0 9px;height:26px;background-color:#6e8ef72e;border-radius:999px;font-size:11.5px;font-weight:600;line-height:26px;color:#a9bdff">全部 2</span>
+    <span data-id="banner-listed__chip-online" data-type="text" style="padding:0 9px;height:26px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:11.5px;line-height:26px;color:var(--color-muted)">已连接 1</span>
+    <span data-id="banner-listed__chip-auth" data-type="text" style="padding:0 9px;height:26px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:11.5px;line-height:26px;color:var(--color-muted)">需鉴权 0</span>
+    <span data-id="banner-listed__chip-off" data-type="text" style="padding:0 9px;height:26px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:999px;font-size:11.5px;line-height:26px;color:var(--color-muted)">已禁用 1</span>
+  </div>
+</div><div data-id="banner-listed__row-gh" data-type="frame" data-name="github 行" style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;background-color:var(--color-layer1);border:1px solid var(--color-brand);border-radius:12px;box-shadow:0 0 0 1px var(--color-brand)">
           <div data-id="banner-listed__row-gh-top" data-type="frame" style="display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:10px">
             <div data-id="banner-listed__row-gh-id" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:8px;min-width:0">
               <div data-id="banner-listed__dot-gh" data-type="shape" data-kind="rect" style="width:8px;height:8px;flex:0 0 auto;background-color:var(--color-success);border-radius:999px"></div>
@@ -928,35 +896,35 @@ svg:not([data-fill]) > :not([fill]):not([stroke]){fill:none;stroke:currentColor;
       </div>
     </div>
   </div>
-</section><section data-id="detail-down" data-type="page" data-canvas="4320,1400" data-name="⑬ 详情 · 不可用（重连）" style="width:640px;height:600px;overflow:hidden;background-color:var(--color-layer1)">
-  <div data-id="detail-down__detail" data-type="frame" data-name="详情面板" style="display:flex;flex-direction:column;gap:14px;width:100%;height:100%;padding:20px 22px;font-family:var(--font-body);font-size:13px;color:var(--color-ink);background-color:var(--color-layer1);overflow:auto">
+</section><section data-id="detail-down" data-type="page" data-canvas="4320,1400" data-name="⑬ 详情 · 不可用（重连）" style="width:640px;height:600px;background-color:var(--color-layer1);overflow:hidden">
+  <div data-id="detail-down__detail" data-type="frame" data-name="详情面板" style="display:flex;flex-direction:column;gap:14px;padding:20px 22px;width:100%;height:100%;background-color:var(--color-layer1);overflow:auto;font-family:var(--font-body);font-size:13px;color:var(--color-ink)">
     <div data-id="detail-down__head" data-type="frame" style="display:flex;flex-direction:column;gap:10px">
-      <div data-id="detail-down__namerow" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:10px;flex-wrap:wrap">
-        <div data-id="detail-down__dot" data-type="shape" data-kind="rect" style="width:10px;height:10px;flex:0 0 auto;border-radius:999px;background-color:var(--color-error)"></div>
+      <div data-id="detail-down__namerow" data-type="frame" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px">
+        <div data-id="detail-down__dot" data-type="shape" data-kind="rect" style="width:10px;height:10px;flex:0 0 auto;background-color:var(--color-error);border-radius:999px"></div>
         <h2 data-id="detail-down__name" data-type="text" style="font-size:18px;font-weight:700">xterminal</h2>
-        <span data-id="detail-down__badge" data-type="text" style="flex:0 0 auto;padding:2px 8px;font-size:11px;font-weight:600;color:var(--color-http);background-color:#f0854c26;border-radius:999px">HTTP</span>
-        <span data-id="detail-down__pill" data-type="text" style="flex:0 0 auto;padding:3px 8px;font-size:12px;font-weight:600;color:var(--color-error);background-color:#f4717a26;border-radius:999px">不可用</span>
+        <span data-id="detail-down__badge" data-type="text" style="padding:2px 8px;flex:0 0 auto;background-color:#f0854c26;border-radius:999px;font-size:11px;font-weight:600;color:var(--color-http)">HTTP</span>
+        <span data-id="detail-down__pill" data-type="text" style="padding:3px 8px;flex:0 0 auto;background-color:#f4717a26;border-radius:999px;font-size:12px;font-weight:600;color:var(--color-error)">不可用</span>
       </div>
       <p data-id="detail-down__sub" data-type="text" style="font-size:12.5px;line-height:1.5;color:var(--color-muted)">mcp__xterminal__* · 配置 id：mcp-xterminal · 工具命名空间 xterminal</p>
-      <div data-id="detail-down__actions" data-type="frame" style="display:flex;flex-direction:row;align-items:center;gap:8px;flex-wrap:wrap">
-        <span data-id="detail-down__btn-reconnect" data-type="text" style="height:30px;line-height:30px;padding:0 12px;font-size:12.5px;font-weight:600;color:var(--color-base);background-color:var(--color-brand);border-radius:8px">重连</span>
-        <span data-id="detail-down__btn-edit" data-type="text" style="height:30px;line-height:30px;padding:0 12px;font-size:12.5px;color:var(--color-ink);background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px">编辑</span>
-        <span data-id="detail-down__btn-diagnose" data-type="text" style="height:30px;line-height:30px;padding:0 12px;font-size:12.5px;color:var(--color-ink);background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px">诊断</span>
-        <span data-id="detail-down__btn-delete" data-type="text" style="height:30px;line-height:30px;padding:0 12px;font-size:12.5px;color:var(--color-error);background-color:var(--color-layer1);border:1px solid #f4717a66;border-radius:8px">删除</span>
+      <div data-id="detail-down__actions" data-type="frame" style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px">
+        <span data-id="detail-down__btn-reconnect" data-type="text" style="padding:0 12px;height:30px;background-color:var(--color-brand);border-radius:8px;font-size:12.5px;font-weight:600;line-height:30px;color:var(--color-base)">重连</span>
+        <span data-id="detail-down__btn-edit" data-type="text" style="padding:0 12px;height:30px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:30px;color:var(--color-ink)">编辑</span>
+        <span data-id="detail-down__btn-diagnose" data-type="text" style="padding:0 12px;height:30px;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:8px;font-size:12.5px;line-height:30px;color:var(--color-ink)">诊断</span>
+        <span data-id="detail-down__btn-delete" data-type="text" style="padding:0 12px;height:30px;background-color:var(--color-layer1);border:1px solid #f4717a66;border-radius:8px;font-size:12.5px;line-height:30px;color:var(--color-error)">删除</span>
       </div>
     </div>
     <div data-id="detail-down__fields" data-type="frame" data-name="字段卡" style="display:flex;flex-direction:column;background-color:var(--color-layer1);border:1px solid var(--color-line);border-radius:12px;overflow:hidden">
       <div data-id="detail-down__field-1" data-type="frame" style="display:flex;flex-direction:row;align-items:flex-start;justify-content:space-between;gap:16px;padding:11px 14px;border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
         <span data-id="detail-down__field-1-label" data-type="text" style="flex:0 0 auto;font-size:12px;font-weight:600;color:var(--color-muted)">传输</span>
-        <span data-id="detail-down__field-1-value" data-type="text" style="text-align:right;font-family:var(--font-mono);font-size:12.5px">streamable-http</span>
+        <span data-id="detail-down__field-1-value" data-type="text" style="font-family:var(--font-mono);font-size:12.5px;text-align:right">streamable-http</span>
       </div>
-      <div data-id="detail-down__field-2" data-type="frame" style="display:flex;flex-direction:row;align-items:flex-start;justify-content:space-between;gap:16px;padding:11px 14px;border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line);background-color:var(--color-layer2)">
+      <div data-id="detail-down__field-2" data-type="frame" style="display:flex;flex-direction:row;align-items:flex-start;justify-content:space-between;gap:16px;padding:11px 14px;background-color:var(--color-layer2);border-width:0 0 1px 0;border-style:solid;border-color:var(--color-line)">
         <span data-id="detail-down__field-2-label" data-type="text" style="flex:0 0 auto;font-size:12px;font-weight:600;color:var(--color-muted)">URL</span>
-        <span data-id="detail-down__field-2-value" data-type="text" style="text-align:right;font-family:var(--font-mono);font-size:12.5px">http://127.0.0.1:12335/mcp</span>
+        <span data-id="detail-down__field-2-value" data-type="text" style="font-family:var(--font-mono);font-size:12.5px;text-align:right">http://127.0.0.1:12335/mcp</span>
       </div>
       <div data-id="detail-down__field-3" data-type="frame" style="display:flex;flex-direction:row;align-items:flex-start;justify-content:space-between;gap:16px;padding:11px 14px;background-color:var(--color-layer2)">
         <span data-id="detail-down__field-3-label" data-type="text" style="flex:0 0 auto;font-size:12px;font-weight:600;color:var(--color-muted)">Authorization</span>
-        <span data-id="detail-down__field-3-value" data-type="text" style="text-align:right;font-family:var(--font-mono);font-size:12.5px">••••••••</span>
+        <span data-id="detail-down__field-3-value" data-type="text" style="font-family:var(--font-mono);font-size:12.5px;text-align:right">••••••••</span>
       </div>
     </div>
     <div data-id="detail-down__tools" data-type="frame" data-name="工具区" style="display:flex;flex-direction:column;gap:8px">
