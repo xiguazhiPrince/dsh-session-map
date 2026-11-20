@@ -8,7 +8,7 @@
  */
 import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { zstdCompressSync } from 'node:zlib'
 import type { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -59,8 +59,8 @@ async function readReady(store: UsageStatsStore, refresh = false): Promise<Extra
 
 describe('resolveDshHome', () => {
   it('uses a non-blank DSH_HOME and falls back to <home>/.dsh', () => {
-    expect(resolveDshHome({ DSH_HOME: '/custom' }, '/home/u')).toBe('/custom')
-    expect(resolveDshHome({ DSH_HOME: ' ' }, '/home/u')).toBe('/home/u/.dsh')
+    expect(resolveDshHome({ DSH_HOME: '/custom' }, '/home/u')).toBe(resolve('/custom'))
+    expect(resolveDshHome({ DSH_HOME: ' ' }, '/home/u')).toBe(resolve(join('/home/u', '.dsh')))
   })
 })
 

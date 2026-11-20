@@ -21,10 +21,13 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { spawn } from 'node:child_process'
+import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
-import { parseDocument, stringify } from 'yaml'
+import { dirname, join, resolve, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { isMap, isSeq, parseDocument, stringify } from 'yaml'
+import type { Document, Node } from 'yaml'
 import { errorMessage } from '../git-workspace/git'
 import {
   isTrustedRequest,
@@ -40,6 +43,8 @@ import {
   MCP_CLIENT_PACKAGE,
   MCP_MANAGER_ROUTE,
   MCP_MAX_BODY_BYTES,
+  MCP_ROW_ID_PREFIX,
+  MCP_SERVER_NAME_RE,
   buildExportText,
   buildPatchRow,
   isObject,
@@ -50,11 +55,14 @@ import {
   sortServers,
   stringMap,
   viewFromPatchRow,
+  type McpAdoptResult,
+  type McpAdoptSkip,
   type McpFailureCode,
   type McpManagerState,
   type McpPatchRow,
   type McpServerView,
   type McpToolSummary,
+  type McpUnmanagedView,
 } from './model'
 import {
   authorizationHeader,
@@ -126,11 +134,19 @@ interface ToolsService {
   schemas?(scope?: undefined): readonly ToolDefinitionFace[]
 }
 
-/** yaml `!!js` tag: keep the expression as `{ __js }` so round-trips stay valid. */
+/**
+ * yaml `!!js` tag: parse the expression into `{ __js }` and stringify it back
+ * as `!!js …`, so a read-modify-write round-trip never corrupts the loader
+ * expressions dsh recommends for referenced credentials.
+ */
 const JS_EXPR_TAG = {
   tag: 'tag:yaml.org,2002:js',
   resolve: (value: string) => ({ __js: value }),
-  identify: () => false,
+  identify: (value: unknown): boolean =>
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+    && typeof (value as { __js?: unknown }).__js === 'string',
+  stringify: (item: { readonly value: unknown }): string =>
+    String((item.value as { __js: string }).__js),
 }
 
 /** Legacy markers from dsh-mcp-console — migrated into our markers on first load. */
@@ -154,6 +170,8 @@ const ENDPOINT_METHODS: Readonly<Record<string, string>> = {
   '/server': 'POST',
   '/toggle': 'POST',
   '/remove': 'POST',
+  '/adopt': 'POST',
+  '/reconnect': 'POST',
   '/import': 'POST',
   '/export': 'GET',
   '/diagnose': 'POST',
@@ -249,7 +267,13 @@ export function resolveDshHome(
 
 /**
  * Resolve the current profile directory.
- * Prefers `$DSH_PROFILE_DIR`, else `$DSH_HOME/profiles/$DSH_PROFILE`.
+ *
+ * `DSH_PROFILE_DIR` / `DSH_PROFILE` win when set, but the Host process does
+ * not always carry them: Desktop and the web runner inject `DSH_*` facts into
+ * tool shells, not into their own environment. Blindly defaulting to
+ * `desktop` then edits the wrong profile's patch file, so the bundle locates
+ * the profile that actually mounted it before falling back.
+ *
  * @param env - environment; defaults to `process.env`.
  * @param home - OS home; defaults to `os.homedir()`.
  */
@@ -259,8 +283,129 @@ export function resolveProfileDir(
 ): string {
   const configured = nonEmptyString(env.DSH_PROFILE_DIR)
   if (configured !== undefined) return resolve(configured)
-  const profile = nonEmptyString(env.DSH_PROFILE) ?? 'desktop'
-  return join(resolveDshHome(env, home), 'profiles', profile)
+  const named = nonEmptyString(env.DSH_PROFILE)
+  if (named !== undefined) {
+    return join(resolveDshHome(env, home), 'profiles', named)
+  }
+  const detected = detectProfileDir(env, home)
+  if (detected !== undefined) return detected
+  return join(resolveDshHome(env, home), 'profiles', 'desktop')
+}
+
+/**
+ * This package's directory with symlinks resolved: the nearest ancestor of
+ * this module that holds a `package.json`. Works for the built `lib/index.js`
+ * and for the TypeScript source a test imports.
+ */
+function ownPackageDir(): string | undefined {
+  let dir: string
+  try {
+    dir = realpathSync(dirname(fileURLToPath(import.meta.url)))
+  } catch {
+    return undefined
+  }
+  for (let depth = 0; depth < 8; depth += 1) {
+    try {
+      if (statSync(join(dir, 'package.json')).isFile()) return dir
+    } catch {
+      // keep walking up
+    }
+    const parent = dirname(dir)
+    if (parent === dir) return undefined
+    dir = parent
+  }
+  return undefined
+}
+
+/** Manifest names read so far, keyed by package directory. */
+const OWN_PACKAGE_NAMES = new Map<string, string | undefined>()
+
+/** This package's `name`, read from its own manifest once per directory. */
+function ownPackageName(dir: string): string | undefined {
+  if (OWN_PACKAGE_NAMES.has(dir)) return OWN_PACKAGE_NAMES.get(dir)
+  let name: string | undefined
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    name = isObject(parsed) ? nonEmptyString(parsed.name) : undefined
+  } catch {
+    name = undefined
+  }
+  OWN_PACKAGE_NAMES.set(dir, name)
+  return name
+}
+
+/**
+ * Profile directory implied by one resolved package path: a package living in
+ * `<dshHome>/profiles/<name>/node_modules/…` belongs to profile `<name>`.
+ * Pure, so the rule can be tested without filesystem fixtures.
+ * @param packageDir - resolved directory of this bundle.
+ */
+export function profileDirFromOwnPath(packageDir: string): string | undefined {
+  const marker = `${sep}profiles${sep}`
+  const at = packageDir.lastIndexOf(marker)
+  if (at < 0) return undefined
+  const name = packageDir.slice(at + marker.length).split(sep)[0]
+  if (name === undefined || name === '' || name.startsWith('.')) return undefined
+  return packageDir.slice(0, at + marker.length) + name
+}
+
+/**
+ * Locate the profile that mounted this bundle.
+ *
+ * An installed copy resolves inside its own profile, so the path answers
+ * directly. A `link:` copy (a development checkout) resolves outside every
+ * profile, so each profile's `node_modules` entry is compared with this
+ * package's real path; several matches resolve to the most recently touched
+ * `cordis.patch.yml`.
+ *
+ * @param env - environment for path resolution.
+ * @param home - OS home.
+ * @param own - this package's resolved directory; defaults to the real one.
+ * @param profilesRoot - profiles root; defaults to `<dshHome>/profiles`.
+ */
+export function detectProfileDir(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  home: string = homedir(),
+  own: string | undefined = ownPackageDir(),
+  profilesRoot: string = join(resolveDshHome(env, home), 'profiles'),
+): string | undefined {
+  if (own === undefined) return undefined
+  const fromPath = profileDirFromOwnPath(own)
+  if (fromPath !== undefined) return fromPath
+  const packageName = ownPackageName(own)
+  if (packageName === undefined) return undefined
+
+  let names: string[]
+  try {
+    names = readdirSync(profilesRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+  } catch {
+    return undefined
+  }
+
+  const matches: Array<{ readonly dir: string; readonly touched: number }> = []
+  for (const name of names) {
+    const entry = join(profilesRoot, name, 'node_modules', ...packageName.split('/'))
+    let resolved: string
+    try {
+      resolved = realpathSync(entry)
+    } catch {
+      continue
+    }
+    if (resolved !== own) continue
+    let touched = 0
+    try {
+      touched = statSync(join(profilesRoot, name, 'cordis.patch.yml')).mtimeMs
+    } catch {
+      // A profile without a patch has no recency signal; it still counts.
+    }
+    matches.push({ dir: join(profilesRoot, name), touched })
+  }
+  if (matches.length === 0) return undefined
+  if (matches.length === 1) return matches[0]!.dir
+  const [newest] = [...matches].sort((a, b) => b.touched - a.touched)
+  return newest?.dir
 }
 
 /** Absolute path of the profile's `cordis.patch.yml`. */
@@ -277,6 +422,23 @@ export function resolveOAuthFile(
   home: string = homedir(),
 ): string {
   return join(resolveDshHome(env, home), 'storages', 'session-map', 'mcp-oauth.json')
+}
+
+/**
+ * Read the raw patch text; a missing file reads as `[]\n`.
+ * @param env - environment for path resolution.
+ */
+async function readPatchText(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): Promise<string> {
+  const file = resolvePatchFile(env)
+  try {
+    return await readFile(file, 'utf8')
+  } catch (error: unknown) {
+    const code = isObject(error) ? error.code : undefined
+    if (code === 'ENOENT') return '[]\n'
+    throw new McpHostError('patch-error', `读取 profile patch 失败：${errorMessage(error)}`)
+  }
 }
 
 /** Parse the managed YAML block body into ours / foreign / inserted rows. */
@@ -349,7 +511,7 @@ function renderBlock(
   if (inserts.length > 0) {
     const body = inserts
       .map((row) =>
-        stringify([row], { lineWidth: 0 })
+        stringify([row], { lineWidth: 0, customTags: [JS_EXPR_TAG] })
           .replace(/\n+$/, '')
           .split('\n')
           .map((line) => `    ${line}`)
@@ -358,7 +520,9 @@ function renderBlock(
       .join('\n')
     parts.push(`- insert:\n${body}\n`)
   }
-  for (const row of foreign) parts.push(stringify([row], { lineWidth: 0 }))
+  for (const row of foreign) {
+    parts.push(stringify([row], { lineWidth: 0, customTags: [JS_EXPR_TAG] }))
+  }
   return `${MCP_BLOCK_BEGIN}\n${parts.join('')}${MCP_BLOCK_END}\n`
 }
 
@@ -414,28 +578,14 @@ async function writeAtomic(file: string, text: string): Promise<void> {
 }
 
 /**
- * Replace the managed block (or migrate a legacy one) with the given rows.
- * Preserves foreign / inserted rows that lived inside the previous block.
+ * Splice the managed block inside raw patch text so it holds exactly `rows`,
+ * migrating a legacy block when ours is absent and preserving foreign
+ * content. Pure — the filesystem write lives in {@link writePatchRows}.
+ * @param raw - current patch text.
  * @param rows - our `@deepseek-ai/dsh-mcp-client` rows.
- * @param env - environment for path resolution.
+ * @returns the next patch text, validated.
  */
-export async function writePatchRows(
-  rows: readonly McpPatchRow[],
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): Promise<void> {
-  const file = resolvePatchFile(env)
-  let raw: string
-  try {
-    raw = await readFile(file, 'utf8')
-  } catch (error: unknown) {
-    const code = isObject(error) ? error.code : undefined
-    if (code === 'ENOENT') {
-      raw = '[]\n'
-    } else {
-      throw new McpHostError('patch-error', `读取 profile patch 失败：${errorMessage(error)}`)
-    }
-  }
-
+export function splicePatchRows(raw: string, rows: readonly McpPatchRow[]): string {
   const current = findBlock(raw, MCP_BLOCK_BEGIN, MCP_BLOCK_END)
   const legacyConsole = findBlock(raw, LEGACY_CONSOLE_BEGIN, LEGACY_CONSOLE_END)
   const legacySkill = findBlock(raw, LEGACY_SKILL_BEGIN, LEGACY_SKILL_END)
@@ -464,9 +614,10 @@ export async function writePatchRows(
     const replaced = raw.slice(0, legacySkill.start) + block + raw.slice(legacySkill.end)
     next = emptyManaged && isEmptyMarkerOnly(replaced) ? '[]\n' : replaced
   } else {
-    // An empty / `[]` patch is a complete flow node; appending `- insert:` after
-    // it is invalid YAML. Replace the empty document with our block alone.
-    // Non-empty patches are a top-level sequence, so comments + more items append fine.
+    // An empty / `[]` patch is a complete flow node; appending `- insert:`
+    // after it is invalid YAML. Replace the empty document with our block
+    // alone. Non-empty patches are a top-level sequence, so comments + more
+    // items append fine.
     const trimmed = raw.trim()
     if (trimmed === '' || trimmed === '[]') {
       next = emptyManaged ? '[]\n' : block
@@ -475,6 +626,21 @@ export async function writePatchRows(
     }
   }
   validatePatch(next)
+  return next
+}
+
+/**
+ * Replace the managed block (or migrate a legacy one) with the given rows.
+ * Preserves foreign / inserted rows that lived inside the previous block.
+ * @param rows - our `@deepseek-ai/dsh-mcp-client` rows.
+ * @param env - environment for path resolution.
+ */
+export async function writePatchRows(
+  rows: readonly McpPatchRow[],
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): Promise<void> {
+  const file = resolvePatchFile(env)
+  const next = splicePatchRows(await readPatchText(env), rows)
   try {
     await writeAtomic(file, next)
   } catch (error: unknown) {
@@ -482,41 +648,280 @@ export async function writePatchRows(
   }
 }
 
+/** Managed rows from patch text, without the legacy migration write. */
+function rowsFromText(raw: string): McpPatchRow[] {
+  const ours = findBlock(raw, MCP_BLOCK_BEGIN, MCP_BLOCK_END)
+  if (ours !== null) return parseBlock(ours.body).ours
+
+  const legacyConsole = findBlock(raw, LEGACY_CONSOLE_BEGIN, LEGACY_CONSOLE_END)
+  if (legacyConsole !== null) return parseBlock(legacyConsole.body).ours
+
+  const legacySkill = findBlock(raw, LEGACY_SKILL_BEGIN, LEGACY_SKILL_END)
+  if (legacySkill !== null) return parseBlock(legacySkill.body).ours
+
+  return []
+}
+
 /**
- * Load our managed rows from the profile patch, migrating legacy markers.
+ * Load our managed rows from the profile patch, migrating legacy markers
+ * into ours on first load.
  * @param env - environment for path resolution.
  */
 export async function loadPatchRows(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): Promise<McpPatchRow[]> {
-  const file = resolvePatchFile(env)
-  let raw: string
+  const raw = await readPatchText(env)
+  const rows = rowsFromText(raw)
+  if (
+    findBlock(raw, MCP_BLOCK_BEGIN, MCP_BLOCK_END) === null
+    && (findBlock(raw, LEGACY_CONSOLE_BEGIN, LEGACY_CONSOLE_END) !== null
+      || findBlock(raw, LEGACY_SKILL_BEGIN, LEGACY_SKILL_END) !== null)
+  ) {
+    await writePatchRows(rows, env)
+  }
+  return rows
+}
+
+/** One `@deepseek-ai/dsh-mcp-client` row scanned outside the marker blocks. */
+export interface UnmanagedCandidate {
+  /** Parsed row; null when the shape is not adoptable. */
+  readonly row: McpPatchRow | null
+  /** serverName when readable, else the row id. */
+  readonly name: string
+  /** Row id as written, when readable. */
+  readonly id: string
+  /** Why the row cannot be adopted, when it cannot. */
+  readonly blocked?: string
+  /** Cut span: start of the row's first source line. */
+  readonly start: number
+  /** Cut span: end of the row's last source line (past the newline). */
+  readonly end: number
+  /**
+   * Cut span widened to the whole `- insert:` item when this row is that
+   * item's only member, so adopting it never leaves an empty `insert:` key.
+   */
+  readonly cutStart: number
+  /** End of the widened cut span. */
+  readonly cutEnd: number
+}
+
+/** One read of a YAML node as a managed-row candidate. */
+interface RowRead {
+  /** Parsed row; null when the shape is not adoptable. */
+  readonly row: McpPatchRow | null
+  /** serverName when readable, else the row id. */
+  readonly name: string
+  /** Row id as written, when readable. */
+  readonly id: string
+  /** Why the row cannot be adopted, when it cannot. */
+  readonly blocked?: string
+}
+
+/**
+ * Read one YAML node as a dsh-mcp-client row candidate.
+ * @param node - parsed map node.
+ * @param doc - owning document, for JS-value conversion.
+ * @returns the candidate read, or null when the node is not such a row.
+ */
+function rowFromNode(node: unknown, doc: Document): RowRead | null {
+  if (!isMap(node)) return null
+  const value = node.toJS(doc) as unknown
+  if (!isObject(value) || value.name !== MCP_CLIENT_PACKAGE) return null
+  const config = isObject(value.config) ? value.config : undefined
+  const name = nonEmptyString(config?.serverName)
+  const id = nonEmptyString(value.id) ?? ''
+  if (config === undefined || name === undefined) {
+    return { row: null, name: id === '' ? '(未命名)' : id, id, blocked: '行缺少 config.serverName，无法收编' }
+  }
+  if (!MCP_SERVER_NAME_RE.test(name)) {
+    return { row: null, name, id, blocked: `serverName「${name}」不合法` }
+  }
+  const row: McpPatchRow = {
+    id: id === '' ? `${MCP_ROW_ID_PREFIX}${name}` : id,
+    name: MCP_CLIENT_PACKAGE,
+    ...(value.disabled === true ? { disabled: true } : {}),
+    config: config as unknown as McpPatchRow['config'],
+  }
+  return { row, name, id }
+}
+
+/**
+ * Scan patch text for `@deepseek-ai/dsh-mcp-client` rows outside the managed
+ * (and legacy) marker blocks, keeping the source spans an adopt must cut.
+ * An unparseable document scans as empty: a broken patch elsewhere must not
+ * take the whole tab down.
+ * @param raw - patch text.
+ */
+export function scanUnmanagedRows(raw: string): readonly UnmanagedCandidate[] {
+  let doc: Document
   try {
-    raw = await readFile(file, 'utf8')
-  } catch (error: unknown) {
-    const code = isObject(error) ? error.code : undefined
-    if (code === 'ENOENT') return []
-    throw new McpHostError('patch-error', `读取 profile patch 失败：${errorMessage(error)}`)
+    doc = parseDocument(raw, { logLevel: 'silent', customTags: [JS_EXPR_TAG] })
+  } catch {
+    return []
+  }
+  const root = doc.contents
+  if (doc.errors.length > 0 || !isSeq(root)) return []
+
+  const spans: Array<{ readonly start: number; readonly end: number }> = []
+  for (const [begin, end] of [
+    [MCP_BLOCK_BEGIN, MCP_BLOCK_END],
+    [LEGACY_CONSOLE_BEGIN, LEGACY_CONSOLE_END],
+    [LEGACY_SKILL_BEGIN, LEGACY_SKILL_END],
+  ] as const) {
+    const block = findBlock(raw, begin, end)
+    if (block !== null) spans.push({ start: block.start, end: block.end })
+  }
+  const inBlocks = (at: number): boolean =>
+    spans.some((span) => at >= span.start && at < span.end)
+
+  const out: UnmanagedCandidate[] = []
+  for (const item of root.items as unknown as readonly Node[]) {
+    if (item.range == null) continue
+    const itemStart = lineStart(raw, item.range[0])
+    if (inBlocks(itemStart)) continue
+    const insertNode = isMap(item) ? item.get('insert', true) : undefined
+    if (isSeq(insertNode)) {
+      const members = insertNode.items as unknown as readonly Node[]
+      for (const member of members) {
+        if (member.range == null) continue
+        const read = rowFromNode(member, doc)
+        if (read === null) continue
+        const start = lineStart(raw, member.range[0])
+        if (inBlocks(start)) continue
+        const end = lineEnd(raw, member.range[1])
+        const sole = members.length === 1
+        out.push({
+          row: read.row,
+          name: read.name,
+          id: read.id,
+          ...(read.blocked !== undefined ? { blocked: read.blocked } : {}),
+          start,
+          end,
+          cutStart: sole ? itemStart : start,
+          cutEnd: sole ? lineEnd(raw, item.range[1]) : end,
+        })
+      }
+      continue
+    }
+    const read = rowFromNode(item, doc)
+    if (read === null) continue
+    const end = lineEnd(raw, item.range[1])
+    out.push({
+      row: read.row,
+      name: read.name,
+      id: read.id,
+      ...(read.blocked !== undefined ? { blocked: read.blocked } : {}),
+      start: itemStart,
+      end,
+      cutStart: itemStart,
+      cutEnd: end,
+    })
+  }
+  return out
+}
+
+/**
+ * Map scan candidates to unmanaged views, in scan order, marking conflicts
+ * against the managed rows and each other. The first same-name row wins.
+ * @param candidates - scan output.
+ * @param managed - rows already inside the managed block.
+ */
+export function classifyUnmanaged(
+  candidates: readonly UnmanagedCandidate[],
+  managed: readonly McpPatchRow[],
+): McpUnmanagedView[] {
+  const names = new Set(managed.map((row) => String(row.config.serverName)))
+  const ids = new Set(managed.map((row) => row.id))
+  const seen = new Set<string>()
+  const out: McpUnmanagedView[] = []
+  for (const candidate of candidates) {
+    const row = candidate.row
+    const config = row?.config
+    let conflict = candidate.blocked
+    if (row !== null && conflict === undefined) {
+      const name = String(config?.serverName ?? '')
+      if (names.has(name)) conflict = `与已纳管服务器「${name}」同名`
+      else if (ids.has(row.id)) conflict = `行 id「${row.id}」已被已纳管行使用`
+      else if (seen.has(name)) conflict = `与另一台未纳管服务器「${name}」同名`
+      seen.add(name)
+    }
+    const http = config?.transport === 'streamable-http'
+    out.push({
+      id: candidate.id,
+      name: candidate.name,
+      transport: http ? 'http' : 'stdio',
+      enabled: row !== null && row.disabled !== true,
+      endpoint: http ? String(config?.url ?? '') : String(config?.command ?? ''),
+      ...(conflict !== undefined ? { conflict } : {}),
+    })
+  }
+  return out
+}
+
+/**
+ * Adopt out-of-block `@deepseek-ai/dsh-mcp-client` rows into the managed
+ * block: cut their source lines from `cordis.patch.yml`, then splice them
+ * into the block in one atomic write. Config round-trips through the yaml
+ * tree (including `!!js` expressions), row ids stay as written, and the
+ * loader entries keep their live connections — nothing reconnects.
+ * Conflicting rows stay untouched and come back with reasons.
+ * @param ctx - plugin context (optional loader for hot-apply parity).
+ * @param names - serverName filter; omit to adopt every non-conflicting row.
+ * @param env - environment for path resolution.
+ * @returns adopted serverNames and skipped rows with reasons.
+ */
+export async function adoptUnmanaged(
+  ctx: Context,
+  names?: readonly string[],
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): Promise<McpAdoptResult> {
+  const raw = await readPatchText(env)
+  const managed = rowsFromText(raw)
+  const candidates = scanUnmanagedRows(raw)
+  const views = classifyUnmanaged(candidates, managed)
+  const wanted = names === undefined ? undefined : new Set(names)
+
+  const adoptedRows: McpPatchRow[] = []
+  const adopted: string[] = []
+  const skipped: McpAdoptSkip[] = []
+  const cuts: Array<{ readonly start: number; readonly end: number }> = []
+  for (let index = 0; index < candidates.length; index += 1) {
+    const candidate = candidates[index]!
+    const view = views[index]!
+    if (wanted !== undefined && !wanted.has(candidate.name)) continue
+    if (view.conflict !== undefined) {
+      skipped.push({ name: view.name, id: view.id, reason: view.conflict })
+      continue
+    }
+    if (candidate.row === null) continue
+    adoptedRows.push(candidate.row)
+    adopted.push(candidate.name)
+    cuts.push({ start: candidate.cutStart, end: candidate.cutEnd })
+  }
+  if (wanted !== undefined) {
+    for (const name of wanted) {
+      if (adopted.includes(name) || skipped.some((item) => item.name === name)) continue
+      skipped.push({ name, id: '', reason: '管理块之外没有这台服务器' })
+    }
   }
 
-  const ours = findBlock(raw, MCP_BLOCK_BEGIN, MCP_BLOCK_END)
-  if (ours !== null) return parseBlock(ours.body).ours
-
-  const legacyConsole = findBlock(raw, LEGACY_CONSOLE_BEGIN, LEGACY_CONSOLE_END)
-  if (legacyConsole !== null) {
-    const rows = parseBlock(legacyConsole.body).ours
-    await writePatchRows(rows, env)
-    return rows
+  if (adoptedRows.length > 0) {
+    // Cut from the end so spans computed on the original text stay valid.
+    let cut = raw
+    for (const span of [...cuts].sort((a, b) => b.start - a.start)) {
+      cut = cut.slice(0, span.start) + cut.slice(span.end)
+    }
+    const next = splicePatchRows(cut, [...managed, ...adoptedRows])
+    try {
+      await writeAtomic(resolvePatchFile(env), next)
+    } catch (error: unknown) {
+      throw new McpHostError('patch-error', `写入 profile patch 失败：${errorMessage(error)}`)
+    }
+    // The adopted entries were already live under these ids; the update is a
+    // parity call, not a restart.
+    for (const row of adoptedRows) await applyRow(ctx, row, 'save')
   }
-
-  const legacySkill = findBlock(raw, LEGACY_SKILL_BEGIN, LEGACY_SKILL_END)
-  if (legacySkill !== null) {
-    const rows = parseBlock(legacySkill.body).ours
-    await writePatchRows(rows, env)
-    return rows
-  }
-
-  return []
+  return { adopted, skipped }
 }
 
 /** List every loader entry, swallowing loader faults. */
@@ -662,11 +1067,11 @@ function openExternal(url: string): void {
 }
 
 /** Probe one HTTP MCP endpoint with a tiny initialize call. */
-async function probeHttp(server: McpServerView): Promise<ProbeResult> {
+async function probeHttp(server: McpServerView, fresh = false): Promise<ProbeResult> {
   const key = `${server.name}|${server.url}`
   const now = Date.now()
   const cached = PROBES.get(key)
-  if (cached !== undefined && now - cached.at < PROBE_TTL_MS) return cached.result
+  if (!fresh && cached !== undefined && now - cached.at < PROBE_TTL_MS) return cached.result
 
   let result: ProbeResult
   const controller = new AbortController()
@@ -724,12 +1129,15 @@ function maskView(view: McpServerView): McpServerView {
  * Assemble the list payload the tab renders.
  * @param ctx - plugin context (optional loader / tools).
  * @param env - environment for path resolution.
+ * @param options - `fresh` bypasses the HTTP probe cache for a manual retry.
  */
 export async function buildManagerState(
   ctx: Context,
   env: Readonly<Record<string, string | undefined>> = process.env,
+  options: { readonly fresh?: boolean } = {},
 ): Promise<McpManagerState> {
   const rows = await loadPatchRows(env)
+  const unmanaged = classifyUnmanaged(scanUnmanagedRows(await readPatchText(env)), rows)
   const loader = lookup<LoaderService>(ctx, 'loader')
   const tools = lookup<ToolsService>(ctx, 'tools')
   const servers: McpServerView[] = []
@@ -749,7 +1157,7 @@ export async function buildManagerState(
     } else if (toolCount > 0) {
       state = 'online'
     } else if (base.transport === 'http') {
-      const probe = await probeHttp(base)
+      const probe = await probeHttp(base, options.fresh === true)
       message = probe.message
       state = probe.state === 'auth' ? 'auth' : probe.state === 'reachable' ? 'idle' : 'down'
       oauth = probe.state === 'auth'
@@ -775,6 +1183,7 @@ export async function buildManagerState(
     profileDir: resolveProfileDir(env),
     updatedAt: new Date().toISOString(),
     servers: sortServers(servers),
+    unmanaged: [...unmanaged].sort((a, b) => a.name.localeCompare(b.name, 'en')),
   }
 }
 
@@ -1091,8 +1500,38 @@ function rebuildRow(previous: McpPatchRow, enabled: boolean): McpPatchRow {
   return row
 }
 
-async function handleState(ctx: Context, response: RouteResponse): Promise<void> {
-  sendJson(response, 200, { ok: true, state: await buildManagerState(ctx) })
+async function handleState(
+  ctx: Context,
+  url: URL,
+  response: RouteResponse,
+): Promise<void> {
+  const fresh = url.searchParams.get('fresh') === '1'
+  sendJson(response, 200, { ok: true, state: await buildManagerState(ctx, process.env, { fresh }) })
+}
+
+/**
+ * Retry one server: drop its cached probe and, for a stdio row, re-apply the
+ * loader entry so a dead child process is respawned. Answers with a fresh
+ * state so the caller does not need a second round trip.
+ */
+async function handleReconnect(
+  ctx: Context,
+  request: RouteRequest,
+  response: RouteResponse,
+): Promise<void> {
+  const body = await readBodyRecord(request)
+  const name = requiredField(body, 'name')
+  const rows = await loadPatchRows()
+  const row = rows.find((item) => item.config.serverName === name)
+  if (row === undefined) throw new McpHostError('not-found', `服务器 "${name}" 不存在`)
+  PROBES.delete(`${name}|${String(row.config.url ?? '')}`)
+  let warning: { readonly code: McpFailureCode; readonly message: string } | undefined
+  if (row.config.transport !== 'streamable-http') {
+    const applied = await applyRow(ctx, row, 'save')
+    if (!applied.ok) warning = { code: 'loader-error', message: applied.error }
+  }
+  const state = await buildManagerState(ctx, process.env, { fresh: true })
+  sendJson(response, 200, { ok: true, state, ...(warning !== undefined ? { warning } : {}) })
 }
 
 async function handleServer(
@@ -1178,6 +1617,27 @@ async function handleRemove(
     PROBES.delete(`${name}|${String(row.config.url ?? '')}`)
   }
   sendJson(response, 200, { ok: true, state: await buildManagerState(ctx) })
+}
+
+async function handleAdopt(
+  ctx: Context,
+  request: RouteRequest,
+  response: RouteResponse,
+): Promise<void> {
+  // Tolerate an empty or unreadable body: adopt-everything is the default
+  // operation and revalidates every candidate anyway.
+  const body = await readBodyRecord(request).catch(
+    () => ({}) as Record<string, unknown>,
+  )
+  const names = Array.isArray(body.names)
+    ? body.names.filter((item): item is string => typeof item === 'string' && item !== '')
+    : undefined
+  const result = await adoptUnmanaged(ctx, names)
+  sendJson(response, 200, {
+    ok: true,
+    result,
+    state: await buildManagerState(ctx),
+  })
 }
 
 async function handleImport(
@@ -1466,7 +1926,7 @@ async function dispatch(
 
   switch (subpath) {
     case '/state':
-      await handleState(ctx, response)
+      await handleState(ctx, url, response)
       return
     case '/server':
       await handleServer(ctx, request, response)
@@ -1476,6 +1936,12 @@ async function dispatch(
       return
     case '/remove':
       await handleRemove(ctx, request, response)
+      return
+    case '/adopt':
+      await handleAdopt(ctx, request, response)
+      return
+    case '/reconnect':
+      await handleReconnect(ctx, request, response)
       return
     case '/import':
       await handleImport(ctx, request, response)

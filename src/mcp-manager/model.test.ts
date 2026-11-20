@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  adoptFromEnvelope,
   buildExportText,
   buildPatchRow,
   formatParameterSummary,
@@ -14,6 +15,7 @@ import {
   sortServers,
   summariseParameters,
   viewFromPatchRow,
+  type McpAdoptEnvelope,
   type McpServerView,
 } from './model'
 
@@ -134,6 +136,23 @@ describe('maskSecretMap / sortServers', () => {
       { name: 'github' } as McpServerView,
     ])
     expect(sorted.map((item) => item.name)).toEqual(['github', 'web'])
+  })
+})
+
+describe('adoptFromEnvelope', () => {
+  it('unwraps the adopt result', () => {
+    const body = {
+      ok: true,
+      result: { adopted: ['xterminal', 'yunxiao'], skipped: [] },
+    } as McpAdoptEnvelope
+    expect(adoptFromEnvelope(body).adopted).toEqual(['xterminal', 'yunxiao'])
+  })
+
+  it('throws the host message on failure', () => {
+    expect(() => adoptFromEnvelope({
+      ok: false,
+      error: { code: 'patch-error', message: '写入 profile patch 失败：disk' },
+    })).toThrow('写入 profile patch 失败：disk')
   })
 })
 

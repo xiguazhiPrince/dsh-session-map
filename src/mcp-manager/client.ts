@@ -18,6 +18,7 @@ import {
   MCP_MANAGER_ROUTE,
   MCP_ROW_ID_PREFIX,
   MCP_SERVER_NAME_RE,
+  adoptFromEnvelope,
   checkOkEnvelope,
   diagnoseFromEnvelope,
   exportFromEnvelope,
@@ -26,6 +27,8 @@ import {
   oauthPollFromEnvelope,
   oauthStartFromEnvelope,
   stateFromEnvelope,
+  type McpAdoptEnvelope,
+  type McpAdoptResult,
   type McpDiagnoseEnvelope,
   type McpDiagnoseResult,
   type McpExportEnvelope,
@@ -42,6 +45,7 @@ import {
   type McpStateEnvelope,
   type McpToolSummary,
   type McpTransport,
+  type McpUnmanagedView,
 } from './model'
 
 /** Fixed UI copy; Chinese-first like the other Conversation seats. */
@@ -70,6 +74,8 @@ const COPY = {
   edit: '编辑',
   diagnose: '诊断',
   delete: '删除',
+  reconnect: '重连',
+  reconnecting: '连接中…',
   login: '登录',
   loggingIn: '登录中…',
   authTitle: '需要登录',
@@ -79,6 +85,7 @@ const COPY = {
   toolsHintSuffix: '__*',
   toolsUnavailableTitle: '工具列表不可用',
   toolsUnavailableBody: '完成登录并刷新后，这里会列出工具。',
+  toolsDownBody: '服务暂时连不上。点「重连」再试一次，或打开「诊断」看完整日志。',
   toolsCountOnlyTitlePrefix: '已注册 ',
   toolsCountOnlyTitleSuffix: ' 个工具',
   toolsCountOnlyBody: '名称与描述还没加载到详情。请完全重启 DeepSeek Harness（不只是刷新网页）后再点「刷新」。',
@@ -158,6 +165,23 @@ const COPY = {
   noSelection: '点击左侧服务器查看详情。',
   noMatch: '没有匹配的服务器。',
   unauthorizedHint: '未设置 · 登录后写入 Bearer Token',
+  unmanagedTitlePrefix: '检测到 ',
+  unmanagedTitleSuffix: ' 台未纳管的服务器',
+  unmanagedBody: '它们是 cordis.patch.yml 里管理块之外的手写行，本页看不到、也管不了。',
+  adoptRun: '收编',
+  adopting: '收编中…',
+  adoptConfirmCrumb: '收编未纳管服务器',
+  adoptConfirmTitlePrefix: '把 ',
+  adoptConfirmTitleSuffix: ' 台服务器移入管理',
+  adoptBody: '手写的行会从 cordis.patch.yml 的原位置删除，原文移入 dsh-session-map 管理块：配置一字不动（含 Authorization），行 ID 保持不变，loader 加载的还是同一批条目，服务不会断线。',
+  adoptWriteLabel: '写入',
+  adoptGo: '确认收编',
+  adoptDonePrefix: '已收编 ',
+  adoptDoneNamesMid: ' 台：',
+  adoptDoneSuffix: ' 现在由本页管理',
+  adoptSkippedMid: '；',
+  adoptSkippedSuffix: '，已跳过',
+  adoptNoneFound: '没有发现可收编的服务器',
 } as const
 
 /** List filter chips. */
@@ -173,14 +197,21 @@ type ViewMode =
 
 /** Everything the tab needs from its Host. */
 export interface McpManagerRuntime {
-  /** Read the assembled MCP manager state. */
-  loadState(signal: AbortSignal): Promise<McpManagerState>
+  /** Read the assembled MCP manager state; `fresh` bypasses the probe cache. */
+  loadState(signal: AbortSignal, fresh?: boolean): Promise<McpManagerState>
   /** Create or update one server. */
   saveServer(input: McpServerInput, signal: AbortSignal): Promise<void>
   /** Enable or disable one server by name. */
   toggleServer(name: string, enabled: boolean, signal: AbortSignal): Promise<void>
+  /** Retry one server: re-probe and re-apply its loader entry. */
+  reconnect(name: string, signal: AbortSignal): Promise<McpManagerState>
   /** Remove one server by name. */
   removeServer(name: string, signal: AbortSignal): Promise<void>
+  /** Adopt out-of-block rows into the managed block. */
+  adoptUnmanaged(
+    names: readonly string[] | undefined,
+    signal: AbortSignal,
+  ): Promise<McpAdoptResult>
   /** Import Claude/Codex-style JSON text. */
   importText(text: string, signal: AbortSignal): Promise<void>
   /** Export current servers as mcpServers JSON. */
@@ -254,8 +285,9 @@ async function requestHost(path: string, request: HostRequest, signal: AbortSign
  */
 export function createMcpManagerRuntime(_ctx: Context): McpManagerRuntime {
   return {
-    async loadState(signal) {
-      const body = await requestHost(`${MCP_MANAGER_ROUTE}/state`, { method: 'GET' }, signal)
+    async loadState(signal, fresh) {
+      const query = fresh === true ? '?fresh=1' : ''
+      const body = await requestHost(`${MCP_MANAGER_ROUTE}/state${query}`, { method: 'GET' }, signal)
       return stateFromEnvelope(envelopeOf<McpStateEnvelope>(body))
     },
     async saveServer(input, signal) {
@@ -274,6 +306,14 @@ export function createMcpManagerRuntime(_ctx: Context): McpManagerRuntime {
       )
       checkOkEnvelope(envelopeOf<McpOkEnvelope>(body))
     },
+    async reconnect(name, signal) {
+      const body = await requestHost(
+        `${MCP_MANAGER_ROUTE}/reconnect`,
+        { method: 'POST', body: { name } },
+        signal,
+      )
+      return stateFromEnvelope(envelopeOf<McpStateEnvelope>(body))
+    },
     async removeServer(name, signal) {
       const body = await requestHost(
         `${MCP_MANAGER_ROUTE}/remove`,
@@ -281,6 +321,14 @@ export function createMcpManagerRuntime(_ctx: Context): McpManagerRuntime {
         signal,
       )
       checkOkEnvelope(envelopeOf<McpOkEnvelope>(body))
+    },
+    async adoptUnmanaged(names, signal) {
+      const body = await requestHost(
+        `${MCP_MANAGER_ROUTE}/adopt`,
+        { method: 'POST', body: names === undefined ? {} : { names } },
+        signal,
+      )
+      return adoptFromEnvelope(envelopeOf<McpAdoptEnvelope>(body))
     },
     async importText(text, signal) {
       const body = await requestHost(
@@ -613,8 +661,9 @@ function ServerDetail(props: {
   readonly onDiagnose: () => void
   readonly onDelete: () => void
   readonly onLogin: () => void
+  readonly onReconnect: () => void
 }): React.ReactElement {
-  const { server, oauthBusy, actionBusy, onEdit, onDiagnose, onDelete, onLogin } = props
+  const { server, oauthBusy, actionBusy, onEdit, onDiagnose, onDelete, onLogin, onReconnect } = props
   const [toolQuery, setToolQuery] = React.useState('')
   const [expandedTools, setExpandedTools] = React.useState<ReadonlySet<string>>(() => new Set())
 
@@ -744,6 +793,18 @@ function ServerDetail(props: {
       React.createElement(
         'div',
         { className: 'mcp-detailActions' },
+        server.enabled && (server.state === 'down' || server.state === 'idle')
+          ? React.createElement(
+            'button',
+            {
+              type: 'button',
+              className: 'mcp-btn mcp-btn--primary',
+              disabled: actionBusy,
+              onClick: onReconnect,
+            },
+            COPY.reconnect,
+          )
+          : null,
         React.createElement(
           'button',
           { type: 'button', className: 'mcp-btn', disabled: actionBusy, onClick: onEdit },
@@ -799,7 +860,9 @@ function ServerDetail(props: {
               ? `完成登录并刷新后，这里会列出 mcp__${server.name}__* 工具`
               : toolsKnownButUnlisted
                 ? `${COPY.toolsCountOnlyBody}（mcp__${server.name}__*）`
-                : COPY.toolsUnavailableBody,
+                : server.state === 'down'
+                  ? COPY.toolsDownBody
+                  : COPY.toolsUnavailableBody,
           ),
         )
         : React.createElement(
@@ -1402,6 +1465,132 @@ function EmptyState(props: {
   )
 }
 
+/**
+ * Unmanaged-rows banner: the dashed discovery card, and the solid confirm
+ * card that replaces it in place after「收编 N 台」.
+ */
+function UnmanagedBanner(props: {
+  readonly unmanaged: readonly McpUnmanagedView[]
+  readonly busy: boolean
+  readonly patchFile: string
+  readonly onAdopt: () => void
+}): React.ReactElement {
+  const { unmanaged, busy, patchFile, onAdopt } = props
+  const [confirming, setConfirming] = React.useState(false)
+  const adoptable = unmanaged.filter((row) => row.conflict === undefined)
+
+  if (confirming && adoptable.length > 0) {
+    return React.createElement(
+      'div',
+      { className: 'mcp-adpt' },
+      React.createElement('div', { className: 'mcp-adptCrumb' }, COPY.adoptConfirmCrumb),
+      React.createElement(
+        'div',
+        { className: 'mcp-adptTitle' },
+        `${COPY.adoptConfirmTitlePrefix}${adoptable.length}${COPY.adoptConfirmTitleSuffix}`,
+      ),
+      React.createElement('div', { className: 'mcp-adptBody' }, COPY.adoptBody),
+      ...adoptable.map((row) => React.createElement(
+        'div',
+        { key: `${row.id}|${row.name}`, className: 'mcp-adptEntry' },
+        React.createElement(
+          'div',
+          { className: 'mcp-adptEntryTop' },
+          React.createElement('span', { className: 'mcp-adptEntryName' }, row.name),
+          React.createElement(TransportBadge, { transport: row.transport }),
+          React.createElement('span', { className: 'mcp-adptEntryId', title: row.id }, row.id),
+        ),
+        React.createElement(
+          'div',
+          { className: 'mcp-adptEndpoint' },
+          row.endpoint === '' ? '(未配置地址)' : row.endpoint,
+        ),
+      )),
+      React.createElement(
+        'div',
+        { className: 'mcp-adptPath' },
+        React.createElement('span', null, COPY.adoptWriteLabel),
+        React.createElement('span', { className: 'mcp-adptPathFile' }, patchFile),
+      ),
+      React.createElement(
+        'div',
+        { className: 'mcp-adptActions' },
+        React.createElement(
+          'button',
+          {
+            type: 'button',
+            className: 'mcp-btn',
+            disabled: busy,
+            onClick: () => { setConfirming(false) },
+          },
+          COPY.cancel,
+        ),
+        React.createElement(
+          'button',
+          {
+            type: 'button',
+            className: 'mcp-btn mcp-btn--primary',
+            disabled: busy,
+            onClick: onAdopt,
+          },
+          busy ? COPY.adopting : COPY.adoptGo,
+        ),
+      ),
+    )
+  }
+
+  return React.createElement(
+    'div',
+    { className: 'mcp-unmanaged' },
+    React.createElement(
+      'div',
+      { className: 'mcp-unHead' },
+      React.createElement(
+        'div',
+        { className: 'mcp-unHeadText' },
+        React.createElement(
+          'div',
+          { className: 'mcp-unTitle' },
+          `${COPY.unmanagedTitlePrefix}${unmanaged.length}${COPY.unmanagedTitleSuffix}`,
+        ),
+        React.createElement('div', { className: 'mcp-unBody' }, COPY.unmanagedBody),
+      ),
+      React.createElement('span', { className: 'mcp-unCount' }, String(unmanaged.length)),
+    ),
+    ...unmanaged.map((row) => React.createElement(
+      'div',
+      { key: `${row.id}|${row.name}`, className: 'mcp-unRow' },
+      React.createElement(
+        'div',
+        { className: 'mcp-unRowTop' },
+        React.createElement('span', { className: 'mcp-dot', 'aria-hidden': true }),
+        React.createElement('span', { className: 'mcp-unName' }, row.name),
+        React.createElement(TransportBadge, { transport: row.transport }),
+        React.createElement('span', { className: 'mcp-unId', title: row.id }, row.id),
+      ),
+      row.conflict === undefined
+        ? null
+        : React.createElement('div', { className: 'mcp-unConflict' }, row.conflict),
+    )),
+    adoptable.length === 0
+      ? null
+      : React.createElement(
+        'div',
+        { className: 'mcp-unActions' },
+        React.createElement(
+          'button',
+          {
+            type: 'button',
+            className: 'mcp-btn mcp-btn--primary',
+            disabled: busy,
+            onClick: () => { setConfirming(true) },
+          },
+          `${COPY.adoptRun} ${adoptable.length} 台`,
+        ),
+      ),
+  )
+}
+
 /** Master-detail list page. */
 function ListPage(props: {
   readonly state: McpManagerState
@@ -1414,11 +1603,13 @@ function ListPage(props: {
   readonly actionFailure: string | null
   readonly actionBusy: boolean
   readonly oauthBusy: boolean
+  readonly adoptNotice: string | null
   readonly onSearch: (value: string) => void
   readonly onFilter: (filter: FilterKind) => void
   readonly onRefresh: () => void
   readonly onSelect: (name: string) => void
   readonly onToggle: (server: McpServerView, enabled: boolean) => void
+  readonly onAdopt: () => void
   readonly onAdd: () => void
   readonly onImport: () => void
   readonly onExport: () => void
@@ -1426,6 +1617,7 @@ function ListPage(props: {
   readonly onDiagnose: () => void
   readonly onDelete: () => void
   readonly onLogin: () => void
+  readonly onReconnect: (server: McpServerView) => void
 }): React.ReactElement {
   const {
     state,
@@ -1438,11 +1630,13 @@ function ListPage(props: {
     actionFailure,
     actionBusy,
     oauthBusy,
+    adoptNotice,
     onSearch,
     onFilter,
     onRefresh,
     onSelect,
     onToggle,
+    onAdopt,
     onAdd,
     onImport,
     onExport,
@@ -1450,6 +1644,7 @@ function ListPage(props: {
     onDiagnose,
     onDelete,
     onLogin,
+    onReconnect,
   } = props
 
   const filtered = state.servers.filter(
@@ -1480,84 +1675,10 @@ function ListPage(props: {
         { className: 'mcp-header' },
         React.createElement(
           'div',
-          { className: 'mcp-headRow' },
-          React.createElement(
-            'div',
-            { className: 'mcp-head' },
-            React.createElement('h1', { className: 'mcp-title' }, COPY.title),
-            React.createElement('p', { className: 'mcp-desc' }, COPY.description),
-          ),
-          React.createElement(
-            'div',
-            { className: 'mcp-toolbar' },
-            React.createElement(
-              'button',
-              { type: 'button', className: 'mcp-btn', onClick: onImport, disabled: actionBusy },
-              COPY.import,
-            ),
-            React.createElement(
-              'button',
-              { type: 'button', className: 'mcp-btn', onClick: onExport, disabled: actionBusy },
-              COPY.export,
-            ),
-            React.createElement(
-              'button',
-              {
-                type: 'button',
-                className: 'mcp-btn mcp-btn--primary',
-                onClick: onAdd,
-                disabled: actionBusy,
-              },
-              COPY.add,
-            ),
-          ),
+          { className: 'mcp-head' },
+          React.createElement('h1', { className: 'mcp-title' }, COPY.title),
+          React.createElement('p', { className: 'mcp-desc' }, COPY.description),
         ),
-        showEmpty
-          ? null
-          : React.createElement(
-            'div',
-            { className: 'mcp-toolbarRow' },
-            React.createElement('input', {
-              className: 'mcp-search',
-              value: search,
-              placeholder: COPY.searchPlaceholder,
-              onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
-                onSearch(event.currentTarget.value)
-              },
-            }),
-            React.createElement(
-              'div',
-              { className: 'mcp-chips' },
-              ...chips.map(chip => React.createElement(
-                'button',
-                {
-                  key: chip.id,
-                  type: 'button',
-                  className: 'mcp-chip',
-                  'data-active': filter === chip.id ? 'true' : 'false',
-                  onClick: () => { onFilter(chip.id) },
-                },
-                `${chip.label} ${filterCount(state.servers, chip.id)}`,
-              )),
-            ),
-            React.createElement(
-              'div',
-              { className: 'mcp-refreshGroup' },
-              React.createElement(
-                'button',
-                {
-                  type: 'button',
-                  className: 'mcp-btn',
-                  onClick: onRefresh,
-                  disabled: refreshing,
-                },
-                refreshing ? COPY.refreshing : COPY.refresh,
-              ),
-              updated === null
-                ? null
-                : React.createElement('span', { className: 'mcp-updated' }, COPY.updatedPrefix + updated),
-            ),
-          ),
       ),
       staleFailure === null
         ? null
@@ -1567,6 +1688,14 @@ function ListPage(props: {
           React.createElement('div', { className: 'mcp-statusTitle' }, COPY.staleFailure),
           React.createElement('div', { className: 'mcp-statusPath' }, staleFailure),
         ),
+      state.unmanaged.length === 0
+        ? null
+        : React.createElement(UnmanagedBanner, {
+          unmanaged: state.unmanaged,
+          busy: actionBusy,
+          patchFile: state.patchFile,
+          onAdopt,
+        }),
       actionFailure === null
         ? null
         : React.createElement(
@@ -1582,6 +1711,90 @@ function ListPage(props: {
           React.createElement(
             'div',
             { className: 'mcp-master' },
+            React.createElement(
+              'div',
+              { className: 'mcp-masterTools' },
+              React.createElement(
+                'div',
+                { className: 'mcp-toolbar' },
+                React.createElement(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'mcp-btn mcp-btn--primary',
+                    onClick: onAdd,
+                    disabled: actionBusy,
+                  },
+                  COPY.add,
+                ),
+                React.createElement(
+                  'button',
+                  { type: 'button', className: 'mcp-btn', onClick: onImport, disabled: actionBusy },
+                  COPY.import,
+                ),
+                React.createElement(
+                  'button',
+                  { type: 'button', className: 'mcp-btn', onClick: onExport, disabled: actionBusy },
+                  COPY.export,
+                ),
+                updated === null
+                  ? null
+                  : React.createElement(
+                    'span',
+                    { className: 'mcp-updated' },
+                    COPY.updatedPrefix + updated,
+                  ),
+              ),
+              React.createElement(
+                'div',
+                { className: 'mcp-toolbarRow' },
+                React.createElement('input', {
+                  className: 'mcp-search',
+                  value: search,
+                  placeholder: COPY.searchPlaceholder,
+                  onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+                    onSearch(event.currentTarget.value)
+                  },
+                }),
+                React.createElement(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'mcp-btn',
+                    onClick: onRefresh,
+                    disabled: refreshing,
+                  },
+                  refreshing ? COPY.refreshing : COPY.refresh,
+                ),
+              ),
+              React.createElement(
+                'div',
+                { className: 'mcp-chips' },
+                ...chips.map(chip => React.createElement(
+                  'button',
+                  {
+                    key: chip.id,
+                    type: 'button',
+                    className: 'mcp-chip',
+                    'data-active': filter === chip.id ? 'true' : 'false',
+                    onClick: () => { onFilter(chip.id) },
+                  },
+                  `${chip.label} ${filterCount(state.servers, chip.id)}`,
+                )),
+              ),
+            ),
+            adoptNotice === null
+              ? null
+              : React.createElement(
+                'div',
+                { className: 'mcp-stripOk', role: 'status' },
+                React.createElement('span', {
+                  className: 'mcp-dot',
+                  'data-state': 'online',
+                  'aria-hidden': true,
+                }),
+                adoptNotice,
+              ),
             filtered.length === 0
               ? React.createElement('div', { className: 'mcp-noMatch' }, COPY.noMatch)
               : filtered.map(server => React.createElement(ServerRow, {
@@ -1604,6 +1817,9 @@ function ListPage(props: {
               onDiagnose,
               onDelete,
               onLogin,
+              onReconnect: () => {
+                if (selected !== null) onReconnect(selected)
+              },
             }),
           ),
         ),
@@ -1642,19 +1858,23 @@ export function createMcpManagerTab(
     const [saving, setSaving] = React.useState(false)
     const [actionBusy, setActionBusy] = React.useState(false)
     const [oauthBusy, setOauthBusy] = React.useState(false)
+    const [adoptNotice, setAdoptNotice] = React.useState<string | null>(null)
 
     const listInFlight = React.useRef<AbortController | null>(null)
     const actionInFlight = React.useRef<AbortController | null>(null)
     const oauthInFlight = React.useRef<AbortController | null>(null)
     const hasData = React.useRef(false)
 
-    const readState = React.useCallback(async (quiet: boolean): Promise<McpManagerState | null> => {
+    const readState = React.useCallback(async (
+      quiet: boolean,
+      fresh = false,
+    ): Promise<McpManagerState | null> => {
       listInFlight.current?.abort()
       const controller = new AbortController()
       listInFlight.current = controller
       setRefreshing(!quiet)
       try {
-        const next = await runtime.loadState(controller.signal)
+        const next = await runtime.loadState(controller.signal, fresh)
         if (controller.signal.aborted) return null
         hasData.current = true
         setState(next)
@@ -1686,6 +1906,7 @@ export function createMcpManagerTab(
       setFailure(null)
       setStaleFailure(null)
       setActionFailure(null)
+      setAdoptNotice(null)
       setUpdatedAt(null)
       setView({ kind: 'list' })
       void readState(false)
@@ -1789,6 +2010,69 @@ export function createMcpManagerTab(
           await runtime.removeServer(server.name, controller.signal)
           if (controller.signal.aborted) return
           setSelectedName(null)
+          await readState(true)
+        } catch (error) {
+          if (controller.signal.aborted || isAbortError(error)) return
+          setActionFailure(errorText(error))
+        } finally {
+          if (actionInFlight.current === controller) {
+            actionInFlight.current = null
+            setActionBusy(false)
+          }
+        }
+      })()
+    }
+
+    function reconnect(server: McpServerView): void {
+      if (actionBusy) return
+      const controller = new AbortController()
+      actionInFlight.current?.abort()
+      actionInFlight.current = controller
+      setActionBusy(true)
+      setActionFailure(null)
+      void (async (): Promise<void> => {
+        try {
+          const next = await runtime.reconnect(server.name, controller.signal)
+          if (controller.signal.aborted) return
+          hasData.current = true
+          setState(next)
+          setFailure(null)
+          setStaleFailure(null)
+          setUpdatedAt(next.updatedAt || new Date().toISOString())
+        } catch (error) {
+          if (controller.signal.aborted || isAbortError(error)) return
+          setActionFailure(errorText(error))
+        } finally {
+          if (actionInFlight.current === controller) {
+            actionInFlight.current = null
+            setActionBusy(false)
+          }
+        }
+      })()
+    }
+
+    function adopt(): void {
+      if (actionBusy) return
+      const controller = new AbortController()
+      actionInFlight.current?.abort()
+      actionInFlight.current = controller
+      setActionBusy(true)
+      setActionFailure(null)
+      void (async (): Promise<void> => {
+        try {
+          const result = await runtime.adoptUnmanaged(undefined, controller.signal)
+          if (controller.signal.aborted) return
+          const adoptedText = result.adopted.length > 0
+            ? `${COPY.adoptDonePrefix}${result.adopted.length}${COPY.adoptDoneNamesMid}${result.adopted.join('、')}${COPY.adoptDoneSuffix}`
+            : ''
+          const skippedText = result.skipped.length > 0
+            ? `${result.adopted.length > 0 ? COPY.adoptSkippedMid : ''}${result.skipped.map((item) => `${item.name} ${item.reason}`).join('、')}${COPY.adoptSkippedSuffix}`
+            : ''
+          setAdoptNotice(
+            adoptedText === '' && skippedText === ''
+              ? COPY.adoptNoneFound
+              : `${adoptedText}${skippedText}`,
+          )
           await readState(true)
         } catch (error) {
           if (controller.signal.aborted || isAbortError(error)) return
@@ -2046,11 +2330,19 @@ export function createMcpManagerTab(
       actionFailure,
       actionBusy,
       oauthBusy,
+      adoptNotice,
       onSearch: setSearch,
       onFilter: setFilter,
-      onRefresh: () => { void readState(false) },
+      onRefresh: () => {
+        setAdoptNotice(null)
+        // A manual refresh re-probes: it must not answer "still down" from the
+        // 45s probe cache, which is what made the old button look inert.
+        void readState(false, true)
+      },
       onSelect: setSelectedName,
       onToggle: toggle,
+      onAdopt: adopt,
+      onReconnect: reconnect,
       onAdd: () => { openForm(null) },
       onImport: () => {
         setImportText('')
@@ -2082,12 +2374,11 @@ export const MCP_MANAGER_CSS = `
 .mcp-page { box-sizing: border-box; height: 100%; color: var(--dsw-alias-label-primary); font-size: 13px; line-height: 1.55; font-family: inherit; }
 .mcp-page * { box-sizing: border-box; }
 .mcp-shell { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; padding: 0 0 16px; }
-.mcp-header { display: flex; flex-direction: column; gap: 12px; padding: 20px 24px 14px; border-bottom: 0.5px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); }
-.mcp-headRow { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.mcp-header { display: flex; flex-direction: column; gap: 12px; padding: 18px 24px 14px; border-bottom: 0.5px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); }
 .mcp-head { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .mcp-title { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.4; }
 .mcp-desc { margin: 0; color: var(--dsw-alias-label-secondary); font-size: 12.5px; }
-.mcp-toolbar, .mcp-toolbarRow, .mcp-refreshGroup, .mcp-detailActions, .mcp-emptyActions, .mcp-statusActions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mcp-toolbar, .mcp-toolbarRow, .mcp-detailActions, .mcp-emptyActions, .mcp-statusActions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .mcp-toolbarRow { gap: 10px; }
 .mcp-btn { flex: none; height: 32px; padding: 0 12px; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
 .mcp-btn:hover:not(:disabled) { border-color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); }
@@ -2117,6 +2408,20 @@ export const MCP_MANAGER_CSS = `
 .mcp-chip[data-active="true"] { border-color: transparent; background: color-mix(in srgb, var(--dsw-alias-brand-primary) 16%, transparent); color: var(--dsw-alias-brand-primary); font-weight: 600; }
 .mcp-split { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; border-top: 0.5px solid var(--dsw-alias-border-l2); }
 .mcp-master { display: flex; flex-direction: column; gap: 10px; width: min(420px, 42%); flex-shrink: 0; padding: 14px; overflow: auto; border-right: 0.5px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); }
+/*
+ * List controls live above the rows they act on: create/import/export, then
+ * search + refresh, then the filter chips. Slightly tighter than the shared
+ * .mcp-btn size so three actions plus a timestamp fit a 420px column.
+ */
+.mcp-masterTools { display: flex; flex-direction: column; gap: 9px; padding: 0 0 11px; border-bottom: 0.5px solid var(--dsw-alias-border-l2); }
+.mcp-masterTools .mcp-toolbar { gap: 7px; }
+.mcp-masterTools .mcp-toolbarRow { gap: 7px; flex-wrap: nowrap; }
+.mcp-masterTools .mcp-btn { height: 30px; padding: 0 10px; }
+.mcp-masterTools .mcp-btn--primary { padding: 0 11px; }
+.mcp-masterTools .mcp-search { height: 32px; padding: 0 11px; }
+.mcp-masterTools .mcp-chips { gap: 6px; }
+.mcp-masterTools .mcp-chip { height: 26px; padding: 0 9px; font-size: 11.5px; }
+.mcp-masterTools .mcp-updated { margin: 0 0 0 auto; }
 .mcp-detailPane { flex: 1 1 auto; min-width: 0; overflow: auto; padding: 18px 22px; background: var(--dsw-alias-bg-layer-1); }
 .mcp-row { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 12px 14px; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: 12px; background: var(--dsw-alias-bg-layer-1); color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .mcp-row:hover { border-color: var(--dsw-alias-label-secondary); }
@@ -2236,8 +2541,32 @@ export const MCP_MANAGER_CSS = `
 .mcp-logHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #1e293b; background: #111827; color: #94a3b8; font-size: 12px; font-weight: 650; }
 .mcp-logBody, .mcp-exportBody { flex: 1; margin: 0; padding: 12px 14px; overflow: auto; color: #e2e8f0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
 .mcp-exportBody { min-height: 360px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
+.mcp-unmanaged { display: flex; flex-direction: column; gap: 10px; margin: 12px 24px 0; padding: 14px; border: 1px dashed color-mix(in srgb, var(--dsw-alias-state-warn-primary) 55%, var(--dsw-alias-border-l2)); border-radius: 12px; background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 9%, transparent); }
+.mcp-unHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.mcp-unTitle { font-weight: 700; color: var(--dsw-alias-state-warn-primary); font-size: 13px; }
+.mcp-unBody { color: var(--dsw-alias-label-secondary); font-size: 11.5px; line-height: 1.5; }
+.mcp-unCount { flex: none; height: 24px; line-height: 24px; padding: 0 10px; border-radius: 999px; font-size: 11px; font-weight: 650; color: var(--dsw-alias-state-warn-primary); background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 16%, transparent); }
+.mcp-unRow { display: flex; flex-direction: column; gap: 3px; padding: 9px 12px; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); }
+.mcp-unRowTop { display: flex; align-items: center; gap: 8px; }
+.mcp-unName { font-size: 13px; font-weight: 650; }
+.mcp-unId { flex: 1 1 auto; min-width: 0; text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: var(--dsw-alias-label-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mcp-unConflict { color: var(--dsw-alias-state-warn-primary); font-size: 11px; line-height: 1.45; }
+.mcp-unActions { display: flex; justify-content: flex-end; }
+.mcp-adpt { display: flex; flex-direction: column; gap: 12px; margin: 12px 24px 0; padding: 16px 14px; border: 1px solid color-mix(in srgb, var(--dsw-alias-state-warn-primary) 55%, var(--dsw-alias-border-l2)); border-radius: 12px; background: var(--dsw-alias-bg-layer-1); }
+.mcp-adptCrumb { font-size: 11px; font-weight: 650; color: var(--dsw-alias-state-warn-primary); }
+.mcp-adptTitle { font-size: 15px; font-weight: 700; }
+.mcp-adptBody { font-size: 11.5px; line-height: 1.55; color: var(--dsw-alias-label-secondary); }
+.mcp-adptEntry { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); }
+.mcp-adptEntryTop { display: flex; align-items: center; gap: 8px; }
+.mcp-adptEntryName { font-size: 13px; font-weight: 650; }
+.mcp-adptEntryId { flex: 1 1 auto; min-width: 0; text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: var(--dsw-alias-label-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mcp-adptEndpoint { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: var(--dsw-alias-label-secondary); line-height: 1.5; overflow-wrap: anywhere; }
+.mcp-adptPath { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.mcp-adptPathFile { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; overflow-wrap: anywhere; }
+.mcp-adptActions { display: flex; justify-content: flex-end; gap: 8px; }
+.mcp-stripOk { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 0.5px solid color-mix(in srgb, var(--dsw-alias-state-success-primary) 45%, var(--dsw-alias-border-l2)); border-radius: 10px; background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 10%, transparent); font-size: 12.5px; line-height: 1.45; }
 @media (max-width: 960px) {
   .mcp-split { flex-direction: column; }
-  .mcp-master { width: 100%; border-right: 0; border-bottom: 0.5px solid var(--dsw-alias-border-l2); max-height: 42vh; }
+  .mcp-master { width: 100%; border-right: 0; border-bottom: 0.5px solid var(--dsw-alias-border-l2); max-height: 52vh; }
 }
 `

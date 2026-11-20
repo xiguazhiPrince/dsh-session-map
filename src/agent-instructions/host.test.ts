@@ -124,8 +124,8 @@ function projectFile(state: AgentInstructionsState, relativePath: string) {
 describe('resolveInstructionHomes', () => {
   it('falls back to the home-relative defaults with symbolic labels', () => {
     const homes = resolveInstructionHomes({}, '/home/tester')
-    expect(homes.dshHome).toBe(join('/home/tester', '.dsh'))
-    expect(homes.agentsHome).toBe(join('/home/tester', '.agents'))
+    expect(homes.dshHome).toBe(resolve(join('/home/tester', '.dsh')))
+    expect(homes.agentsHome).toBe(resolve(join('/home/tester', '.agents')))
     expect(homes.dshTitle).toBe('~/.dsh')
     expect(homes.agentsTitle).toBe('~/.agents')
   })
@@ -140,8 +140,8 @@ describe('resolveInstructionHomes', () => {
 
   it('ignores blank overrides', () => {
     const homes = resolveInstructionHomes({ DSH_HOME: '   ', DSH_AGENTS_HOME: '' }, '/home/tester')
-    expect(homes.dshHome).toBe(join('/home/tester', '.dsh'))
-    expect(homes.agentsHome).toBe(join('/home/tester', '.agents'))
+    expect(homes.dshHome).toBe(resolve(join('/home/tester', '.dsh')))
+    expect(homes.agentsHome).toBe(resolve(join('/home/tester', '.agents')))
     expect(homes.dshTitle).toBe('~/.dsh')
     expect(homes.agentsTitle).toBe('~/.agents')
   })

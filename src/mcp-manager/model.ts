@@ -168,6 +168,25 @@ export interface McpServerView {
   readonly toolList?: readonly McpToolSummary[]
 }
 
+/**
+ * One `@deepseek-ai/dsh-mcp-client` row found outside the managed block of
+ * `cordis.patch.yml`, offered for adoption into it.
+ */
+export interface McpUnmanagedView {
+  /** Patch row id as written in the file. */
+  readonly id: string
+  /** serverName. */
+  readonly name: string
+  /** UI transport. */
+  readonly transport: McpTransport
+  /** Whether the row is enabled (not `disabled: true`). */
+  readonly enabled: boolean
+  /** HTTP url or stdio command summary for the confirm card. */
+  readonly endpoint: string
+  /** Why the row cannot be adopted yet; undefined when it can. */
+  readonly conflict?: string
+}
+
 /** Assembled list payload for the MCP tab. */
 export interface McpManagerState {
   /** Absolute path of the profile patch file. */
@@ -178,6 +197,8 @@ export interface McpManagerState {
   readonly updatedAt: string
   /** Servers in display order (name ascending). */
   readonly servers: readonly McpServerView[]
+  /** dsh-mcp-client rows living outside the managed block. */
+  readonly unmanaged: readonly McpUnmanagedView[]
 }
 
 /** Create / update payload from the form. */
@@ -222,6 +243,32 @@ export interface McpNameRequest {
 /** Import request: a Claude/Codex mcpServers object, an array, or patch rows. */
 export interface McpImportRequest {
   readonly text: string
+}
+
+/**
+ * Adopt request: omit `names` to adopt every non-conflicting unmanaged row;
+ * pass serverNames to adopt a subset.
+ */
+export interface McpAdoptRequest {
+  readonly names?: readonly string[]
+}
+
+/** One row the adopt step left untouched, with the reason. */
+export interface McpAdoptSkip {
+  /** serverName of the skipped row. */
+  readonly name: string
+  /** Patch row id as written in the file. */
+  readonly id: string
+  /** Why the row was not adopted. */
+  readonly reason: string
+}
+
+/** Adopt response payload. */
+export interface McpAdoptResult {
+  /** serverNames adopted into the managed block. */
+  readonly adopted: readonly string[]
+  /** Rows skipped, in scan order. */
+  readonly skipped: readonly McpAdoptSkip[]
 }
 
 /** Diagnose response. */
@@ -276,6 +323,11 @@ export type McpDiagnoseEnvelope = McpEnvelope<{ readonly result: McpDiagnoseResu
 export type McpExportEnvelope = McpEnvelope<{ readonly result: McpExportResult }>
 export type McpOAuthStartEnvelope = McpEnvelope<{ readonly result: McpOAuthStartResult }>
 export type McpOAuthPollEnvelope = McpEnvelope<{ readonly result: McpOAuthPollResult }>
+export type McpAdoptEnvelope = McpEnvelope<{
+  readonly result: McpAdoptResult
+  /** Present on the wire; the browser tab re-reads state on its own. */
+  readonly state?: McpManagerState
+}>
 export type McpOkEnvelope = McpEnvelope
 
 /** Raw patch row shape (before UI mapping). */
@@ -552,6 +604,15 @@ export function oauthStartFromEnvelope(body: McpOAuthStartEnvelope): McpOAuthSta
  * @param body - Host JSON.
  */
 export function oauthPollFromEnvelope(body: McpOAuthPollEnvelope): McpOAuthPollResult {
+  if (!body.ok) throw new Error(body.error.message)
+  return body.result
+}
+
+/**
+ * Unwrap an adopt envelope.
+ * @param body - Host JSON.
+ */
+export function adoptFromEnvelope(body: McpAdoptEnvelope): McpAdoptResult {
   if (!body.ok) throw new Error(body.error.message)
   return body.result
 }

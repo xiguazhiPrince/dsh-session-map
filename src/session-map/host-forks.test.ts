@@ -8,7 +8,7 @@
  */
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
@@ -117,11 +117,11 @@ function record(childId: string, parentId: string, recordedAt: number): SessionF
 describe('resolveForkLedgerPath', () => {
   it('uses DSH_HOME when set and falls back to <home>/.dsh', () => {
     expect(resolveForkLedgerPath({ DSH_HOME: '/custom/dsh' }, '/home/user'))
-      .toBe('/custom/dsh/session-map/forks.json')
+      .toBe(join(resolve('/custom/dsh'), 'session-map', 'forks.json'))
     expect(resolveForkLedgerPath({}, '/home/user'))
-      .toBe('/home/user/.dsh/session-map/forks.json')
+      .toBe(join(resolve(join('/home/user', '.dsh')), 'session-map', 'forks.json'))
     expect(resolveForkLedgerPath({ DSH_HOME: '   ' }, '/home/user'))
-      .toBe('/home/user/.dsh/session-map/forks.json')
+      .toBe(join(resolve(join('/home/user', '.dsh')), 'session-map', 'forks.json'))
   })
 })
 

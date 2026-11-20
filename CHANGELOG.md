@@ -2,6 +2,32 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布]
+
+### 新增
+
+- **MCP 收编**：MCP 页会扫描 `cordis.patch.yml` 管理块之外的手写 `@deepseek-ai/dsh-mcp-client` 行，在列表上方显示「检测到 N 台未纳管的服务器」横幅；点「收编 N 台」原位展开确认卡（说明只移动原文、配置一字不动、行 ID 保持不变、服务不断线），确认后一次性把行移入管理块并从原位置删除。与已纳管行同名或同 ID 的行会带原因跳过，留在横幅里提示解法（删除或改名任一台即可解除）。设计稿见仓库根目录 `design.html`。
+
+### 改进
+
+- **手动重连**：详情页在「不可用 / 启动中」时出现「重连」按钮——丢掉该服务器的探测缓存、stdio 服务器顺带重挂 loader 条目（重新拉起子进程），并直接返回新状态。左上「刷新」也改为绕过 45 秒探测缓存，不再出现「点了还是不可用」。
+- 不可用服务器的工具空态文案改为「服务暂时连不上，点『重连』再试一次，或打开『诊断』看完整日志」，不再误导成「去登录」。
+- **MCP 页控件下移到列表列**：搜索、筛选、刷新，以及「添加服务器 / 导入 / 导出」从整页页头移进左侧列表顶部，与它们作用的列表放在一起。页头只剩标题和说明，详情区因此多出约 130px 高度（字段卡与工具列表可以少滚一屏）。按钮收到 30px、chips 收到 26px 以适配窄列；窄屏堆叠时列表高度由 42vh 提到 52vh。
+
+### 修复
+
+- **MCP 页认错 profile**：在 Desktop / web 里使用时，MCP 页可能显示并写入 `profiles\desktop\cordis.patch.yml`，而本该是当前 profile（例如 `web`）。原因是 Desktop 与 web 运行器只把 `DSH_PROFILE_DIR` / `DSH_PROFILE` 注入工具 shell，Host 进程自身没有这两个变量，于是代码退回硬编码的 `desktop`。现在按「环境变量 → 本插件自身安装位置反推（装在 profile 内直接读路径；`link:` 安装则比对各 profile 的软链）→ `desktop` 兜底」解析，MCP 页、收编、诊断、OAuth 都落到正确的 profile。
+- 管理 `!!js` loader 表达式：`cordis.patch.yml` 里 `!!js …` 形式的配置值（如引用环境变量的鉴权头）此前在增删改、启停、OAuth 回写等任何块内写操作后会被改写成普通映射；现在读写往返保持 `!!js` 原样。
+- 若干路径断言改为平台无关写法，`pnpm test` 在 Windows 上也能全绿（此前 4 个用例只在 POSIX 上通过）。
+
+### 内部
+
+- `writePatchRows` 拆出纯函数 `splicePatchRows`；`loadPatchRows` 复用 `readPatchText`，legacy 标记块仍会在读取时迁移。
+- 新增 Host 侧 `/plugin-mcp-manager/adopt` 路由（POST，可选 `names` 过滤）与 `scanUnmanagedRows` / `classifyUnmanaged` / `adoptUnmanaged`，MCP 状态新增 `unmanaged` 列表。
+- 新增 `/plugin-mcp-manager/reconnect` 路由；`/state?fresh=1` 绕过探测缓存，`buildManagerState` 接受 `{ fresh }`。
+- 新增 `detectProfileDir` / `profileDirFromOwnPath` 并接入 `resolveProfileDir`。
+- `pnpm typecheck`、`pnpm test`、`pnpm build` 均通过：612 个用例通过，另有 16 个 Git 安全集成用例默认跳过。
+
 ## [0.7.0] — 2026-11-19
 
 ### 新增
