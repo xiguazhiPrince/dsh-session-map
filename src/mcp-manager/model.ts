@@ -51,6 +51,15 @@ export type McpTransport = 'stdio' | 'http'
  */
 export type McpServerState = 'online' | 'auth' | 'idle' | 'down' | 'off'
 
+/**
+ * The three answers a tool permission can be.
+ *
+ * - `allow` — the model sees the tool and may call it directly
+ * - `ask` — the model sees it, and every call waits for one approval
+ * - `deny` — the model never sees it, and a call that arrives anyway is refused
+ */
+export type ToolPermission = 'allow' | 'ask' | 'deny'
+
 /** One tool the Host observed for a connected server (optional detail). */
 export interface McpToolSummary {
   /** Raw tool name on the server (without mcp__ns__ prefix). */
@@ -62,6 +71,8 @@ export interface McpToolSummary {
    * Usually `{ type: 'object', properties, required }`.
    */
   readonly parameters?: unknown
+  /** The answer that decides this tool, when its server is gated. */
+  readonly permission?: ToolPermission
 }
 
 /** One compact parameter line for the tool list. */
@@ -166,6 +177,22 @@ export interface McpServerView {
   readonly reconnectEnabled: boolean
   /** Optional tool list when the Host expanded detail. */
   readonly toolList?: readonly McpToolSummary[]
+  /** Per-tool answers for this server; absent when the server is not gated. */
+  readonly policy?: McpServerPolicyView
+}
+
+/** One gated server's tool counts, as the list row and filter chips show them. */
+export interface McpServerPolicyView {
+  /** Answer for tools the policy does not name. */
+  readonly fallback: ToolPermission
+  /** Tools explicitly allowed. */
+  readonly allow: number
+  /** Tools that ask before every call. */
+  readonly ask: number
+  /** Tools explicitly denied. */
+  readonly deny: number
+  /** Tools the policy does not name (they take the fallback). */
+  readonly unnamed: number
 }
 
 /**

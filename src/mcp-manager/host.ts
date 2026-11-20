@@ -63,6 +63,7 @@ import {
   type McpServerView,
   type McpToolSummary,
   type McpUnmanagedView,
+  type ToolPermission,
 } from './model'
 import {
   authorizationHeader,
@@ -78,6 +79,14 @@ import {
   type LoopbackServer,
   type OAuthMetadata,
 } from './oauth'
+import { reloadGatePolicy } from './gate'
+import {
+  isPermission,
+  readPolicy,
+  summarize,
+  updateServerPolicy,
+  type ServerPolicy,
+} from './policy'
 
 /** Structural view of the context's untyped service lookup. */
 interface ServiceLocator {
@@ -177,6 +186,7 @@ const ENDPOINT_METHODS: Readonly<Record<string, string>> = {
   '/diagnose': 'POST',
   '/oauth/start': 'POST',
   '/oauth/poll': 'GET',
+  '/tools': 'POST',
 }
 
 /** Effect label the route registration is owned by. */
@@ -1140,6 +1150,7 @@ export async function buildManagerState(
   const unmanaged = classifyUnmanaged(scanUnmanagedRows(await readPatchText(env)), rows)
   const loader = lookup<LoaderService>(ctx, 'loader')
   const tools = lookup<ToolsService>(ctx, 'tools')
+  const gatePolicy = await readPolicy(resolveProfileDir(env))
   const servers: McpServerView[] = []
 
   for (const row of rows) {
@@ -1167,14 +1178,23 @@ export async function buildManagerState(
       message = live ? '启动中' : '未启动'
     }
 
+    const policyEntry = gatePolicy.servers[base.name]
+    const permissioned = policyEntry === undefined
+      ? toolList
+      : toolList.map((item) => ({ ...item, permission: policyEntry.tools[item.name] ?? policyEntry.fallback }))
+    const policyView = policyEntry === undefined
+      ? undefined
+      : { fallback: policyEntry.fallback, ...summarize(toolList.map((item) => item.name), policyEntry) }
+
     servers.push(maskView({
       ...base,
       state,
       message,
       tools: toolCount,
-      toolList,
+      toolList: permissioned,
       live,
       oauth,
+      ...(policyView === undefined ? {} : { policy: policyView }),
     }))
   }
 
@@ -1897,6 +1917,56 @@ async function handleOAuthPoll(
 }
 
 /**
+ * Set one tool's permission, or every tool of one server at once.
+ *
+ * The visible set is derived from this file by the Host gate, so the write
+ * returns the freshly assembled state: one round trip, and the browser can
+ * never show a permission the gate does not enforce.
+ *
+ * @param ctx - plugin context (its tool registry names the bulk set).
+ * @param request - POST body `{ name, tool?, permission?, bulk? }`.
+ * @param response - route response.
+ */
+async function handleToolPolicy(
+  ctx: Context,
+  request: RouteRequest,
+  response: RouteResponse,
+): Promise<void> {
+  const body = await readBodyRecord(request)
+  const name = nonEmptyString(body.name)
+  if (name === undefined || !MCP_SERVER_NAME_RE.test(name)) {
+    throw new McpHostError('bad-request', '服务器名称不合法')
+  }
+  const bulk = isPermission(body.bulk) ? body.bulk : undefined
+  const tool = nonEmptyString(body.tool)
+  const permission = isPermission(body.permission) ? body.permission : undefined
+  if (bulk === undefined && (tool === undefined || permission === undefined)) {
+    throw new McpHostError('bad-request', '需要 tool + permission，或 bulk')
+  }
+
+  const env = process.env
+  const dir = resolveProfileDir(env)
+  const tools = lookup<ToolsService>(ctx, 'tools')
+
+  await updateServerPolicy(dir, name, (current: ServerPolicy): ServerPolicy => {
+    if (bulk !== undefined) {
+      // Name every currently known tool so the list shows exactly what the
+      // human just chose; the fallback keeps unnamed future tools in line.
+      const named: Record<string, ToolPermission> = {}
+      for (const item of listTools(tools, `mcp__${name}__`)) named[item.name] = bulk
+      return { fallback: bulk, tools: named }
+    }
+    return {
+      fallback: current.fallback,
+      tools: { ...current.tools, [tool as string]: permission as ToolPermission },
+    }
+  })
+
+  await reloadGatePolicy(dir)
+  sendJson(response, 200, { ok: true, state: await buildManagerState(ctx, env) })
+}
+
+/**
  * Answer one route request.
  * @param ctx - the plugin's context.
  * @param request - incoming request.
@@ -1957,6 +2027,9 @@ async function dispatch(
       return
     case '/oauth/poll':
       await handleOAuthPoll(ctx, url, response)
+      return
+    case '/tools':
+      await handleToolPolicy(ctx, request, response)
       return
     default:
       throw new McpHostError('bad-request', `未知的接口：${method} ${url.pathname}`)

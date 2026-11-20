@@ -31,6 +31,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { installAgentInstructionsHost } from './agent-instructions/host'
 import { installGitWorkspaceHost } from './git-workspace/host'
+import { installMcpToolGate } from './mcp-manager/gate'
+import { resolveProfileDir } from './mcp-manager/host'
 import { installMcpManagerHost } from './mcp-manager/host'
 import { installSessionForkHost } from './session-map/host-forks'
 import { installSessionLineageHost } from './session-map/host-lineage'
@@ -39,6 +41,11 @@ import { installUsageStatsHost } from './usage-stats/host'
 
 /** Host plugin body: expose the settings and instruction routes. */
 export function apply(ctx: Context): void {
+  // The MCP tool gate is independent of the web server: it exists wherever
+  // agents run, so a headless composition still enforces the policy the
+  // browser would have written.
+  installMcpToolGate(ctx, resolveProfileDir())
+
   ctx.inject(['webServer', 'subprocess', 'workspaceRegistry'], (scope) => {
     installGitWorkspaceHost(scope)
   })

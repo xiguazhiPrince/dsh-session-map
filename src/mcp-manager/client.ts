@@ -46,6 +46,7 @@ import {
   type McpToolSummary,
   type McpTransport,
   type McpUnmanagedView,
+  type ToolPermission,
 } from './model'
 
 /** Fixed UI copy; Chinese-first like the other Conversation seats. */
@@ -97,6 +98,21 @@ const COPY = {
   toolsMatchPrefix: '显示 ',
   toolsMatchMid: ' / ',
   toolsMatchSuffix: ' 个',
+  permTitle: '工具权限',
+  permAllow: '放行',
+  permAsk: '问我',
+  permDeny: '禁止',
+  permBulkAllow: '全部放行',
+  permBulkAsk: '全部问我',
+  permBulkDeny: '全部禁止',
+  permDefaultDeny: '新工具默认禁止',
+  permDefaultBody: '以后新增的工具自动藏起来，不会自己变成可用。',
+  permDefaultPrefix: '默认 · ',
+  permUnnamedPrefix: '未点名 ',
+  permCountsMid: ' · ',
+  permAllowPrefix: '放行 ',
+  permAskPrefix: '问我 ',
+  permDenyPrefix: '禁止 ',
   fieldTransport: '传输',
   fieldCommand: '命令',
   fieldArgs: '参数',
@@ -222,6 +238,19 @@ export interface McpManagerRuntime {
   oauthStart(name: string, signal: AbortSignal): Promise<McpOAuthStartResult>
   /** Poll an OAuth flow until done/error. */
   oauthPoll(flowId: string, signal: AbortSignal): Promise<McpOAuthPollResult>
+  /** Answer one tool of one server. */
+  setToolPermission(
+    name: string,
+    tool: string,
+    permission: ToolPermission,
+    signal: AbortSignal,
+  ): Promise<McpManagerState>
+  /** Answer every tool of one server at once. */
+  setAllToolPermissions(
+    name: string,
+    permission: ToolPermission,
+    signal: AbortSignal,
+  ): Promise<McpManagerState>
 }
 
 /** One Host request description. */
@@ -366,6 +395,22 @@ export function createMcpManagerRuntime(_ctx: Context): McpManagerRuntime {
         signal,
       )
       return oauthPollFromEnvelope(envelopeOf<McpOAuthPollEnvelope>(body))
+    },
+    async setToolPermission(name, tool, permission, signal) {
+      const body = await requestHost(
+        `${MCP_MANAGER_ROUTE}/tools`,
+        { method: 'POST', body: { name, tool, permission } },
+        signal,
+      )
+      return stateFromEnvelope(envelopeOf<McpStateEnvelope>(body))
+    },
+    async setAllToolPermissions(name, permission, signal) {
+      const body = await requestHost(
+        `${MCP_MANAGER_ROUTE}/tools`,
+        { method: 'POST', body: { name, bulk: permission } },
+        signal,
+      )
+      return stateFromEnvelope(envelopeOf<McpStateEnvelope>(body))
     },
   }
 }
@@ -662,18 +707,75 @@ const TOOL_LIST_BOTTOM_GAP = 56
 /** Floor for the measured tool list, so it stays usable on a short window. */
 const TOOL_LIST_MIN_HEIGHT = 160
 
+/** Display order of the three answers, weakest permission last. */
+const PERMISSIONS: readonly ToolPermission[] = ['allow', 'ask', 'deny']
+
+/** Localized label for one permission. */
+function permissionLabel(permission: ToolPermission): string {
+  if (permission === 'allow') return COPY.permAllow
+  if (permission === 'ask') return COPY.permAsk
+  return COPY.permDeny
+}
+
+/**
+ * Three-state control for one tool.
+ *
+ * Deliberately NOT a checkbox: the middle answer is a different kind of thing
+ * (it runs, but only after a human says so), and a switch would hide that.
+ */
+function PermissionControl(props: {
+  readonly value: ToolPermission
+  readonly disabled: boolean
+  readonly onChange: (next: ToolPermission) => void
+}): React.ReactElement {
+  return React.createElement(
+    'div',
+    { className: 'mcp-perm', role: 'group' },
+    ...PERMISSIONS.map(permission => React.createElement(
+      'button',
+      {
+        key: permission,
+        type: 'button',
+        className: 'mcp-permSeg',
+        'data-permission': permission,
+        'data-active': permission === props.value ? 'true' : 'false',
+        disabled: props.disabled,
+        onClick: () => {
+          if (permission !== props.value) props.onChange(permission)
+        },
+      },
+      permissionLabel(permission),
+    )),
+  )
+}
+
 /** Detail pane for the selected server. */
 function ServerDetail(props: {
   readonly server: McpServerView | null
   readonly oauthBusy: boolean
   readonly actionBusy: boolean
+  readonly permBusy: boolean
   readonly onEdit: () => void
   readonly onDiagnose: () => void
   readonly onDelete: () => void
   readonly onLogin: () => void
   readonly onReconnect: () => void
+  readonly onToolPermission: (tool: string, permission: ToolPermission) => void
+  readonly onAllToolPermissions: (permission: ToolPermission) => void
 }): React.ReactElement {
-  const { server, oauthBusy, actionBusy, onEdit, onDiagnose, onDelete, onLogin, onReconnect } = props
+  const {
+    server,
+    oauthBusy,
+    actionBusy,
+    permBusy,
+    onEdit,
+    onDiagnose,
+    onDelete,
+    onLogin,
+    onReconnect,
+    onToolPermission,
+    onAllToolPermissions,
+  } = props
   const [toolQuery, setToolQuery] = React.useState('')
   const [expandedTools, setExpandedTools] = React.useState<ReadonlySet<string>>(() => new Set())
   /**
@@ -717,6 +819,8 @@ function ServerDetail(props: {
 
   const needsAuth = server.state === 'auth' || server.oauth
   const toolList = server.toolList ?? []
+  /** Absent until the gate manages this server; present once any answer was set. */
+  const policy = server.policy
   const toolsKnownButUnlisted = toolList.length === 0 && server.tools > 0
   const query = toolQuery.trim().toLowerCase()
   const filteredTools = query === ''
@@ -858,6 +962,23 @@ function ServerDetail(props: {
       ),
     ),
     React.createElement('div', { className: 'mcp-fields' }, ...fields),
+    policy === undefined
+      ? null
+      : React.createElement(
+        'div',
+        { className: 'mcp-default' },
+        React.createElement(
+          'div',
+          { className: 'mcp-defaultText' },
+          React.createElement('span', { className: 'mcp-defaultTitle' }, COPY.permDefaultDeny),
+          React.createElement('span', { className: 'mcp-defaultBody' }, COPY.permDefaultBody),
+        ),
+        React.createElement(
+          'span',
+          { className: 'mcp-defaultPill' },
+          `${COPY.permDefaultPrefix}${permissionLabel(policy.fallback)}`,
+        ),
+      ),
     React.createElement(
       'div',
       { className: 'mcp-tools' },
@@ -867,16 +988,43 @@ function ServerDetail(props: {
         React.createElement(
           'span',
           { className: 'mcp-toolsTitle' },
-          `${COPY.toolsTitle} ${toolList.length > 0 ? toolList.length : server.tools}`,
+          `${policy === undefined ? COPY.toolsTitle : COPY.permTitle} ${toolList.length > 0 ? toolList.length : server.tools}`,
         ),
-        React.createElement(
+        policy === undefined
+          ? React.createElement(
+            'span',
+            { className: 'mcp-toolsHint' },
+            toolList.length > 0 && query !== ''
+              ? `${COPY.toolsMatchPrefix}${filteredTools.length}${COPY.toolsMatchMid}${toolList.length}${COPY.toolsMatchSuffix}`
+              : `${COPY.toolsHintPrefix}${server.name}${COPY.toolsHintSuffix}`,
+          )
+          : React.createElement(
+            'div',
+            { className: 'mcp-toolsBulk' },
+            ...PERMISSIONS.map(permission => React.createElement(
+              'button',
+              {
+                key: permission,
+                type: 'button',
+                className: `mcp-bulk mcp-bulk--${permission}`,
+                disabled: actionBusy || permBusy,
+                onClick: () => onAllToolPermissions(permission),
+              },
+              permission === 'allow'
+                ? COPY.permBulkAllow
+                : permission === 'ask' ? COPY.permBulkAsk : COPY.permBulkDeny,
+            )),
+          ),
+      ),
+      policy === undefined
+        ? null
+        : React.createElement(
           'span',
           { className: 'mcp-toolsHint' },
-          toolList.length > 0 && query !== ''
-            ? `${COPY.toolsMatchPrefix}${filteredTools.length}${COPY.toolsMatchMid}${toolList.length}${COPY.toolsMatchSuffix}`
-            : `${COPY.toolsHintPrefix}${server.name}${COPY.toolsHintSuffix}`,
+          `${COPY.permAllowPrefix}${policy.allow}${COPY.permCountsMid}${COPY.permAskPrefix}${policy.ask}`
+          + `${COPY.permCountsMid}${COPY.permDenyPrefix}${policy.deny}`
+          + `${COPY.permCountsMid}${COPY.permUnnamedPrefix}${policy.unnamed}`,
         ),
-      ),
       toolList.length === 0
         ? React.createElement(
           'div',
@@ -929,7 +1077,18 @@ function ServerDetail(props: {
                     key: tool.name,
                     className: index % 2 === 1 ? 'mcp-tool mcp-tool--soft' : 'mcp-tool',
                   },
-                  React.createElement('div', { className: 'mcp-toolName' }, tool.name),
+                  React.createElement(
+                    'div',
+                    { className: 'mcp-toolTop' },
+                    React.createElement('div', { className: 'mcp-toolName' }, tool.name),
+                    tool.permission === undefined
+                      ? null
+                      : React.createElement(PermissionControl, {
+                        value: tool.permission,
+                        disabled: actionBusy || permBusy,
+                        onChange: (next: ToolPermission) => onToolPermission(tool.name, next),
+                      }),
+                  ),
                   tool.description === ''
                     ? null
                     : React.createElement('div', { className: 'mcp-toolDesc' }, tool.description),
@@ -1657,6 +1816,9 @@ function ListPage(props: {
   readonly onDelete: () => void
   readonly onLogin: () => void
   readonly onReconnect: (server: McpServerView) => void
+  readonly permBusy: boolean
+  readonly onToolPermission: (server: McpServerView, tool: string, permission: ToolPermission) => void
+  readonly onAllToolPermission: (server: McpServerView, permission: ToolPermission) => void
 }): React.ReactElement {
   const {
     state,
@@ -1684,6 +1846,9 @@ function ListPage(props: {
     onDelete,
     onLogin,
     onReconnect,
+    permBusy,
+    onToolPermission,
+    onAllToolPermission,
   } = props
 
   const filtered = state.servers.filter(
@@ -1852,12 +2017,19 @@ function ListPage(props: {
               server: selected,
               oauthBusy,
               actionBusy,
+              permBusy,
               onEdit,
               onDiagnose,
               onDelete,
               onLogin,
               onReconnect: () => {
                 if (selected !== null) onReconnect(selected)
+              },
+              onToolPermission: (tool: string, permission: ToolPermission) => {
+                if (selected !== null) onToolPermission(selected, tool, permission)
+              },
+              onAllToolPermissions: (permission: ToolPermission) => {
+                if (selected !== null) onAllToolPermission(selected, permission)
               },
             }),
           ),
@@ -1897,11 +2069,13 @@ export function createMcpManagerTab(
     const [saving, setSaving] = React.useState(false)
     const [actionBusy, setActionBusy] = React.useState(false)
     const [oauthBusy, setOauthBusy] = React.useState(false)
+    const [permBusy, setPermBusy] = React.useState(false)
     const [adoptNotice, setAdoptNotice] = React.useState<string | null>(null)
 
     const listInFlight = React.useRef<AbortController | null>(null)
     const actionInFlight = React.useRef<AbortController | null>(null)
     const oauthInFlight = React.useRef<AbortController | null>(null)
+    const permInFlight = React.useRef<AbortController | null>(null)
     const hasData = React.useRef(false)
 
     const readState = React.useCallback(async (
@@ -1953,8 +2127,60 @@ export function createMcpManagerTab(
         listInFlight.current?.abort()
         actionInFlight.current?.abort()
         oauthInFlight.current?.abort()
+        permInFlight.current?.abort()
       }
     }, [readState])
+
+    /**
+     * Write one answer, or one server's whole set, and adopt the state the
+     * Host returns: the write and the gate's new view come back together, so a
+     * permission can never render without being enforced.
+     */
+    function submitPermission(
+      server: McpServerView,
+      tool: string | null,
+      permission: ToolPermission,
+    ): void {
+      const controller = new AbortController()
+      permInFlight.current?.abort()
+      permInFlight.current = controller
+      setPermBusy(true)
+      setActionFailure(null)
+      void (async (): Promise<void> => {
+        try {
+          const next = tool === null
+            ? await runtime.setAllToolPermissions(server.name, permission, controller.signal)
+            : await runtime.setToolPermission(server.name, tool, permission, controller.signal)
+          if (controller.signal.aborted) return
+          setState(next)
+          setUpdatedAt(next.updatedAt || new Date().toISOString())
+        } catch (error) {
+          if (controller.signal.aborted || isAbortError(error)) return
+          setActionFailure(errorText(error))
+        } finally {
+          if (permInFlight.current === controller) {
+            permInFlight.current = null
+            setPermBusy(false)
+          }
+        }
+      })()
+    }
+
+    function setToolPermission(
+      server: McpServerView,
+      tool: string,
+      permission: ToolPermission,
+    ): void {
+      submitPermission(server, tool, permission)
+    }
+
+    function setAllToolPermissions(server: McpServerView, permission: ToolPermission): void {
+      if (permission === 'deny' && typeof window !== 'undefined') {
+        const count = server.toolList?.length ?? server.tools
+        if (!window.confirm(`${COPY.permBulkDeny} ${String(count)} 个工具？此操作会覆盖这些工具现在的设置。`)) return
+      }
+      submitPermission(server, null, permission)
+    }
 
     function openForm(editing: McpServerView | null): void {
       setDraft(draftFromServer(editing))
@@ -2369,6 +2595,7 @@ export function createMcpManagerTab(
       actionFailure,
       actionBusy,
       oauthBusy,
+      permBusy,
       adoptNotice,
       onSearch: setSearch,
       onFilter: setFilter,
@@ -2382,6 +2609,8 @@ export function createMcpManagerTab(
       onToggle: toggle,
       onAdopt: adopt,
       onReconnect: reconnect,
+      onToolPermission: setToolPermission,
+      onAllToolPermission: setAllToolPermissions,
       onAdd: () => { openForm(null) },
       onImport: () => {
         setImportText('')
@@ -2513,7 +2742,7 @@ export const MCP_MANAGER_CSS = `
 .mcp-fieldLabel { flex: none; font-size: 12px; font-weight: 650; color: var(--dsw-alias-label-secondary); }
 .mcp-fieldValue { text-align: right; font-size: 13px; overflow-wrap: anywhere; }
 .mcp-tools { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
-.mcp-toolsHead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.mcp-toolsHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .mcp-toolsTitle { font-size: 13.5px; font-weight: 700; }
 .mcp-toolsHint { color: var(--dsw-alias-label-secondary); font-size: 12px; }
 .mcp-toolSearch { width: 100%; height: 34px; padding: 0 12px; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; }
@@ -2533,6 +2762,32 @@ export const MCP_MANAGER_CSS = `
 /* The tail gap would otherwise expose the last row's own rule. */
 .mcp-tool:last-child { border-bottom: none; }
 .mcp-toolName { font-size: 13px; font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+/* The name and its permission control share one line, so a long tool name
+ * wraps under the control instead of pushing it away. */
+.mcp-toolTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.mcp-toolTop .mcp-toolName { min-width: 0; overflow-wrap: anywhere; }
+/* Three answers, one control. Deliberately not a switch: "ask" is a different
+ * kind of answer (it runs, but only after a human agrees), not a degree of on. */
+.mcp-perm { display: flex; align-items: center; gap: 2px; flex: none; padding: 2px; background: var(--dsw-alias-bg-base); border: 0.5px solid var(--dsw-alias-border-l2); border-radius: 8px; }
+.mcp-permSeg { padding: 0 9px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11.5px; white-space: nowrap; cursor: pointer; }
+.mcp-permSeg:disabled { cursor: default; opacity: 0.5; }
+.mcp-permSeg:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }
+.mcp-permSeg[data-active="true"] { font-weight: 600; }
+.mcp-permSeg[data-active="true"][data-permission="allow"] { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 16%, transparent); color: var(--dsw-alias-state-success-primary); }
+.mcp-permSeg[data-active="true"][data-permission="ask"] { background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 18%, transparent); color: var(--dsw-alias-state-warn-primary); }
+.mcp-permSeg[data-active="true"][data-permission="deny"] { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 16%, transparent); color: var(--dsw-alias-state-error-primary); }
+.mcp-toolsBulk { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mcp-bulk { padding: 0 10px; height: 26px; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); font: inherit; font-size: 11.5px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.mcp-bulk:hover:not(:disabled) { border-color: var(--dsw-alias-label-secondary); }
+.mcp-bulk:disabled { opacity: 0.5; cursor: default; }
+.mcp-bulk--allow { color: var(--dsw-alias-state-success-primary); }
+.mcp-bulk--ask { color: var(--dsw-alias-state-warn-primary); }
+.mcp-bulk--deny { color: var(--dsw-alias-state-error-primary); }
+.mcp-default { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 11px 14px; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: 12px; background: var(--dsw-alias-bg-layer-2); }
+.mcp-defaultText { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mcp-defaultTitle { font-size: 13px; font-weight: 600; }
+.mcp-defaultBody { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.mcp-defaultPill { flex: none; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 16%, transparent); color: var(--dsw-alias-state-error-primary); }
 .mcp-toolDesc { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.45; }
 .mcp-toolParams { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .mcp-toolParamsSummary { min-width: 0; color: var(--dsw-alias-label-secondary); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.45; overflow-wrap: anywhere; }
